@@ -1,5 +1,5 @@
 use config::{Config, ConfigError, Environment};
-use secrecy::SecretString; // Use SecretString and trait
+use secrecy::SecretString;
 use serde::Deserialize;
 
 #[derive(Debug, Deserialize, Clone)]
