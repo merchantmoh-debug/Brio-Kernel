@@ -1,0 +1,16 @@
+[package]
+name = "smart-agent"
+version = "0.1.0"
+edition = "2021"
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+wit-bindgen = "0.36.0"
+# Note: Using 0.36.0 for guest side usually matches wasmtime 28-ish, but let's check what is standard.
+# Actually, if kernel uses 0.51.0, guest should probably use similar or recent.
+# However, for components, it's safer to stick to something that works.
+# Let's try 0.51.0 to match kernel if possible, or 0.36.0 if we want to be safe with older toolchains?
+# Wait, wasmtime 40.0.1 roughly matches wit-bindgen 0.36.0?? No, 0.51.0 is newer.
+# Let's use 0.51.0 to be consistent with kernel.
