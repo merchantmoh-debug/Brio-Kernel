@@ -19,29 +19,34 @@ use crate::ws::{BroadcastMessage, Broadcaster, WsPatch};
 // If the trait definition is available via `crate::brio_host::...` I would use it.
 // For now, I'll add the field and methods.
 
+use crate::inference::LLMProvider;
+
 pub struct BrioHostState {
-    mesh_router: HashMap<String, Sender<MeshMessage>>,
+    mesh_router: std::sync::RwLock<HashMap<String, Sender<MeshMessage>>>,
     db_pool: SqlitePool,
     broadcaster: Broadcaster,
-    session_manager: SessionManager,
+    session_manager: std::sync::Mutex<SessionManager>,
+    inference_provider: std::sync::Arc<Box<dyn LLMProvider>>,
 }
 
 impl BrioHostState {
-    pub async fn new(db_url: &str) -> Result<Self> {
+    pub async fn new(db_url: &str, provider: Box<dyn LLMProvider>) -> Result<Self> {
         let pool = SqlitePoolOptions::new().connect(db_url).await?;
 
         Ok(Self {
-            mesh_router: HashMap::new(),
+            mesh_router: std::sync::RwLock::new(HashMap::new()),
             db_pool: pool,
             broadcaster: Broadcaster::new(),
-            session_manager: SessionManager::new(),
+            session_manager: std::sync::Mutex::new(SessionManager::new()),
+            inference_provider: std::sync::Arc::new(provider),
         })
     }
 
     /// Register a component (Agent or Tool) with the mesh router.
     /// This enforces the registration contract.
-    pub fn register_component(&mut self, id: String, sender: Sender<MeshMessage>) {
-        self.mesh_router.insert(id, sender);
+    pub fn register_component(&self, id: String, sender: Sender<MeshMessage>) {
+        let mut router = self.mesh_router.write().expect("RwLock poisoned");
+        router.insert(id, sender);
     }
 
     /// Accessor for the DB Pool (Immutable access only)
@@ -70,10 +75,13 @@ impl BrioHostState {
     }
 
     pub async fn mesh_call(&self, target: &str, method: &str, payload: Payload) -> Result<Payload> {
-        let sender = self
-            .mesh_router
-            .get(target)
-            .ok_or_else(|| anyhow!("Target component '{}' not found", target))?;
+        let sender = {
+            let router = self.mesh_router.read().expect("RwLock poisoned");
+            router
+                .get(target)
+                .ok_or_else(|| anyhow!("Target component '{}' not found", target))?
+                .clone()
+        };
 
         let (reply_tx, reply_rx) = oneshot::channel();
 
@@ -98,11 +106,18 @@ impl BrioHostState {
 
     // --- VFS Interface Methods ---
 
-    pub fn begin_session(&mut self, base_path: String) -> Result<String, String> {
-        self.session_manager.begin_session(base_path)
+    pub fn begin_session(&self, base_path: String) -> Result<String, String> {
+        let mut manager = self.session_manager.lock().expect("Mutex poisoned");
+        manager.begin_session(base_path)
     }
 
-    pub fn commit_session(&mut self, session_id: String) -> Result<(), String> {
-        self.session_manager.commit_session(session_id)
+    pub fn commit_session(&self, session_id: String) -> Result<(), String> {
+        let mut manager = self.session_manager.lock().expect("Mutex poisoned");
+        manager.commit_session(session_id)
+    }
+
+    /// Accessor for the inference provider.
+    pub fn inference(&self) -> std::sync::Arc<Box<dyn LLMProvider>> {
+        self.inference_provider.clone()
     }
 }

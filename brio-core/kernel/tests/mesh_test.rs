@@ -2,10 +2,25 @@ use brio_kernel::host::BrioHostState;
 use brio_kernel::mesh::{MeshMessage, Payload};
 use tokio::sync::mpsc;
 
+// Mock Provider for testing
+struct DummyProvider;
+#[async_trait::async_trait]
+impl brio_kernel::inference::LLMProvider for DummyProvider {
+    async fn chat(
+        &self,
+        _request: brio_kernel::inference::ChatRequest,
+    ) -> Result<brio_kernel::inference::ChatResponse, brio_kernel::inference::InferenceError> {
+        Ok(brio_kernel::inference::ChatResponse {
+            content: "".to_string(),
+            usage: None,
+        })
+    }
+}
+
 #[tokio::test]
 async fn test_mesh_routing() {
     // 1. Initialize Host State with in-memory DB
-    let mut state = BrioHostState::new("sqlite::memory:")
+    let state = BrioHostState::new("sqlite::memory:", Box::new(DummyProvider))
         .await
         .expect("Failed to create host");
 

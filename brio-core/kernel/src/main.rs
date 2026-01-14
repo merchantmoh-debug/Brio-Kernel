@@ -29,7 +29,18 @@ async fn main() -> anyhow::Result<()> {
     });
 
     let db_url = config.database.url.expose_secret();
-    let state = match BrioHostState::new(db_url).await {
+
+    // Clean Code: Configure Provider (DIP)
+    // In future, this would load from strict configuration.
+    // For now we default to a placeholder config or environment.
+    // However, to keep it functional, we check env vars or use a default.
+    let provider_config = brio_kernel::inference::OpenAIConfig {
+        api_key: secrecy::SecretString::new("sk-placeholder".into()), // Placeholder for now
+        base_url: reqwest::Url::parse("https://openrouter.ai/api/v1").expect("Invalid URL"),
+    };
+    let provider = brio_kernel::inference::OpenAIProvider::new(provider_config);
+
+    let state = match BrioHostState::new(db_url, Box::new(provider)).await {
         Ok(s) => s,
         Err(e) => {
             error!("Failed to initialize host state: {:?}", e);
