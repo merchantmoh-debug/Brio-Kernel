@@ -52,9 +52,10 @@ impl<'a> Visitor for TableVisitor<'a> {
 
     fn pre_visit_table_factor(&mut self, table_factor: &TableFactor) -> ControlFlow<Self::Break> {
         if let TableFactor::Table { name, .. } = table_factor
-            && let Some(table_ident) = name.0.last()
+            && let Some(table_part) = name.0.last()
+            && let Some(ident) = table_part.as_ident()
         {
-            let table_name = table_ident.value.as_str();
+            let table_name = ident.value.as_str();
             let expected_prefix = format!("{}_", self.scope);
 
             if !table_name.starts_with(&expected_prefix) {
