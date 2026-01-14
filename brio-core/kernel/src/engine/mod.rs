@@ -39,11 +39,17 @@ wasmtime::component::bindgen!({
              chat: func(model: string, messages: list<message>) -> result<completion-response, inference-error>;
         }
 
+        interface logging {
+            enum level { trace, debug, info, warn, error }
+            log: func(level: level, context: string, message: string);
+        }
+
         world brio-host {
             import service-mesh;
             import sql-state;
             import session-fs;
             import inference;
+            import logging;
         }
     "#,
 });

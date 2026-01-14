@@ -9,7 +9,7 @@ world brio-host {
     import sql-state;
     import session-fs;
     import brio:ai/inference;
-    // import wasi:logging/logging;
+    import logging;
 
 }
 

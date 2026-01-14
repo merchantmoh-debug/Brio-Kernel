@@ -1,0 +1,16 @@
+package brio:core;
+
+// Local logging stub (replaces wasi:logging/logging)
+// Provides basic logging capability without full WASI dependency
+
+interface logging {
+    enum level {
+        trace,
+        debug,
+        info,
+        warn,
+        error,
+    }
+
+    log: func(level: level, context: string, message: string);
+}

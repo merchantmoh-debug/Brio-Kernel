@@ -1,0 +1,26 @@
+package brio:tools;
+
+interface tool-grep {
+    record grep-match {
+        line-number: u32,
+        content: string,
+    }
+
+    record grep-result {
+        file-path: string,
+        matches: list<grep-match>,
+    }
+
+    grep: func(pattern: string, path: string) -> result<list<grep-result>, string>;
+}
+
+interface tool-read-file {
+    read-file: func(path: string) -> result<string, string>;
+    read-file-range: func(path: string, start-line: u32, end-line: u32) -> result<string, string>;
+}
+
+world tool-runner {
+    import brio:core/session-fs;
+    export tool-grep;
+    export tool-read-file;
+}

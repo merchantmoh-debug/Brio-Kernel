@@ -1,7 +1,7 @@
 use crate::engine::brio;
 use crate::host::BrioHostState;
 use anyhow::Result;
-use wasmtime::component::Linker;
+use wasmtime::component::{HasSelf, Linker};
 use wasmtime::{Config, Engine};
 
 impl brio::core::service_mesh::Host for BrioHostState {
@@ -52,9 +52,35 @@ impl brio::core::inference::Host for BrioHostState {
     }
 }
 
-pub fn create_linker(engine: &Engine) -> Result<Linker<BrioHostState>> {
-    let linker = Linker::new(engine);
+impl brio::core::logging::Host for BrioHostState {
+    fn log(&mut self, level: brio::core::logging::Level, context: String, message: String) {
+        tracing::info!(
+            target: "wasm_guest",
+            level = %LogLevel(level),
+            context = context,
+            "[WASM] {}",
+            message
+        );
+    }
+}
 
+struct LogLevel(brio::core::logging::Level);
+
+impl std::fmt::Display for LogLevel {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self.0 {
+            brio::core::logging::Level::Trace => f.write_str("TRACE"),
+            brio::core::logging::Level::Debug => f.write_str("DEBUG"),
+            brio::core::logging::Level::Info => f.write_str("INFO"),
+            brio::core::logging::Level::Warn => f.write_str("WARN"),
+            brio::core::logging::Level::Error => f.write_str("ERROR"),
+        }
+    }
+}
+
+pub fn create_linker(engine: &Engine) -> Result<Linker<BrioHostState>> {
+    let mut linker = Linker::new(engine);
+    register_host_interfaces(&mut linker)?;
     Ok(linker)
 }
 
@@ -63,6 +89,18 @@ pub fn create_engine_config() -> Config {
     config.wasm_component_model(true);
     config.async_support(true);
     config
+}
+
+fn register_host_interfaces(linker: &mut Linker<BrioHostState>) -> Result<()> {
+    type State = HasSelf<BrioHostState>;
+
+    brio::core::service_mesh::add_to_linker::<BrioHostState, State>(linker, |s| s)?;
+    brio::core::sql_state::add_to_linker::<BrioHostState, State>(linker, |s| s)?;
+    brio::core::session_fs::add_to_linker::<BrioHostState, State>(linker, |s| s)?;
+    brio::core::inference::add_to_linker::<BrioHostState, State>(linker, |s| s)?;
+    brio::core::logging::add_to_linker::<BrioHostState, State>(linker, |s| s)?;
+
+    Ok(())
 }
 
 fn stub_error(interface: &str) -> String {
