@@ -4,7 +4,6 @@ pub mod runtime;
 pub use linker::{create_engine_config, create_linker};
 pub use runtime::WasmEngine;
 
-// WIT contract is inlined to ensure Rust bindings stay in sync with the canonical interface.
 wasmtime::component::bindgen!({
     inline: r#"
         package brio:core;

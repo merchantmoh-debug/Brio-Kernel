@@ -55,7 +55,6 @@ impl brio::core::inference::Host for BrioHostState {
 pub fn create_linker(engine: &Engine) -> Result<Linker<BrioHostState>> {
     let linker = Linker::new(engine);
 
-    // TODO: Enable BrioHost::add_to_linker after resolving HasData trait issues
     Ok(linker)
 }
 

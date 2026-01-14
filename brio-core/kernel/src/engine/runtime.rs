@@ -3,7 +3,6 @@ use anyhow::{Context, Result};
 use wasmtime::component::{Component, Linker};
 use wasmtime::{Engine, Store};
 
-/// Encapsulates the Wasmtime runtime for component execution.
 pub struct WasmEngine {
     engine: Engine,
     linker: Linker<BrioHostState>,
