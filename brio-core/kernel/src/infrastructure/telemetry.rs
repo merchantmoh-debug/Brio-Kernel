@@ -1,5 +1,4 @@
 use anyhow::{Context, Result};
-// use opentelemetry::trace::TracerProvider as _;
 use opentelemetry_otlp::WithExportConfig;
 use opentelemetry_sdk::{Resource, propagation::TraceContextPropagator, trace::Sampler};
 use opentelemetry_semantic_conventions::resource;
@@ -56,10 +55,8 @@ impl TelemetryBuilder {
     }
 
     pub fn init(self) -> Result<()> {
-        // 1. Setup global propagator
         opentelemetry::global::set_text_map_propagator(TraceContextPropagator::new());
 
-        // 2. Setup Logs (Tracing Subscriber)
         let env_filter =
             EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new(&self.log_level));
 
@@ -67,11 +64,8 @@ impl TelemetryBuilder {
 
         let registry = Registry::default().with(env_filter).with(fmt_layer);
 
-        // 3. Optional OTLP Tracing Layer
         if self.enable_tracing {
             if let Some(endpoint) = self.otlp_endpoint {
-                // Initialize OTLP Tracer via SdkTracerProvider (OTel 0.31)
-                // Use Resource::builder() as Resource::new is private
                 let resource = Resource::builder()
                     .with_attributes(vec![
                         opentelemetry::KeyValue::new(
@@ -85,20 +79,15 @@ impl TelemetryBuilder {
                     ])
                     .build();
 
-                // 1. Build Exporter
-                // opentelemetry-otlp 0.31 uses SpanExporter::builder().with_tonic()
                 let exporter = opentelemetry_otlp::SpanExporter::builder()
                     .with_tonic()
                     .with_endpoint(endpoint)
                     .build()
                     .context("Failed to build OTLP span exporter")?;
 
-                // 2. Build Processor (Batch)
-                // BatchSpanProcessor::builder takes only exporter in 0.31
                 let processor =
                     opentelemetry_sdk::trace::BatchSpanProcessor::builder(exporter).build();
 
-                // 3. Build Provider
                 let provider = opentelemetry_sdk::trace::SdkTracerProvider::builder()
                     .with_span_processor(processor)
                     .with_resource(resource)
@@ -107,10 +96,8 @@ impl TelemetryBuilder {
                     ))))
                     .build();
 
-                // Set global provider
                 opentelemetry::global::set_tracer_provider(provider.clone());
 
-                // Get tracer
                 use opentelemetry::trace::TracerProvider;
                 let tracer = provider.tracer("brio-kernel");
 
@@ -127,14 +114,6 @@ impl TelemetryBuilder {
             registry.try_init().context("Failed to init subscriber")?;
         }
 
-        // 4. Setup Metrics (Prometheus)
-        // usage: defined in server.rs, but we might want to register global provider here?
-        // For now, server.rs handles specific PrometheusBuilder.
-        // If we wanted global OTel metrics, we'd do it here.
-
         Ok(())
     }
 }
-
-// Temporary: exposing function to get Prometheus handle easily is tricky if we want Strict Encapsulation.
-// Better approach: `init()` returns the handle if metrics enabled.

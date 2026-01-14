@@ -47,7 +47,6 @@ async fn pprof_profile() -> impl axum::response::IntoResponse {
 }
 
 pub async fn run_server(config: &Settings) -> anyhow::Result<()> {
-    // Initialize Prometheus Recorder and get handle
     let builder = PrometheusBuilder::new();
     let handle = builder
         .install_recorder()
