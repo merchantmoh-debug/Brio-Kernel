@@ -29,7 +29,6 @@ metrics = "0.24.3"
 metrics-exporter-prometheus = "0.18.1"
 config = "0.15.19"
 axum = { version = "0.8.8", features = ["ws"] }
-pprof = { version = "0.15", features = ["flamegraph", "prost-codec"] }
 sysinfo = "0.37.2"
 secrecy = { version = "0.10.3", features = ["serde"] }
 serde = { workspace = true, features = ["derive"] }
@@ -50,7 +49,12 @@ reqwest = { version = "0.13.1", default-features = false, features = [
 ] }
 async-trait = "0.1"
 
+# pprof uses Unix-specific APIs (pthread, signals) - only enable on Unix
+[target.'cfg(unix)'.dependencies]
+pprof = { version = "0.15", features = ["flamegraph", "prost-codec"] }
+
 [dev-dependencies]
 supervisor = { path = "../components/supervisor" }
 wiremock = "0.6"
 proptest = "1"
+

@@ -1,68 +1,60 @@
 warning: profiles for the non root package will be ignored, specify profiles at the workspace root:
 package:   C:\Users\wrc02\Desktop\brio\Brio-Kernel\brio-core\components\supervisor\Cargo.toml
 workspace: C:\Users\wrc02\Desktop\brio\Brio-Kernel\brio-core\Cargo.toml
-    Checking tokio-util v0.7.18
-   Compiling aws-lc-sys v0.35.0
-   Compiling cranelift-codegen v0.127.1
-   Compiling wasm-encoder v0.243.0
-   Compiling crunchy v0.2.4
-   Compiling libsqlite3-sys v0.30.1
-   Compiling wasmparser v0.243.0
-    Checking object v0.37.3
-    Checking debugid v0.8.0
-    Checking rand v0.9.2
-    Checking cpp_demangle v0.4.5
-    Checking url v2.5.8
-warning: aws-lc-sys@0.35.0: Emitting configuration: cargo:rustc-cfg=universal
-warning: aws-lc-sys@0.35.0: NASM command not found or failed to execute.
-warning: aws-lc-sys@0.35.0: NASM command not found or failed to execute.
-error: failed to run custom build command for `aws-lc-sys v0.35.0`
+   Compiling brio-kernel v0.1.0 (C:\Users\wrc02\Desktop\brio\Brio-Kernel\brio-core\kernel)
+warning: function `stub_error` is never used
+   --> kernel\src\engine\linker.rs:201:4
+    |
+201 | fn stub_error(interface: &str) -> String {
+    |    ^^^^^^^^^^
+    |
+    = note: `#[warn(dead_code)]` on by default
 
-Caused by:
-  process didn't exit successfully: `C:\Users\wrc02\Desktop\brio\Brio-Kernel\brio-core\target\debug\build\aws-lc-sys-c4ac31bc89c8f72e\build-script-main` (exit code: 101)
-  --- stdout
-  cargo:rerun-if-env-changed=AWS_LC_SYS_NO_PREFIX_x86_64_pc_windows_msvc
-  cargo:rerun-if-env-changed=AWS_LC_SYS_NO_PREFIX
-  cargo:rerun-if-env-changed=AWS_LC_SYS_PREGENERATING_BINDINGS_x86_64_pc_windows_msvc
-  cargo:rerun-if-env-changed=AWS_LC_SYS_PREGENERATING_BINDINGS
-  cargo:rerun-if-env-changed=AWS_LC_SYS_EXTERNAL_BINDGEN_x86_64_pc_windows_msvc
-  cargo:rerun-if-env-changed=AWS_LC_SYS_EXTERNAL_BINDGEN
-  cargo:rerun-if-env-changed=AWS_LC_SYS_NO_ASM_x86_64_pc_windows_msvc
-  cargo:rerun-if-env-changed=AWS_LC_SYS_NO_ASM
-  cargo:rerun-if-env-changed=AWS_LC_SYS_CFLAGS_x86_64_pc_windows_msvc
-  cargo:rerun-if-env-changed=AWS_LC_SYS_CFLAGS
-  cargo:rerun-if-env-changed=CFLAGS_x86_64_pc_windows_msvc
-  cargo:rerun-if-env-changed=CFLAGS
-  cargo:rerun-if-env-changed=AWS_LC_SYS_PREBUILT_NASM_x86_64_pc_windows_msvc
-  cargo:rerun-if-env-changed=AWS_LC_SYS_PREBUILT_NASM
-  cargo:rerun-if-env-changed=AWS_LC_SYS_C_STD_x86_64_pc_windows_msvc
-  cargo:rerun-if-env-changed=AWS_LC_SYS_C_STD
-  cargo:rerun-if-env-changed=AWS_LC_SYS_CMAKE_BUILDER_x86_64_pc_windows_msvc
-  cargo:rerun-if-env-changed=AWS_LC_SYS_CMAKE_BUILDER
-  cargo:rerun-if-env-changed=AWS_LC_SYS_NO_PREGENERATED_SRC_x86_64_pc_windows_msvc
-  cargo:rerun-if-env-changed=AWS_LC_SYS_NO_PREGENERATED_SRC
-  cargo:rerun-if-env-changed=AWS_LC_SYS_EFFECTIVE_TARGET_x86_64_pc_windows_msvc
-  cargo:rerun-if-env-changed=AWS_LC_SYS_EFFECTIVE_TARGET
-  cargo:rerun-if-env-changed=AWS_LC_SYS_NO_JITTER_ENTROPY_x86_64_pc_windows_msvc
-  cargo:rerun-if-env-changed=AWS_LC_SYS_NO_JITTER_ENTROPY
-  cargo:warning=Emitting configuration: cargo:rustc-cfg=universal
-  cargo:rustc-cfg=universal
-  cargo:rerun-if-env-changed=AWS_LC_SYS_STATIC_x86_64_pc_windows_msvc
-  cargo:rerun-if-env-changed=AWS_LC_SYS_STATIC
-  default_for Target: 'x86_64-pc-windows-msvc'
-  cargo:rerun-if-env-changed=AWS_LC_SYS_STATIC_x86_64_pc_windows_msvc
-  cargo:rerun-if-env-changed=AWS_LC_SYS_STATIC
-  cargo:warning=NASM command not found or failed to execute.
-  cargo:warning=NASM command not found or failed to execute.
-  cargo:rerun-if-env-changed=AWS_LC_SYS_CMAKE_x86_64_pc_windows_msvc
-  cargo:rerun-if-env-changed=AWS_LC_SYS_CMAKE
-  cargo:rerun-if-env-changed=CMAKE_x86_64_pc_windows_msvc
-  cargo:rerun-if-env-changed=CMAKE
+warning: `brio-kernel` (lib test) generated 1 warning
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 11.59s
+     Running unittests src\lib.rs (C:\Users\wrc02\Desktop\brio\Brio-Kernel\brio-core\target\debug\deps\brio_kernel-ccb815be137a2abd.exe)
 
-  --- stderr
-  Missing dependency: cmake
+running 40 tests
+test inference::anthropic::tests::test_prepare_messages_no_system ... ok
+test inference::anthropic::tests::test_prepare_messages_extracts_system ... ok
+test inference::anthropic::tests::test_anthropic_config_with_api_key ... ok
+test inference::anthropic::tests::test_anthropic_config_with_retries ... ok
+test inference::openai::tests::test_openai_config_with_retries ... ok
+test inference::openai::tests::test_openai_config_creation ... ok
+test inference::anthropic::tests::test_anthropic_config_creation ... ok
+test inference::registry::tests::test_registry_new ... ok
+test inference::registry::tests::test_registry_default_provider ... ok
+test inference::registry::tests::test_registry_multiple_providers ... ok
+test inference::registry::tests::test_registry_list_providers ... ok
+test inference::registry::tests::test_registry_register_and_get ... ok
+test inference::registry::tests::test_registry_remove ... ok
+test inference::registry::tests::test_registry_chat ... ok
+test inference::registry::tests::test_registry_chat_default ... ok
+test inference::registry::tests::test_registry_chat_provider_not_found ... ok
+test infrastructure::audit::tests::test_log_audit_variants ... ok
+test inference::openai::tests::test_openai_provider_new ... ok
+test inference::anthropic::tests::test_anthropic_provider_new ... ok
+test inference::openai::tests::test_backoff_delay_calculation ... ok
+test inference::anthropic::tests::test_backoff_delay_calculation ... ok
+test inference::openai::tests::test_openai_provider_with_custom_retries ... ok
+test store::policy::tests::test_drop_table_valid ... ok
+test store::policy::tests::test_invalid_scope_query ... ok
+test store::policy::tests::test_quoted_identifiers ... ok
+test ws::broadcaster::tests::broadcast_reaches_subscribers ... ok
+test ws::broadcaster::tests::broadcaster_is_clone ... ok
+test ws::broadcaster::tests::broadcast_with_no_subscribers_succeeds ... ok
+test store::policy::tests::test_join_scope_violation ... ok
+test store::policy::tests::test_valid_scope_query ... ok
+test ws::broadcaster::tests::broadcaster_tracks_client_count ... ok
+test ws::connection::tests::connection_generates_unique_client_id ... ok
+test ws::types::tests::broadcast_message_shutdown_serializes ... ok
+test ws::types::tests::client_id_display ... ok
+test ws::types::tests::client_id_is_unique ... ok
+test ws::handler::tests::ws_router_creates_valid_router ... ok
+test store::integration_tests::test_store_policy_violation ... ok
+test store::integration_tests::test_store_query_success ... ok
+test store::integration_tests::test_store_generic_types ... ok
+test vfs::tests::test_session_lifecycle ... ok
 
-  thread 'main' panicked at C:\Users\wrc02\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\aws-lc-sys-0.35.0\builder\main.rs:445:40:
-  called `Result::unwrap()` on an `Err` value: "Required build dependency is missing. Halting build."
-  note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
-warning: build failed, waiting for other jobs to finish...
+test result: ok. 40 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.04s
+

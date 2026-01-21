@@ -114,7 +114,12 @@ impl brio::core::inference::Host for BrioHostState {
             messages: internal_messages,
         };
 
-        let inference_provider = self.inference();
+        let inference_provider = match self.inference() {
+            Some(provider) => provider,
+            None => return Err(brio::core::inference::InferenceError::ProviderError(
+                "No default inference provider configured".to_string()
+            )),
+        };
         let result = tokio::task::block_in_place(|| {
             tokio::runtime::Handle::current().block_on(async {
                 inference_provider.chat(request).await
