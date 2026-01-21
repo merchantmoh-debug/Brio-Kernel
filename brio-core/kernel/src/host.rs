@@ -115,33 +115,23 @@ impl BrioHostState {
             return response.map_err(|e| anyhow!("Target '{}' returned error: {}", target, e));
         }
 
-        // 2. Try remote routing if enabled and target looks like "node_id/component" or if we have a robust routing table
-        // For now, we assume simple target names are local. If we want explicit remote addressing: "node_id:component_id"
-        // OR we just broadcast/lookup in remote registry.
-        
-        // Simplified logic: If not found locally, and we have a distributed router, try to find where it lives? 
-        // Or for now, explicit routing "remote_node_id/target".
-        
-        // Let's implement explicit remote routing: "node_id:component"
-        if let Some(router) = &self.remote_router {
-            if let Some((node_id_str, component)) = target.split_once('/') {
-                let node_id = NodeId::from(node_id_str.to_string());
-                
-                // If it's for 'us', recurse locally (handle edge case)
-                // For now assuming it is remote.
-                
-                let message = MeshMessage {
-                    target: component.to_string(),
-                    method: method.to_string(),
-                    payload,
-                    reply_tx: oneshot::channel().0, // Dummy, not used by RemoteRouter internal logic which handles req/resp
-                };
-                
-                return router.send(&node_id, message).await;
-            }
+        // 2. Try remote routing if enabled and target is formatted as "node_id/component"
+        // Explicit remote addressing: "node_id/component_id"
+        if let (Some(router), Some((node_id_str, component))) = (&self.remote_router, target.split_once('/')) {
+            let node_id = NodeId::from(node_id_str.to_string());
+            
+            // If the target is a different node, route via gRPC
+            let message = MeshMessage {
+                target: component.to_string(),
+                method: method.to_string(),
+                payload,
+                reply_tx: oneshot::channel().0, // Reply handling is managed by RemoteRouter's request/response flow
+            };
+            
+            return router.send(&node_id, message).await;
         }
 
-        Err(anyhow!("Target component '{}' not found", target))
+        Err(anyhow!("Target component '{}' not found. Ensure format is 'component' (local) or 'node_id/component' (remote).", target))
     }
 
     pub fn begin_session(&self, base_path: String) -> Result<String, String> {

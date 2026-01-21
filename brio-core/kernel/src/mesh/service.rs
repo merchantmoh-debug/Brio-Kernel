@@ -11,6 +11,8 @@ use crate::mesh::grpc::{
 use crate::mesh::Payload;
 use crate::mesh::types::NodeId;
 
+/// gRPC Service Implementation for MeshTransport.
+/// Handles incoming RPC calls and routes them to local components via `BrioHostState`.
 pub struct MeshService {
     host: Arc<BrioHostState>,
     node_id: NodeId,

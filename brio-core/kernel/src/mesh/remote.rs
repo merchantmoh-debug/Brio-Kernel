@@ -7,7 +7,8 @@ use crate::mesh::types::{NodeId, NodeInfo, NodeAddress};
 use crate::mesh::grpc::mesh_transport_client::MeshTransportClient;
 use crate::mesh::{MeshMessage, Payload};
 
-/// Route mesh calls to remote nodes
+/// Router for dispatching mesh calls to remote nodes via gRPC.
+/// Handles connection pooling and payload serialization.
 #[derive(Clone)]
 pub struct RemoteRouter {
     registry: Arc<RwLock<NodeRegistry>>,
@@ -90,6 +91,12 @@ impl RemoteRouter {
 
 pub struct NodeRegistry {
     nodes: HashMap<NodeId, NodeInfo>,
+}
+
+impl Default for NodeRegistry {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl NodeRegistry {

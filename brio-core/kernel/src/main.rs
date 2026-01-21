@@ -30,10 +30,19 @@ async fn main() -> anyhow::Result<()> {
 
     let db_url = config.database.url.expose_secret();
 
+
     // Clean Code: Configure Provider (DIP)
+    let openai_key = config.inference.as_ref()
+        .and_then(|i| i.openai_api_key.clone())
+        .unwrap_or_else(|| secrecy::SecretString::new("sk-placeholder".into()));
+
+    let openai_base = config.inference.as_ref()
+        .and_then(|i| i.openai_base_url.clone())
+        .unwrap_or("https://openrouter.ai/api/v1/".to_string());
+
     let provider_config = brio_kernel::inference::OpenAIConfig::new(
-        secrecy::SecretString::new("sk-placeholder".into()), // Placeholder for now
-        reqwest::Url::parse("https://openrouter.ai/api/v1/").expect("Invalid URL"),
+        openai_key,
+        reqwest::Url::parse(&openai_base).expect("Invalid OpenAI Base URL"),
     );
     let provider = brio_kernel::inference::OpenAIProvider::new(provider_config);
     
@@ -43,8 +52,9 @@ async fn main() -> anyhow::Result<()> {
     registry.set_default("default");
 
     // Check for distributed config
-    let node_id = std::env::var("BRIO_NODE_ID").ok().map(brio_kernel::mesh::types::NodeId::from);
-    let mesh_port = std::env::var("BRIO_MESH_PORT").ok().unwrap_or("50051".to_string());
+    let mesh_config = config.mesh.clone();
+    let node_id = mesh_config.as_ref().and_then(|m| m.node_id.clone()).map(brio_kernel::mesh::types::NodeId::from);
+    let mesh_port = mesh_config.as_ref().and_then(|m| m.port).map(|p| p.to_string()).unwrap_or("50051".to_string());
 
     let state = if let Some(ref id) = node_id {
         info!("Initializing in Distributed Mode (Node ID: {})", id);

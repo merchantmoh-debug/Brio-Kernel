@@ -45,7 +45,7 @@ async fn spawn_node(id: &str, port: u16) -> (Arc<BrioHostState>, String) {
 #[tokio::test]
 async fn test_distributed_call() {
     // 1. Spawn two nodes
-    let (node_a, addr_a) = spawn_node("node-a", 50055).await;
+    let (node_a, _addr_a) = spawn_node("node-a", 50055).await;
     let (node_b, addr_b) = spawn_node("node-b", 50056).await;
     
     // 2. Register "echo" component on Node B

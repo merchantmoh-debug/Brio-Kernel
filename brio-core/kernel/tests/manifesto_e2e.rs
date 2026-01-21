@@ -267,6 +267,7 @@ async fn smart_agent_logic(
 
             let response = host
                 .inference()
+                .expect("Default provider not found")
                 .chat(request)
                 .await
                 .expect("LLM Call Failed");
