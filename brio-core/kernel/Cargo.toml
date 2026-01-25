@@ -6,8 +6,8 @@ license = "MPL-2.0"
 
 [dependencies]
 tokio = { version = "1.0", features = ["full"] }
-wasmtime = { version = "40.0.1", features = ["component-model"] }
-wasmtime-wasi = "40.0.1"
+wasmtime = { version = "41.0.0", features = ["component-model"] }
+wasmtime-wasi = "41.0.0"
 wit-bindgen = "0.51.0"
 sqlx = { version = "0.8.6", default-features = false, features = [
     "sqlite",
@@ -29,7 +29,7 @@ metrics = "0.24.3"
 metrics-exporter-prometheus = "0.18.1"
 config = "0.15.19"
 axum = { version = "0.8.8", features = ["ws"] }
-sysinfo = "0.37.2"
+sysinfo = "0.38.0"
 secrecy = { version = "0.10.3", features = ["serde"] }
 serde = { workspace = true, features = ["derive"] }
 serde_json.workspace = true
@@ -48,8 +48,9 @@ reqwest = { version = "0.13.1", default-features = false, features = [
     "rustls",
 ] }
 async-trait = "0.1"
-prost = "0.13"
-tonic = "0.12"
+prost = "0.14.3"
+tonic = "0.14.2"
+tonic-prost = "0.14.2"
 
 # pprof uses Unix-specific APIs (pthread, signals) - only enable on Unix
 [target.'cfg(unix)'.dependencies]
@@ -62,5 +63,7 @@ proptest = "1"
 
 
 [build-dependencies]
-tonic-build = "0.12"
+tonic-build = "0.14.2"
+prost-build = "0.14.3"
 protoc-bin-vendored = "3.0"
+tonic-prost-build = "0.14.2"
