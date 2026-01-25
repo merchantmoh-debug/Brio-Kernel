@@ -34,7 +34,7 @@ proptest! {
         }
         fs::create_dir_all(&base).unwrap();
 
-        let mut manager = SessionManager::new();
+        let mut manager = SessionManager::new(Default::default());
         let session_id = manager.begin_session(base.to_str().unwrap().to_string()).unwrap();
         let session_path = std::env::temp_dir().join("brio").join(&session_id);
 
@@ -80,7 +80,7 @@ proptest! {
             fs::write(base.join(name), "to be deleted").unwrap();
         }
 
-        let mut manager = SessionManager::new();
+        let mut manager = SessionManager::new(Default::default());
         let session_id = manager.begin_session(base.to_str().unwrap().to_string()).unwrap();
         let session_path = std::env::temp_dir().join("brio").join(&session_id);
 
@@ -130,7 +130,7 @@ proptest! {
             fs::write(base.join(name), "original content").unwrap();
         }
 
-        let mut manager = SessionManager::new();
+        let mut manager = SessionManager::new(Default::default());
         let session_id = manager.begin_session(base.to_str().unwrap().to_string()).unwrap();
         let session_path = std::env::temp_dir().join("brio").join(&session_id);
 

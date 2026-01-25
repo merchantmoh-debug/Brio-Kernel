@@ -9,7 +9,7 @@ use std::fs;
 
 #[test]
 fn test_session_begin_with_nonexistent_path() {
-    let mut manager = SessionManager::new();
+    let mut manager = SessionManager::new(Default::default());
     let result = manager.begin_session("/nonexistent/path/that/does/not/exist".to_string());
 
     assert!(result.is_err());
@@ -18,7 +18,7 @@ fn test_session_begin_with_nonexistent_path() {
 
 #[test]
 fn test_commit_nonexistent_session() {
-    let mut manager = SessionManager::new();
+    let mut manager = SessionManager::new(Default::default());
     let result = manager.commit_session("fake-session-id-12345".to_string());
 
     assert!(result.is_err());
@@ -33,7 +33,7 @@ fn test_session_with_empty_directory() {
     }
     fs::create_dir_all(&temp).unwrap();
 
-    let mut manager = SessionManager::new();
+    let mut manager = SessionManager::new(Default::default());
     let session_id = manager
         .begin_session(temp.to_str().unwrap().to_string())
         .unwrap();
@@ -64,7 +64,7 @@ fn test_session_preserves_nested_structure() {
     fs::write(temp.join("a/b/level2.txt"), "level2").unwrap();
     fs::write(temp.join("a/b/c/level3.txt"), "level3").unwrap();
 
-    let mut manager = SessionManager::new();
+    let mut manager = SessionManager::new(Default::default());
     let session_id = manager
         .begin_session(temp.to_str().unwrap().to_string())
         .unwrap();
@@ -97,7 +97,7 @@ fn test_session_modification_and_commit() {
     fs::create_dir_all(&temp).unwrap();
     fs::write(temp.join("file.txt"), "original").unwrap();
 
-    let mut manager = SessionManager::new();
+    let mut manager = SessionManager::new(Default::default());
     let session_id = manager
         .begin_session(temp.to_str().unwrap().to_string())
         .unwrap();
@@ -128,7 +128,7 @@ fn test_session_add_new_file() {
     }
     fs::create_dir_all(&temp).unwrap();
 
-    let mut manager = SessionManager::new();
+    let mut manager = SessionManager::new(Default::default());
     let session_id = manager
         .begin_session(temp.to_str().unwrap().to_string())
         .unwrap();
@@ -161,7 +161,7 @@ fn test_session_delete_file() {
     fs::create_dir_all(&temp).unwrap();
     fs::write(temp.join("to_delete.txt"), "delete me").unwrap();
 
-    let mut manager = SessionManager::new();
+    let mut manager = SessionManager::new(Default::default());
     let session_id = manager
         .begin_session(temp.to_str().unwrap().to_string())
         .unwrap();
