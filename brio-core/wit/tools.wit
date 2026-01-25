@@ -1,4 +1,4 @@
-package brio:tools;
+package brio:core;
 
 interface tool-grep {
     record grep-match {
@@ -20,7 +20,7 @@ interface tool-read-file {
 }
 
 world tool-runner {
-    import brio:core/session-fs;
+    import session-fs;
     export tool-grep;
     export tool-read-file;
 }

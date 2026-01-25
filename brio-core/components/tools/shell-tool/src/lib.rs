@@ -11,9 +11,9 @@ export_shell_tool!(ShellTool);
 
 struct ShellTool;
 
-impl exports::brio::std_tool::tool::Guest for ShellTool {
-    fn get_info() -> exports::brio::std_tool::tool::ToolInfo {
-        exports::brio::std_tool::tool::ToolInfo {
+impl exports::brio::core::tool::Guest for ShellTool {
+    fn get_info() -> exports::brio::core::tool::ToolInfo {
+        exports::brio::core::tool::ToolInfo {
             name: "shell".to_string(),
             description: "Executes shell commands. Use with caution.".to_string(),
             version: "0.1.0".to_string(),

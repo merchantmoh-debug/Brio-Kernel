@@ -1,4 +1,4 @@
-package brio:std-tool;
+package brio:core;
 
 // Standard interface that all agent tools must implement
 interface tool {

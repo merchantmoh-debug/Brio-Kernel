@@ -1,6 +1,12 @@
 [workspace]
 resolver = "2"
-members = ["kernel", "components/supervisor", "components/tools/shell-tool"]
+members = [
+    "kernel",
+    "components/supervisor",
+    "components/tools/shell-tool",
+    "components/agents/coder",
+    "components/agents/reviewer",
+]
 
 [workspace.dependencies]
 tokio = { version = "1.36", features = ["full"] }
