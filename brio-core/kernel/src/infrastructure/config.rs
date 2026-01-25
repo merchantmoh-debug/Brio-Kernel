@@ -9,6 +9,14 @@ pub struct Settings {
     pub database: DatabaseSettings,
     pub mesh: Option<MeshSettings>,
     pub inference: Option<InferenceSettings>,
+    #[serde(default)]
+    pub sandbox: SandboxSettings,
+}
+
+#[derive(Debug, Deserialize, Clone, Default)]
+pub struct SandboxSettings {
+    #[serde(default)]
+    pub allowed_paths: Vec<String>,
 }
 
 #[derive(Debug, Deserialize, Clone)]
