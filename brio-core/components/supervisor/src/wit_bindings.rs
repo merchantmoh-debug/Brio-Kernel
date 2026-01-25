@@ -102,3 +102,56 @@ pub mod service_mesh {
         }
     }
 }
+
+/// Brio Core bindings.
+pub mod brio {
+    pub mod core {
+        pub mod planner {
+            /// Represents a sub-step of a larger task.
+            #[derive(Debug, Clone)]
+            pub struct Subtask {
+                pub id: String,
+                pub description: String,
+            }
+
+            /// A sequence of steps to achieve an objective.
+            #[derive(Debug, Clone)]
+            pub struct Plan {
+                pub steps: Vec<Subtask>,
+            }
+
+            /// Decomposes a high-level objective into actionable subtasks.
+            pub fn decompose(objective: &str) -> Result<Plan, String> {
+                #[cfg(target_arch = "wasm32")]
+                {
+                    use crate::brio_host::brio::core::planner as wit;
+                    let result = wit::decompose(objective)?;
+
+                    // Map WIT types to our facade types
+                    Ok(Plan {
+                        steps: result
+                            .steps
+                            .into_iter()
+                            .map(|s| Subtask {
+                                id: s.id,
+                                description: s.description,
+                            })
+                            .collect(),
+                    })
+                }
+
+                #[cfg(not(target_arch = "wasm32"))]
+                {
+                    // Stub for native testing
+                    let _ = objective;
+                    Ok(Plan {
+                        steps: vec![Subtask {
+                            id: "step1".to_string(),
+                            description: "Mock step 1".to_string(),
+                        }],
+                    })
+                }
+            }
+        }
+    }
+}

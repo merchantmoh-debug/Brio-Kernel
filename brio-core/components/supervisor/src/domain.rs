@@ -102,9 +102,15 @@ impl Default for Priority {
 /// `Pending` → `Assigned` → `Completed` | `Failed`
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum TaskStatus {
-    /// Task is waiting to be picked up by an agent.
+    /// Task is waiting to be picked up.
     Pending,
-    /// Task has been assigned to an agent.
+    /// Task is currently analyzing and decomposing requirements.
+    Planning,
+    /// Task sub-items are being actively worked on.
+    Executing,
+    /// Task is being verified for correctness.
+    Verifying,
+    /// Task has been assigned to an agent (Legacy/Simple mode).
     Assigned,
     /// Task was completed successfully.
     Completed,
@@ -120,6 +126,9 @@ impl TaskStatus {
     pub fn parse(s: &str) -> Result<Self, ParseStatusError> {
         match s.to_lowercase().as_str() {
             "pending" => Ok(Self::Pending),
+            "planning" => Ok(Self::Planning),
+            "executing" => Ok(Self::Executing),
+            "verifying" => Ok(Self::Verifying),
             "assigned" => Ok(Self::Assigned),
             "completed" => Ok(Self::Completed),
             "failed" => Ok(Self::Failed),
@@ -132,6 +141,9 @@ impl TaskStatus {
     pub const fn as_str(&self) -> &'static str {
         match self {
             Self::Pending => "pending",
+            Self::Planning => "planning",
+            Self::Executing => "executing",
+            Self::Verifying => "verifying",
             Self::Assigned => "assigned",
             Self::Completed => "completed",
             Self::Failed => "failed",
@@ -214,10 +226,22 @@ impl Task {
         self.assigned_agent.as_ref()
     }
 
-    /// Checks if this task is ready for dispatch.
+    /// Checks if this task is ready for dispatch (Pending).
     #[must_use]
     pub const fn is_pending(&self) -> bool {
         matches!(self.status, TaskStatus::Pending)
+    }
+
+    /// Checks if this task is active (managed by supervisor).
+    #[must_use]
+    pub const fn is_active(&self) -> bool {
+        matches!(
+            self.status,
+            TaskStatus::Pending
+                | TaskStatus::Planning
+                | TaskStatus::Executing
+                | TaskStatus::Verifying
+        )
     }
 }
 

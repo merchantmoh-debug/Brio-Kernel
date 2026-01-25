@@ -50,13 +50,22 @@ impl From<ParseStatusError> for RepositoryError {
 /// - Unit testing with mock implementations
 /// - Swapping storage backends without changing business logic
 pub trait TaskRepository {
-    /// Fetches all tasks with status = 'pending', ordered by priority DESC.
+    /// Fetches all active tasks (not completed or failed), ordered by priority DESC.
     ///
     /// # Errors
     /// Returns `RepositoryError` if the query fails or data is malformed.
-    fn fetch_pending_tasks(&self) -> Result<Vec<Task>, RepositoryError>;
+    fn fetch_active_tasks(&self) -> Result<Vec<Task>, RepositoryError>;
 
-    /// Marks a task as assigned to an agent.
+    /// Updates task status.
+    fn update_status(&self, task_id: TaskId, status: TaskStatus) -> Result<(), RepositoryError>;
+
+    /// Assigns an agent to a task without changing its status.
+    ///
+    /// # Errors
+    /// Returns `RepositoryError` if the update fails.
+    fn assign_agent(&self, task_id: TaskId, agent: &AgentId) -> Result<(), RepositoryError>;
+
+    /// Marks a task as assigned to an agent (Legacy: sets status to Assigned).
     ///
     /// # Errors
     /// Returns `RepositoryError` if the update fails.
@@ -136,13 +145,19 @@ impl Default for WitTaskRepository {
 }
 
 impl TaskRepository for WitTaskRepository {
-    fn fetch_pending_tasks(&self) -> Result<Vec<Task>, RepositoryError> {
+    fn fetch_active_tasks(&self) -> Result<Vec<Task>, RepositoryError> {
+        // Fetch all non-terminal states
         let sql = "SELECT id, content, priority, status, assigned_agent \
                    FROM tasks \
-                   WHERE status = ? \
+                   WHERE status IN (?, ?, ?, ?) \
                    ORDER BY priority DESC";
 
-        let params = vec![TaskStatus::Pending.as_str().to_string()];
+        let params = vec![
+            TaskStatus::Pending.as_str().to_string(),
+            TaskStatus::Planning.as_str().to_string(),
+            TaskStatus::Executing.as_str().to_string(),
+            TaskStatus::Verifying.as_str().to_string(),
+        ];
 
         let rows =
             wit_bindings::sql_state::query(sql, &params).map_err(RepositoryError::SqlError)?;
@@ -150,6 +165,32 @@ impl TaskRepository for WitTaskRepository {
         rows.iter()
             .map(|row| Self::parse_row(&row.columns, &row.values))
             .collect()
+    }
+
+    fn update_status(&self, task_id: TaskId, status: TaskStatus) -> Result<(), RepositoryError> {
+        let sql = "UPDATE tasks SET status = ? WHERE id = ?";
+        let params = vec![status.as_str().to_string(), task_id.inner().to_string()];
+
+        let affected =
+            wit_bindings::sql_state::execute(sql, &params).map_err(RepositoryError::SqlError)?;
+
+        if affected == 0 {
+            return Err(RepositoryError::NotFound(task_id));
+        }
+        Ok(())
+    }
+
+    fn assign_agent(&self, task_id: TaskId, agent: &AgentId) -> Result<(), RepositoryError> {
+        let sql = "UPDATE tasks SET assigned_agent = ? WHERE id = ?";
+        let params = vec![agent.as_str().to_string(), task_id.inner().to_string()];
+
+        let affected =
+            wit_bindings::sql_state::execute(sql, &params).map_err(RepositoryError::SqlError)?;
+
+        if affected == 0 {
+            return Err(RepositoryError::NotFound(task_id));
+        }
+        Ok(())
     }
 
     fn mark_assigned(&self, task_id: TaskId, agent: &AgentId) -> Result<(), RepositoryError> {
