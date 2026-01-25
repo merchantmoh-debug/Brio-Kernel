@@ -12,6 +12,7 @@ pub mod mesh_client;
 pub mod orchestrator;
 pub mod planner;
 pub mod repository;
+pub mod selector;
 pub mod wit_bindings;
 
 // Generate WIT bindings when building for WASM target
@@ -43,10 +44,12 @@ pub extern "C" fn run() -> i32 {
 
 /// Inner implementation for testability.
 fn run_inner() -> Result<u32, orchestrator::SupervisorError> {
+    use selector::KeywordAgentSelector;
     let repository = WitTaskRepository::new();
     let dispatcher = WitAgentDispatcher::new();
     let planner = WitPlanner::new();
-    let supervisor = Supervisor::new(repository, dispatcher, planner);
+    let selector = KeywordAgentSelector::default();
+    let supervisor = Supervisor::new(repository, dispatcher, planner, selector);
 
     supervisor.poll_tasks()
 }

@@ -10,6 +10,7 @@
 use crate::domain::{AgentId, Priority, Task, TaskStatus};
 use crate::mesh_client::{AgentDispatcher, DispatchResult, MeshError};
 use crate::repository::{RepositoryError, TaskRepository};
+use crate::selector::AgentSelector;
 
 // =============================================================================
 // Planner Trait
@@ -80,34 +81,36 @@ impl From<MeshError> for SupervisorError {
 // Supervisor
 // =============================================================================
 
-/// Supervisor orchestration logic.
-///
 /// Coordinates task fetching, agent dispatch, and status updates.
 /// Dependencies are injected via generic trait bounds.
-pub struct Supervisor<R, D, P>
+pub struct Supervisor<R, D, P, S>
 where
     R: TaskRepository,
     D: AgentDispatcher,
     P: Planner,
+    S: AgentSelector,
 {
     repository: R,
     dispatcher: D,
     planner: P,
+    selector: S,
 }
 
-impl<R, D, P> Supervisor<R, D, P>
+impl<R, D, P, S> Supervisor<R, D, P, S>
 where
     R: TaskRepository,
     D: AgentDispatcher,
     P: Planner,
+    S: AgentSelector,
 {
     /// Creates a new Supervisor with injected dependencies.
     #[must_use]
-    pub const fn new(repository: R, dispatcher: D, planner: P) -> Self {
+    pub const fn new(repository: R, dispatcher: D, planner: P, selector: S) -> Self {
         Self {
             repository,
             dispatcher,
             planner,
+            selector,
         }
     }
 
@@ -234,21 +237,9 @@ where
     }
 
     /// Selects an appropriate agent based on task content and capabilities.
+    /// Selects an appropriate agent based on task content and capabilities.
     fn select_agent(&self, task: &Task) -> AgentId {
-        // Dynamic Selection Strategy
-        // 1. Analyze content for keywords to determine required capabilities
-        // 2. Select agent with matching capabilities
-
-        let content = task.content().to_lowercase();
-
-        // Simple heuristic for MVP (replacing the hardcoded string)
-        if content.contains("review") || content.contains("audit") || content.contains("check") {
-            // In a real system, we would query the registry for agents with Capability::Reviewing
-            return AgentId::new("agent_reviewer");
-        }
-
-        // Default to coder for implementation tasks
-        AgentId::new("agent_coder")
+        self.selector.select(task)
     }
 
     /// Handles failures during task dispatch.
@@ -267,6 +258,7 @@ where
 mod tests {
     use super::*;
     use crate::domain::{Priority, TaskId, TaskStatus};
+    use crate::selector::KeywordAgentSelector;
     use std::cell::RefCell;
     use std::collections::HashSet;
     use std::rc::Rc;
@@ -492,8 +484,9 @@ mod tests {
         let dispatcher = MockDispatcher {
             result: DispatchResult::Accepted,
         };
+        let selector = KeywordAgentSelector::default();
 
-        let supervisor = Supervisor::new(repo, dispatcher, planner);
+        let supervisor = Supervisor::new(repo, dispatcher, planner, selector);
         let count = supervisor.poll_tasks().unwrap();
 
         // Pending -> Planning (2 tasks processed)
@@ -517,8 +510,9 @@ mod tests {
         let dispatcher = MockDispatcher {
             result: DispatchResult::Accepted,
         };
+        let selector = KeywordAgentSelector::default();
 
-        let supervisor = Supervisor::new(repo, dispatcher, planner);
+        let supervisor = Supervisor::new(repo, dispatcher, planner, selector);
         let count = supervisor.poll_tasks().unwrap();
 
         // 1 active task processed (dispatched and assigned)
@@ -553,8 +547,9 @@ mod tests {
         let dispatcher = MockDispatcher {
             result: DispatchResult::Accepted,
         };
+        let selector = KeywordAgentSelector::default();
 
-        let supervisor = Supervisor::new(repo, dispatcher, planner);
+        let supervisor = Supervisor::new(repo, dispatcher, planner, selector);
         let count = supervisor.poll_tasks().unwrap();
 
         // No processing/changes (count = 0)
@@ -580,8 +575,9 @@ mod tests {
         let dispatcher = MockDispatcher {
             result: DispatchResult::Accepted,
         };
+        let selector = KeywordAgentSelector::default();
 
-        let supervisor = Supervisor::new(repo, dispatcher, planner);
+        let supervisor = Supervisor::new(repo, dispatcher, planner, selector);
         supervisor.poll_tasks().unwrap();
 
         let assigned = repo_clone.assigned();
@@ -618,8 +614,9 @@ mod tests {
         let dispatcher = MockDispatcher {
             result: DispatchResult::Accepted,
         };
+        let selector = KeywordAgentSelector::default();
 
-        let supervisor = Supervisor::new(repo.clone(), dispatcher, planner);
+        let supervisor = Supervisor::new(repo.clone(), dispatcher, planner, selector);
 
         // 1. Poll: Pending -> Planning
         let count = supervisor.poll_tasks().unwrap();
@@ -675,8 +672,9 @@ mod tests {
         let dispatcher = MockDispatcher {
             result: DispatchResult::Accepted,
         };
+        let selector = KeywordAgentSelector::default();
 
-        let supervisor = Supervisor::new(repo, dispatcher, planner);
+        let supervisor = Supervisor::new(repo, dispatcher, planner, selector);
         let agent_id = supervisor.select_agent(&task);
 
         assert_eq!(agent_id.as_str(), "agent_reviewer");
