@@ -13,13 +13,15 @@ use crate::store::{PrefixPolicy, SqlStore};
 use crate::vfs::manager::SessionManager;
 use crate::ws::{BroadcastMessage, Broadcaster, WsPatch};
 
+#[derive(Clone)]
 pub struct BrioHostState {
-    mesh_router: std::sync::RwLock<HashMap<String, Sender<MeshMessage>>>,
+    mesh_router: Arc<std::sync::RwLock<HashMap<String, Sender<MeshMessage>>>>,
     remote_router: Option<RemoteRouter>,
     db_pool: SqlitePool,
     broadcaster: Broadcaster,
-    session_manager: std::sync::Mutex<SessionManager>,
+    session_manager: Arc<std::sync::Mutex<SessionManager>>,
     provider_registry: Arc<ProviderRegistry>,
+    permissions: Arc<std::collections::HashSet<String>>,
 }
 
 impl BrioHostState {
@@ -32,12 +34,13 @@ impl BrioHostState {
         let pool = SqlitePoolOptions::new().connect(db_url).await?;
 
         Ok(Self {
-            mesh_router: std::sync::RwLock::new(HashMap::new()),
+            mesh_router: Arc::new(std::sync::RwLock::new(HashMap::new())),
             remote_router: None, // Default to standalone mode
             db_pool: pool,
             broadcaster: Broadcaster::new(),
-            session_manager: std::sync::Mutex::new(SessionManager::new(sandbox)),
+            session_manager: Arc::new(std::sync::Mutex::new(SessionManager::new(sandbox))),
             provider_registry: Arc::new(registry),
+            permissions: Arc::new(std::collections::HashSet::new()),
         })
     }
 
@@ -52,12 +55,13 @@ impl BrioHostState {
         let remote_router = RemoteRouter::new();
 
         Ok(Self {
-            mesh_router: std::sync::RwLock::new(HashMap::new()),
+            mesh_router: Arc::new(std::sync::RwLock::new(HashMap::new())),
             remote_router: Some(remote_router),
             db_pool: pool,
             broadcaster: Broadcaster::new(),
-            session_manager: std::sync::Mutex::new(SessionManager::new(sandbox)),
+            session_manager: Arc::new(std::sync::Mutex::new(SessionManager::new(sandbox))),
             provider_registry: Arc::new(registry),
+            permissions: Arc::new(std::collections::HashSet::new()),
         })
     }
 
@@ -171,5 +175,24 @@ impl BrioHostState {
     /// Returns the default LLM provider (backward compatible).
     pub fn inference(&self) -> Option<Arc<dyn LLMProvider>> {
         self.provider_registry.get_default()
+    }
+
+    /// Creates a new view of the host state with restricted permissions.
+    pub fn with_permissions(&self, permissions: Vec<String>) -> Self {
+        let mut new_state = self.clone();
+        new_state.permissions = Arc::new(permissions.into_iter().collect());
+        new_state
+    }
+
+    /// Checks if a permission is granted.
+    ///
+    /// # Errors
+    /// Returns error if permission is denied.
+    pub fn check_permission(&self, permission: &str) -> Result<(), String> {
+        if self.permissions.contains(permission) {
+            Ok(())
+        } else {
+            Err(format!("Permission denied: required '{}'", permission))
+        }
     }
 }
