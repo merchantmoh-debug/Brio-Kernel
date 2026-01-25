@@ -160,6 +160,7 @@ impl WitTaskRepository {
             status,
             parent_id,
             assigned_agent,
+            std::collections::HashSet::new(),
         ))
     }
 }

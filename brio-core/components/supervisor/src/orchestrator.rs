@@ -233,12 +233,21 @@ where
         }
     }
 
-    /// Selects an appropriate agent for the task.
-    ///
-    /// Current implementation: simple default agent selection.
-    /// Future: Could use task metadata or load balancing.
-    fn select_agent(&self, _task: &Task) -> AgentId {
-        // Default agent for MVP
+    /// Selects an appropriate agent based on task content and capabilities.
+    fn select_agent(&self, task: &Task) -> AgentId {
+        // Dynamic Selection Strategy
+        // 1. Analyze content for keywords to determine required capabilities
+        // 2. Select agent with matching capabilities
+
+        let content = task.content().to_lowercase();
+
+        // Simple heuristic for MVP (replacing the hardcoded string)
+        if content.contains("review") || content.contains("audit") || content.contains("check") {
+            // In a real system, we would query the registry for agents with Capability::Reviewing
+            return AgentId::new("agent_reviewer");
+        }
+
+        // Default to coder for implementation tasks
         AgentId::new("agent_coder")
     }
 
@@ -259,6 +268,7 @@ mod tests {
     use super::*;
     use crate::domain::{Priority, TaskId, TaskStatus};
     use std::cell::RefCell;
+    use std::collections::HashSet;
     use std::rc::Rc;
 
     /// Shared mock repository state.
@@ -328,6 +338,7 @@ mod tests {
                     status,
                     t.parent_id(),
                     t.assigned_agent().cloned(),
+                    t.required_capabilities().clone(),
                 );
             }
             Ok(())
@@ -345,6 +356,7 @@ mod tests {
                     t.status(),
                     t.parent_id(),
                     Some(agent.clone()),
+                    t.required_capabilities().clone(),
                 );
             }
             Ok(())
@@ -362,6 +374,7 @@ mod tests {
                     TaskStatus::Assigned,
                     t.parent_id(),
                     Some(agent.clone()),
+                    t.required_capabilities().clone(),
                 );
             }
             Ok(())
@@ -379,6 +392,7 @@ mod tests {
                     TaskStatus::Completed,
                     t.parent_id(),
                     t.assigned_agent().cloned(),
+                    t.required_capabilities().clone(),
                 );
             }
             Ok(())
@@ -400,6 +414,7 @@ mod tests {
                     TaskStatus::Failed,
                     t.parent_id(),
                     t.assigned_agent().cloned(),
+                    t.required_capabilities().clone(),
                 );
             }
             Ok(())
@@ -422,6 +437,7 @@ mod tests {
                 TaskStatus::Pending,
                 parent_id,
                 None,
+                HashSet::new(),
             ));
             Ok(new_id)
         }
@@ -465,6 +481,7 @@ mod tests {
             TaskStatus::Pending,
             None,
             None,
+            HashSet::new(),
         )
     }
 
@@ -493,6 +510,7 @@ mod tests {
             TaskStatus::Executing,
             None,
             None,
+            HashSet::new(),
         );
         let repo = MockRepository::new(vec![task]);
         let planner = MockPlanner;
@@ -517,6 +535,7 @@ mod tests {
             TaskStatus::Executing,
             None,
             None,
+            HashSet::new(),
         );
         // Manually assign
         task = Task::new(
@@ -526,6 +545,7 @@ mod tests {
             task.status(),
             task.parent_id(),
             Some(AgentId::new("agent_coder")),
+            HashSet::new(),
         );
 
         let repo = MockRepository::new(vec![task]);
@@ -551,6 +571,7 @@ mod tests {
             TaskStatus::Executing,
             None,
             None,
+            HashSet::new(),
         );
         let repo = MockRepository::new(vec![task]);
         let repo_clone = repo.clone();
@@ -588,6 +609,7 @@ mod tests {
             TaskStatus::Pending,
             None,
             None,
+            HashSet::new(),
         );
         let repo = MockRepository::new(vec![root_task]);
         let planner = DecomposingPlanner {
@@ -634,5 +656,29 @@ mod tests {
 
         let t1 = repo.get_task(TaskId::new(1)).unwrap();
         assert_eq!(t1.status(), TaskStatus::Verifying);
+    }
+
+    #[test]
+    fn select_agent_reviewer_based_on_keyword() {
+        let task = Task::new(
+            TaskId::new(100),
+            "Please review this code".to_string(),
+            Priority::DEFAULT,
+            TaskStatus::Executing,
+            None,
+            None,
+            HashSet::new(),
+        );
+
+        let repo = MockRepository::new(vec![task.clone()]);
+        let planner = MockPlanner;
+        let dispatcher = MockDispatcher {
+            result: DispatchResult::Accepted,
+        };
+
+        let supervisor = Supervisor::new(repo, dispatcher, planner);
+        let agent_id = supervisor.select_agent(&task);
+
+        assert_eq!(agent_id.as_str(), "agent_reviewer");
     }
 }

@@ -5,6 +5,7 @@
 //! making invalid states unrepresentable.
 
 use core::fmt;
+use std::collections::HashSet;
 
 // =============================================================================
 // Value Objects (Type-Safe Wrappers)
@@ -95,6 +96,31 @@ impl Default for Priority {
 }
 
 // =============================================================================
+// Capability System
+// =============================================================================
+
+/// Capabilities that an agent can possess or a task can require.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum Capability {
+    /// Ability to generate or modify code.
+    Coding,
+    /// Ability to review code or designs.
+    Reviewing,
+    /// Ability to reason about system architecture.
+    Reasoning,
+}
+
+impl fmt::Display for Capability {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Coding => write!(f, "Coding"),
+            Self::Reviewing => write!(f, "Reviewing"),
+            Self::Reasoning => write!(f, "Reasoning"),
+        }
+    }
+}
+
+// =============================================================================
 // Task Status (State Machine)
 // =============================================================================
 
@@ -180,6 +206,7 @@ pub struct Task {
     status: TaskStatus,
     parent_id: Option<TaskId>,
     assigned_agent: Option<AgentId>,
+    required_capabilities: HashSet<Capability>,
 }
 
 impl Task {
@@ -192,6 +219,7 @@ impl Task {
         status: TaskStatus,
         parent_id: Option<TaskId>,
         assigned_agent: Option<AgentId>,
+        required_capabilities: HashSet<Capability>,
     ) -> Self {
         Self {
             id,
@@ -200,6 +228,7 @@ impl Task {
             status,
             parent_id,
             assigned_agent,
+            required_capabilities,
         }
     }
 
@@ -237,6 +266,12 @@ impl Task {
     #[must_use]
     pub fn assigned_agent(&self) -> Option<&AgentId> {
         self.assigned_agent.as_ref()
+    }
+
+    /// Returns the capabilities required to perform this task.
+    #[must_use]
+    pub fn required_capabilities(&self) -> &HashSet<Capability> {
+        &self.required_capabilities
     }
 
     /// Checks if this task is ready for dispatch (Pending).
@@ -316,6 +351,7 @@ mod tests {
             TaskStatus::Pending,
             None,
             None,
+            HashSet::new(),
         );
 
         assert_eq!(task.id().inner(), 1);
