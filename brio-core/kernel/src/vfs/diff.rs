@@ -45,18 +45,18 @@ fn scan_directory(root: &Path) -> io::Result<HashMap<PathBuf, FileMetadata>> {
         let entry = entry?;
         let path = entry.path();
 
-        if path.is_file() {
-            if let Ok(relative) = path.strip_prefix(root) {
-                let metadata = fs::metadata(path)?;
-                map.insert(
-                    relative.to_path_buf(),
-                    FileMetadata {
-                        size: metadata.len(),
-                        modified: metadata.modified()?,
-                        hash: None,
-                    },
-                );
-            }
+        if path.is_file()
+            && let Ok(relative) = path.strip_prefix(root)
+        {
+            let metadata = fs::metadata(path)?;
+            map.insert(
+                relative.to_path_buf(),
+                FileMetadata {
+                    size: metadata.len(),
+                    modified: metadata.modified()?,
+                    hash: None,
+                },
+            );
         }
     }
 
