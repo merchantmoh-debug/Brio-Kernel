@@ -12,6 +12,8 @@ impl brio::core::service_mesh::Host for BrioHostState {
         method: String,
         args: brio::core::service_mesh::Payload,
     ) -> Result<brio::core::service_mesh::Payload, String> {
+        self.check_permission("mesh:send")?;
+
         // Convert WASM payload to internal Payload
         let internal_payload = match args {
             brio::core::service_mesh::Payload::Json(s) => Payload::Json(s),
@@ -40,6 +42,8 @@ impl brio::core::sql_state::Host for BrioHostState {
         sql: String,
         params: Vec<String>,
     ) -> Result<Vec<brio::core::sql_state::Row>, String> {
+        self.check_permission("storage:read")?;
+
         // Use a default scope for WASM guests
         let scope = "wasm_guest";
         let store = self.get_store(scope);
@@ -62,6 +66,7 @@ impl brio::core::sql_state::Host for BrioHostState {
     }
 
     fn execute(&mut self, sql: String, params: Vec<String>) -> Result<u32, String> {
+        self.check_permission("storage:write")?;
         let scope = "wasm_guest";
         let store = self.get_store(scope);
 
@@ -76,6 +81,7 @@ impl brio::core::sql_state::Host for BrioHostState {
 
 impl brio::core::session_fs::Host for BrioHostState {
     fn begin_session(&mut self, base_path: String) -> Result<String, String> {
+        self.check_permission("fs:write")?;
         BrioHostState::begin_session(self, base_path)
     }
 
@@ -91,6 +97,10 @@ impl brio::core::inference::Host for BrioHostState {
         messages: Vec<brio::core::inference::Message>,
     ) -> Result<brio::core::inference::CompletionResponse, brio::core::inference::InferenceError>
     {
+        if let Err(e) = self.check_permission("ai:inference") {
+            return Err(brio::core::inference::InferenceError::ProviderError(e));
+        }
+
         use crate::inference::{ChatRequest, Message, Role};
 
         // Convert WASM messages to internal messages
