@@ -1,0 +1,17 @@
+package brio:core;
+
+interface planner {
+    /// Represents a sub-step of a larger task.
+    record subtask {
+        id: string,
+        description: string,
+    }
+
+    /// A sequence of steps to achieve an objective.
+    record plan {
+        steps: list<subtask>,
+    }
+
+    /// Decomposes a high-level objective into actionable subtasks.
+    decompose: func(objective: string) -> result<plan, string>;
+}

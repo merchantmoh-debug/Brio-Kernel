@@ -10,7 +10,7 @@ world brio-host {
     import session-fs;
     import brio:ai/inference;
     import logging;
-
+    import planner;
 }
 
 interface agent-runner {
