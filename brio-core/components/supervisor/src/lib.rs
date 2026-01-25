@@ -10,6 +10,7 @@
 pub mod domain;
 pub mod mesh_client;
 pub mod orchestrator;
+pub mod planner;
 pub mod repository;
 pub mod wit_bindings;
 
@@ -22,6 +23,7 @@ wit_bindgen::generate!({
 
 use mesh_client::WitAgentDispatcher;
 use orchestrator::Supervisor;
+use planner::WitPlanner;
 use repository::WitTaskRepository;
 
 /// Guest export: Run a single supervision cycle.
@@ -43,9 +45,10 @@ pub extern "C" fn run() -> i32 {
 fn run_inner() -> Result<u32, orchestrator::SupervisorError> {
     let repository = WitTaskRepository::new();
     let dispatcher = WitAgentDispatcher::new();
-    let supervisor = Supervisor::new(repository, dispatcher);
+    let planner = WitPlanner::new();
+    let supervisor = Supervisor::new(repository, dispatcher, planner);
 
-    supervisor.poll_pending_tasks()
+    supervisor.poll_tasks()
 }
 
 #[cfg(test)]
