@@ -20,7 +20,7 @@ impl brio_kernel::inference::LLMProvider for DummyProvider {
 #[tokio::test]
 async fn test_mesh_routing() {
     // 1. Initialize Host State with in-memory DB
-    let state = BrioHostState::new("sqlite::memory:", Box::new(DummyProvider))
+    let state = BrioHostState::with_provider("sqlite::memory:", Box::new(DummyProvider))
         .await
         .expect("Failed to create host");
 

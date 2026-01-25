@@ -2,13 +2,16 @@ use crate::infrastructure::config::Settings;
 use crate::ws::{Broadcaster, handler::ws_router};
 use axum::{Router, routing::get};
 use metrics_exporter_prometheus::PrometheusBuilder;
-use pprof::protos::Message;
 use std::net::SocketAddr;
+
+#[cfg(unix)]
+use pprof::protos::Message;
 
 async fn health_check() -> &'static str {
     "OK"
 }
 
+#[cfg(unix)]
 async fn pprof_profile() -> impl axum::response::IntoResponse {
     let guard = pprof::ProfilerGuardBuilder::default()
         .frequency(100)
@@ -43,6 +46,14 @@ async fn pprof_profile() -> impl axum::response::IntoResponse {
             )
         }
     }
+}
+
+#[cfg(not(unix))]
+async fn pprof_profile() -> impl axum::response::IntoResponse {
+    (
+        axum::http::StatusCode::NOT_IMPLEMENTED,
+        "Profiling is only available on Unix systems",
+    )
 }
 
 /// Runs the control plane HTTP server with WebSocket support.

@@ -7,6 +7,8 @@ pub struct Settings {
     pub server: ServerSettings,
     pub telemetry: TelemetrySettings,
     pub database: DatabaseSettings,
+    pub mesh: Option<MeshSettings>,
+    pub inference: Option<InferenceSettings>,
 }
 
 #[derive(Debug, Deserialize, Clone)]
@@ -30,6 +32,19 @@ fn default_sampling() -> f64 {
 #[derive(Debug, Deserialize, Clone)]
 pub struct DatabaseSettings {
     pub url: SecretString,
+}
+
+#[derive(Debug, Deserialize, Clone)]
+pub struct MeshSettings {
+    pub node_id: Option<String>,
+    pub port: Option<u16>,
+}
+
+#[derive(Debug, Deserialize, Clone)]
+pub struct InferenceSettings {
+    pub openai_api_key: Option<SecretString>,
+    pub anthropic_api_key: Option<SecretString>,
+    pub openai_base_url: Option<String>,
 }
 
 impl Settings {

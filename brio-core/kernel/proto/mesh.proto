@@ -1,0 +1,39 @@
+syntax = "proto3";
+
+package mesh;
+
+service MeshTransport {
+  // Routes a mesh call to this node
+  rpc Call(MeshRequest) returns (MeshResponse);
+  
+  // Checks if the node is alive
+  rpc Heartbeat(HeartbeatRequest) returns (HeartbeatResponse);
+}
+
+message MeshRequest {
+  string target = 1;      // The target component ID
+  string method = 2;      // The method to call
+  
+  oneof payload {
+    string json = 3;      // JSON payload
+    bytes binary = 4;     // Binary payload
+  }
+}
+
+message MeshResponse {
+  oneof payload {
+    string json = 1;
+    bytes binary = 2;
+    string error = 3;     // Helper for error strings
+  }
+}
+
+message HeartbeatRequest {
+  string node_id = 1;     // ID of the checking node
+}
+
+message HeartbeatResponse {
+  string node_id = 1;     // ID of the responding node
+  bool ready = 2;         // Whether this node is ready to accept traffic
+  int64 timestamp = 3;    // Server timestamp
+}

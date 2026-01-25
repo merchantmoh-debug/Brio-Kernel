@@ -45,4 +45,6 @@ pub enum InferenceError {
     NetworkError(String),
     #[error("Configuration Error: {0}")]
     ConfigError(String),
+    #[error("Provider Not Found: {0}")]
+    ProviderNotFound(String),
 }

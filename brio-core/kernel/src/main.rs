@@ -31,22 +31,86 @@ async fn main() -> anyhow::Result<()> {
     let db_url = config.database.url.expose_secret();
 
     // Clean Code: Configure Provider (DIP)
-    // In future, this would load from strict configuration.
-    // For now we default to a placeholder config or environment.
-    // However, to keep it functional, we check env vars or use a default.
-    let provider_config = brio_kernel::inference::OpenAIConfig {
-        api_key: secrecy::SecretString::new("sk-placeholder".into()), // Placeholder for now
-        base_url: reqwest::Url::parse("https://openrouter.ai/api/v1").expect("Invalid URL"),
-    };
+    let openai_key = config
+        .inference
+        .as_ref()
+        .and_then(|i| i.openai_api_key.clone())
+        .unwrap_or_else(|| secrecy::SecretString::new("sk-placeholder".into()));
+
+    let openai_base = config
+        .inference
+        .as_ref()
+        .and_then(|i| i.openai_base_url.clone())
+        .unwrap_or("https://openrouter.ai/api/v1/".to_string());
+
+    let provider_config = brio_kernel::inference::OpenAIConfig::new(
+        openai_key,
+        reqwest::Url::parse(&openai_base).expect("Invalid OpenAI Base URL"),
+    );
     let provider = brio_kernel::inference::OpenAIProvider::new(provider_config);
 
-    let state = match BrioHostState::new(db_url, Box::new(provider)).await {
-        Ok(s) => s,
-        Err(e) => {
-            error!("Failed to initialize host state: {:?}", e);
-            std::process::exit(1);
+    // Create registry (common for both modes)
+    let registry = brio_kernel::inference::ProviderRegistry::new();
+    registry.register_arc("default", std::sync::Arc::new(provider));
+    registry.set_default("default");
+
+    // Check for distributed config
+    let mesh_config = config.mesh.clone();
+    let node_id = mesh_config
+        .as_ref()
+        .and_then(|m| m.node_id.clone())
+        .map(brio_kernel::mesh::types::NodeId::from);
+    let mesh_port = mesh_config
+        .as_ref()
+        .and_then(|m| m.port)
+        .map(|p| p.to_string())
+        .unwrap_or("50051".to_string());
+
+    let state = if let Some(ref id) = node_id {
+        info!("Initializing in Distributed Mode (Node ID: {})", id);
+        match BrioHostState::new_distributed(db_url, registry, id.clone()).await {
+            Ok(s) => std::sync::Arc::new(s),
+            Err(e) => {
+                error!("Failed to initialize distributed host state: {:?}", e);
+                std::process::exit(1);
+            }
+        }
+    } else {
+        info!("Initializing in Standalone Mode");
+        match BrioHostState::new(db_url, registry).await {
+            Ok(s) => std::sync::Arc::new(s),
+            Err(e) => {
+                error!("Failed to initialize host state: {:?}", e);
+                std::process::exit(1);
+            }
         }
     };
+
+    // Start gRPC server if distributed
+    if let Some(id) = node_id {
+        let state_clone = state.clone();
+        let port = mesh_port.clone();
+        tokio::spawn(async move {
+            let addr = format!("0.0.0.0:{}", port)
+                .parse()
+                .expect("Invalid mesh address");
+            let service = brio_kernel::mesh::service::MeshService::new(state_clone, id);
+
+            info!("Mesh gRPC server listening on {}", addr);
+
+            if let Err(e) = tonic::transport::Server::builder()
+                .add_service(
+                    brio_kernel::mesh::grpc::mesh_transport_server::MeshTransportServer::new(
+                        service,
+                    ),
+                )
+                .serve(addr)
+                .await
+            {
+                error!("Mesh gRPC server failed: {:?}", e);
+            }
+        });
+    }
 
     let broadcaster = state.broadcaster().clone();
     let server_config = config.clone();

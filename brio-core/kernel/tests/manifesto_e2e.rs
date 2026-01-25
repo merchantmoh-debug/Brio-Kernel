@@ -28,7 +28,7 @@ impl TestEnvironment {
         }
         std::fs::create_dir_all(&root)?;
 
-        let host = Arc::new(BrioHostState::new("sqlite::memory:", provider).await?);
+        let host = Arc::new(BrioHostState::with_provider("sqlite::memory:", provider).await?);
 
         let env = Self {
             host,
@@ -267,6 +267,7 @@ async fn smart_agent_logic(
 
             let response = host
                 .inference()
+                .expect("Default provider not found")
                 .chat(request)
                 .await
                 .expect("LLM Call Failed");
@@ -313,10 +314,10 @@ async fn manifesto_scenario_real_ai() -> Result<()> {
 
     // 2. Setup Real Provider
     // Clean Code: Secure config
-    let config = brio_kernel::inference::OpenAIConfig {
-        api_key: secrecy::SecretString::new(api_key.into()),
-        base_url: reqwest::Url::parse("https://openrouter.ai/api/v1/")?,
-    };
+    let config = brio_kernel::inference::OpenAIConfig::new(
+        secrecy::SecretString::new(api_key.into()),
+        reqwest::Url::parse("https://openrouter.ai/api/v1/")?,
+    );
     let provider = brio_kernel::inference::OpenAIProvider::new(config);
 
     // 3. Arrange Environment

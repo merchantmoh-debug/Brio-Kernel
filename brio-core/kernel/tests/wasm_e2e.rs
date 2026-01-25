@@ -29,7 +29,7 @@ async fn wasm_engine_instantiates_empty_component() -> Result<()> {
 }
 
 async fn create_host_state() -> Result<BrioHostState> {
-    BrioHostState::new("sqlite::memory:", Box::new(MockProvider)).await
+    BrioHostState::with_provider("sqlite::memory:", Box::new(MockProvider)).await
 }
 
 fn create_engine() -> Result<wasmtime::Engine> {

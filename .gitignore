@@ -19,3 +19,5 @@ Thumbs.db
 *.db
 *.db-shm
 *.db-wal
+
+docs\TUI_DEVELOPMENT_GUIDE.md

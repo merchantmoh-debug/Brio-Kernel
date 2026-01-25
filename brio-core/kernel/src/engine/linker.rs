@@ -1,5 +1,6 @@
 use crate::engine::brio;
 use crate::host::BrioHostState;
+use crate::mesh::Payload;
 use anyhow::Result;
 use wasmtime::component::{HasSelf, Linker};
 use wasmtime::{Config, Engine};
@@ -7,48 +8,140 @@ use wasmtime::{Config, Engine};
 impl brio::core::service_mesh::Host for BrioHostState {
     fn call(
         &mut self,
-        _target: String,
-        _method: String,
-        _args: brio::core::service_mesh::Payload,
+        target: String,
+        method: String,
+        args: brio::core::service_mesh::Payload,
     ) -> Result<brio::core::service_mesh::Payload, String> {
-        Err(stub_error("service-mesh"))
+        // Convert WASM payload to internal Payload
+        let internal_payload = match args {
+            brio::core::service_mesh::Payload::Json(s) => Payload::Json(s),
+            brio::core::service_mesh::Payload::Binary(b) => Payload::Binary(b),
+        };
+
+        // Bridge sync to async
+        let result = tokio::task::block_in_place(|| {
+            tokio::runtime::Handle::current()
+                .block_on(async { self.mesh_call(&target, &method, internal_payload).await })
+        });
+
+        // Convert result back to WASM payload
+        result
+            .map(|p| match p {
+                Payload::Json(s) => brio::core::service_mesh::Payload::Json(s),
+                Payload::Binary(b) => brio::core::service_mesh::Payload::Binary(b),
+            })
+            .map_err(|e| e.to_string())
     }
 }
 
 impl brio::core::sql_state::Host for BrioHostState {
     fn query(
         &mut self,
-        _sql: String,
-        _params: Vec<String>,
+        sql: String,
+        params: Vec<String>,
     ) -> Result<Vec<brio::core::sql_state::Row>, String> {
-        Err(stub_error("sql-state"))
+        // Use a default scope for WASM guests
+        let scope = "wasm_guest";
+        let store = self.get_store(scope);
+
+        let result = tokio::task::block_in_place(|| {
+            tokio::runtime::Handle::current()
+                .block_on(async { store.query(scope, &sql, params).await })
+        });
+
+        result
+            .map(|rows| {
+                rows.into_iter()
+                    .map(|r| brio::core::sql_state::Row {
+                        columns: r.columns,
+                        values: r.values,
+                    })
+                    .collect()
+            })
+            .map_err(|e| e.to_string())
     }
 
-    fn execute(&mut self, _sql: String, _params: Vec<String>) -> Result<u32, String> {
-        Err(stub_error("sql-state"))
+    fn execute(&mut self, sql: String, params: Vec<String>) -> Result<u32, String> {
+        let scope = "wasm_guest";
+        let store = self.get_store(scope);
+
+        let result = tokio::task::block_in_place(|| {
+            tokio::runtime::Handle::current()
+                .block_on(async { store.execute(scope, &sql, params).await })
+        });
+
+        result.map_err(|e| e.to_string())
     }
 }
 
 impl brio::core::session_fs::Host for BrioHostState {
-    fn begin_session(&mut self, _base_path: String) -> Result<String, String> {
-        Err(stub_error("session-fs"))
+    fn begin_session(&mut self, base_path: String) -> Result<String, String> {
+        BrioHostState::begin_session(self, base_path)
     }
 
-    fn commit_session(&mut self, _session_id: String) -> Result<(), String> {
-        Err(stub_error("session-fs"))
+    fn commit_session(&mut self, session_id: String) -> Result<(), String> {
+        BrioHostState::commit_session(self, session_id)
     }
 }
 
 impl brio::core::inference::Host for BrioHostState {
     fn chat(
         &mut self,
-        _model: String,
-        _messages: Vec<brio::core::inference::Message>,
+        model: String,
+        messages: Vec<brio::core::inference::Message>,
     ) -> Result<brio::core::inference::CompletionResponse, brio::core::inference::InferenceError>
     {
-        Err(brio::core::inference::InferenceError::ProviderError(
-            stub_error("inference"),
-        ))
+        use crate::inference::{ChatRequest, Message, Role};
+
+        // Convert WASM messages to internal messages
+        let internal_messages: Vec<Message> = messages
+            .into_iter()
+            .map(|m| Message {
+                role: match m.role {
+                    brio::core::inference::Role::System => Role::System,
+                    brio::core::inference::Role::User => Role::User,
+                    brio::core::inference::Role::Assistant => Role::Assistant,
+                },
+                content: m.content,
+            })
+            .collect();
+
+        let request = ChatRequest {
+            model,
+            messages: internal_messages,
+        };
+
+        let inference_provider = match self.inference() {
+            Some(provider) => provider,
+            None => {
+                return Err(brio::core::inference::InferenceError::ProviderError(
+                    "No default inference provider configured".to_string(),
+                ));
+            }
+        };
+        let result = tokio::task::block_in_place(|| {
+            tokio::runtime::Handle::current()
+                .block_on(async { inference_provider.chat(request).await })
+        });
+
+        result
+            .map(|response| brio::core::inference::CompletionResponse {
+                content: response.content,
+                usage: response.usage.map(|u| brio::core::inference::Usage {
+                    prompt_tokens: u.prompt_tokens,
+                    completion_tokens: u.completion_tokens,
+                    total_tokens: u.total_tokens,
+                }),
+            })
+            .map_err(|e| match e {
+                crate::inference::InferenceError::RateLimit => {
+                    brio::core::inference::InferenceError::RateLimit
+                }
+                crate::inference::InferenceError::ContextLengthExceeded => {
+                    brio::core::inference::InferenceError::ContextLengthExceeded
+                }
+                other => brio::core::inference::InferenceError::ProviderError(other.to_string()),
+            })
     }
 }
 
@@ -101,8 +194,4 @@ fn register_host_interfaces(linker: &mut Linker<BrioHostState>) -> Result<()> {
     brio::core::logging::add_to_linker::<BrioHostState, State>(linker, |s| s)?;
 
     Ok(())
-}
-
-fn stub_error(interface: &str) -> String {
-    format!("Interface '{}' not yet implemented via WASM", interface)
 }
