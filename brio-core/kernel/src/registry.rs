@@ -87,6 +87,10 @@ impl PluginRegistry {
             .context("Failed to load component from file")?;
 
         let linker = create_linker(&self.engine)?;
+
+        // Apply plugin permissions to the host state
+        let host_state = host_state.with_permissions(metadata.permissions.clone());
+
         let mut store = Store::new(&self.engine, host_state);
 
         let _ = linker.instantiate_async(&mut store, &component).await?;
