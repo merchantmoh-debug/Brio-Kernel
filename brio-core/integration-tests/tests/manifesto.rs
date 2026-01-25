@@ -9,6 +9,7 @@ use supervisor::mesh_client::{AgentDispatcher, DispatchResult, MeshError};
 use supervisor::orchestrator::{Planner, PlannerError, Supervisor};
 use supervisor::repository::{RepositoryError, TaskRepository};
 use tokio::sync::mpsc;
+use std::collections::HashSet;
 
 // =============================================================================
 // Fixtures (Encapsulation)
@@ -125,6 +126,7 @@ impl TaskRepository for TestTaskRepository {
                                 status,
                                 None, // parent_id
                                 assigned_agent,
+                                HashSet::new(),
                             ))
                     })
                     .collect()
@@ -261,6 +263,7 @@ impl TaskRepository for TestTaskRepository {
                             status,
                             parent_id,
                             assigned_agent,
+                            HashSet::new(),
                         ))
                     })
                     .collect()

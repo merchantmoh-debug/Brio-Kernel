@@ -1,0 +1,18 @@
+[package]
+name = "integration-tests"
+version = "0.1.0"
+edition = "2024"
+publish = false
+
+[dev-dependencies]
+brio-kernel = { path = "../kernel" }
+supervisor = { path = "../components/supervisor" }
+tokio = { version = "1.0", features = ["full", "test-util"] }
+anyhow = "1.0"
+sqlx = { version = "0.8.6", features = ["sqlite", "runtime-tokio"] }
+secrecy = "0.10.3"
+reqwest = { version = "0.13.1", default-features = false, features = [
+    "json",
+    "rustls",
+] }
+async-trait = "0.1"

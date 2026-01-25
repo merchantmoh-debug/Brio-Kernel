@@ -58,7 +58,6 @@ dunce = "1.0.5"
 pprof = { version = "0.15", features = ["flamegraph", "prost-codec"] }
 
 [dev-dependencies]
-supervisor = { path = "../components/supervisor" }
 wiremock = "0.6"
 proptest = "1"
 tempfile = "3.24.0"
