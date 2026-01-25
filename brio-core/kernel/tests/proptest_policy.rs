@@ -11,11 +11,6 @@ fn scope_strategy() -> impl Strategy<Value = String> {
     "[a-z][a-z0-9]{0,7}".prop_filter("Valid scope", |s| !s.is_empty() && s.len() <= 8)
 }
 
-/// Strategy for generating table names that match the scope
-fn matching_table_strategy(scope: String) -> impl Strategy<Value = String> {
-    "[a-z]{1,8}".prop_map(move |suffix| format!("{}_{}", scope, suffix))
-}
-
 /// Strategy for generating table names that don't match the scope
 fn non_matching_table_strategy() -> impl Strategy<Value = String> {
     prop_oneof![

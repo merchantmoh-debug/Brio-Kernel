@@ -195,8 +195,3 @@ fn register_host_interfaces(linker: &mut Linker<BrioHostState>) -> Result<()> {
 
     Ok(())
 }
-
-#[allow(dead_code)]
-fn stub_error(interface: &str) -> String {
-    format!("Interface '{}' not yet implemented via WASM", interface)
-}
