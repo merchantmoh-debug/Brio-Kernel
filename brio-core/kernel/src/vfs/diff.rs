@@ -3,21 +3,29 @@ use std::collections::HashMap;
 use std::fs;
 use std::io::{self, Read};
 use std::path::{Path, PathBuf};
-use tracing::{debug, info};
+use std::time::SystemTime;
+use tracing::{debug, info, warn};
 use walkdir::WalkDir;
 
 #[derive(Debug)]
 pub enum FileChange {
-    Modified(PathBuf), // Path relative to base
+    Modified(PathBuf),
     Added(PathBuf),
     Deleted(PathBuf),
 }
 
-/// Computes SHA256 hash of a file
+#[derive(Debug, Clone)]
+struct FileMetadata {
+    size: u64,
+    #[allow(dead_code)]
+    modified: SystemTime,
+    hash: Option<String>,
+}
+
 fn compute_hash(path: &Path) -> io::Result<String> {
     let mut file = fs::File::open(path)?;
     let mut hasher = Sha256::new();
-    let mut buffer = [0; 8192]; // 8KB buffer
+    let mut buffer = [0; 8192];
 
     loop {
         let count = file.read(&mut buffer)?;
@@ -30,36 +38,57 @@ fn compute_hash(path: &Path) -> io::Result<String> {
     Ok(hex::encode(hasher.finalize()))
 }
 
-/// Scans a directory and returns a map of RelativePath -> Hash
-fn scan_directory(root: &Path) -> io::Result<HashMap<PathBuf, String>> {
+fn scan_directory(root: &Path) -> io::Result<HashMap<PathBuf, FileMetadata>> {
     let mut map = HashMap::new();
 
     for entry in WalkDir::new(root) {
         let entry = entry?;
         let path = entry.path();
 
-        if path.is_file() && path.strip_prefix(root).is_ok() {
-            let relative = path.strip_prefix(root).unwrap();
-            let hash = compute_hash(path)?;
-            map.insert(relative.to_path_buf(), hash);
+        if path.is_file() {
+            if let Ok(relative) = path.strip_prefix(root) {
+                let metadata = fs::metadata(path)?;
+                map.insert(
+                    relative.to_path_buf(),
+                    FileMetadata {
+                        size: metadata.len(),
+                        modified: metadata.modified()?,
+                        hash: None,
+                    },
+                );
+            }
         }
     }
 
     Ok(map)
 }
 
-/// Compares session directory against base directory to find changes
 pub fn compute_diff(session_path: &Path, base_path: &Path) -> io::Result<Vec<FileChange>> {
     let session_files = scan_directory(session_path)?;
     let base_files = scan_directory(base_path)?;
-
     let mut changes = Vec::new();
 
-    // Check for Modified and Added
-    for (rel_path, session_hash) in &session_files {
+    for (rel_path, session_meta) in &session_files {
         match base_files.get(rel_path) {
-            Some(base_hash) => {
-                if session_hash != base_hash {
+            Some(base_meta) => {
+                // Short-circuit: If size differs, it IS modified.
+                if session_meta.size != base_meta.size {
+                    changes.push(FileChange::Modified(rel_path.clone()));
+                    continue;
+                }
+
+                // If sizes match, verify with hash.
+                let s_hash = match &session_meta.hash {
+                    Some(h) => h.clone(),
+                    None => compute_hash(&session_path.join(rel_path))?,
+                };
+
+                let b_hash = match &base_meta.hash {
+                    Some(h) => h.clone(),
+                    None => compute_hash(&base_path.join(rel_path))?,
+                };
+
+                if s_hash != b_hash {
                     changes.push(FileChange::Modified(rel_path.clone()));
                 }
             }
@@ -79,36 +108,94 @@ pub fn compute_diff(session_path: &Path, base_path: &Path) -> io::Result<Vec<Fil
     Ok(changes)
 }
 
-/// Applies changes from session to base
 pub fn apply_changes(
     session_path: &Path,
     base_path: &Path,
     changes: &[FileChange],
 ) -> io::Result<()> {
+    if changes.is_empty() {
+        return Ok(());
+    }
+
+    let staging_dir_name = format!(".commit_{}", uuid::Uuid::new_v4());
+    let staging_path = base_path.join(&staging_dir_name);
+
+    if !staging_path.exists() {
+        fs::create_dir_all(&staging_path)?;
+    }
+
+    // Phase 1: Prepare - Stage content
     for change in changes {
         match change {
             FileChange::Added(rel) | FileChange::Modified(rel) => {
                 let src = session_path.join(rel);
-                let dst = base_path.join(rel);
+                let dst = staging_path.join(rel);
 
                 if let Some(parent) = dst.parent() {
                     fs::create_dir_all(parent)?;
                 }
-
-                // Safest is copy.
                 fs::copy(&src, &dst)?;
-                debug!("Applied {:?}: {:?}", change, dst);
             }
-            FileChange::Deleted(rel) => {
-                let target = base_path.join(rel);
-                if target.exists() {
-                    fs::remove_file(&target)?;
-                    debug!("Applied Delete: {:?}", target);
-                }
-            }
+            FileChange::Deleted(_) => {}
         }
     }
 
-    info!("Applied {} changes to Base", changes.len());
+    debug!("Phase 1 Prepare complete. Staging at {:?}", staging_path);
+
+    // Phase 2: Finalize
+    // We wrap this in a closure (or block) to ensure cleanup executes.
+    // Order: Deletions, then Moves (Staging -> Final).
+
+    let finalize_result = || -> io::Result<()> {
+        // Step 2a: Deletions
+        for change in changes {
+            if let FileChange::Deleted(rel) = change {
+                let target = base_path.join(rel);
+                if target.exists() {
+                    fs::remove_file(&target)?;
+                }
+            }
+        }
+
+        // Step 2b: Moves (Staging -> Final)
+        for change in changes {
+            if let FileChange::Added(rel) | FileChange::Modified(rel) = change {
+                let staged_file = staging_path.join(rel);
+                let final_dest = base_path.join(rel);
+
+                if let Some(parent) = final_dest.parent() {
+                    fs::create_dir_all(parent)?;
+                }
+
+                // If final destination is a directory (and we are replacing it with a file),
+                // we must remove the directory first.
+                if final_dest.is_dir() {
+                    debug!("Removing conflicting directory at {:?}", final_dest);
+                    fs::remove_dir_all(&final_dest)?;
+                }
+
+                if let Err(e) = fs::rename(&staged_file, &final_dest) {
+                    warn!(
+                        "Failed to rename staged file {:?} to {:?}: {}",
+                        staged_file, final_dest, e
+                    );
+                    return Err(e);
+                }
+            }
+        }
+        Ok(())
+    }();
+
+    // Cleanup staging directory
+    if staging_path.exists() {
+        let _ = fs::remove_dir_all(&staging_path);
+    }
+
+    finalize_result?;
+
+    info!(
+        "Applied {} changes to Base via Atomic Staging",
+        changes.len()
+    );
     Ok(())
 }
