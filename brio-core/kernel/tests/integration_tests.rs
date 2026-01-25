@@ -18,22 +18,27 @@ impl LLMProvider for MockProvider {
 #[tokio::test]
 async fn test_basic_host_interaction() -> Result<()> {
     // 1. Setup host state
-    let host_state = BrioHostState::with_provider("sqlite::memory:", Box::new(MockProvider)).await?;
-    
+    let host_state =
+        BrioHostState::with_provider("sqlite::memory:", Box::new(MockProvider)).await?;
+
     // 2. Setup WASM engine
     let config = create_engine_config();
     let engine = wasmtime::Engine::new(&config)?;
     let linker = create_linker(&engine)?;
     let wasm_engine = WasmEngine::new(linker)?;
-    
+
     // 3. Prepare store (this injects host state)
     let mut store = wasm_engine.prepare_store(host_state);
-    
+
     // 4. Create a dummy component that does nothing just to verify instantiation
     let component = wasmtime::component::Component::new(&engine, r#"(component)"#)?;
-    let instance = wasm_engine.linker().instantiate_async(&mut store, &component).await?;
-    
-    assert!(instance.exports(&mut store).root().into_iter().count() >= 0);
+    let _instance = wasm_engine
+        .linker()
+        .instantiate_async(&mut store, &component)
+        .await?;
+
+    // Verify instantiation succeeded
+    // assert!(instance.exports(&mut store).root().into_iter().count() >= 0);
 
     Ok(())
 }
