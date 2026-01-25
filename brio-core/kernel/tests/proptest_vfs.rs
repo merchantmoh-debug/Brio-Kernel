@@ -5,7 +5,6 @@
 
 use brio_kernel::vfs::manager::SessionManager;
 use proptest::prelude::*;
-use std::collections::HashMap;
 use std::fs;
 
 /// Strategy to generate valid file names (no special chars, reasonable length)
@@ -19,6 +18,7 @@ fn content_strategy() -> impl Strategy<Value = String> {
 }
 
 /// Represents a file operation in a session
+#[allow(dead_code)]
 #[derive(Debug, Clone)]
 enum FileOp {
     Create { name: String, content: String },
@@ -27,6 +27,7 @@ enum FileOp {
 }
 
 /// Strategy to generate a sequence of file operations
+#[allow(dead_code)]
 fn file_ops_strategy() -> impl Strategy<Value = Vec<FileOp>> {
     prop::collection::vec(
         prop_oneof![
@@ -73,7 +74,7 @@ proptest! {
         for (name, content) in &files {
             let file_path = base.join(name);
             prop_assert!(file_path.exists(), "File {} should exist in base", name);
-            prop_assert_eq!(fs::read_to_string(&file_path).unwrap(), *content);
+            prop_assert_eq!(fs::read_to_string(&file_path).unwrap(), content.clone());
         }
 
         // Cleanup
@@ -168,7 +169,7 @@ proptest! {
         // Verify all files have new content
         for (name, expected_content) in &unique_mods {
             let actual = fs::read_to_string(base.join(name)).unwrap();
-            prop_assert_eq!(actual, *expected_content, "File {} should have updated content", name);
+            prop_assert_eq!(actual, expected_content.clone(), "File {} should have updated content", name);
         }
 
         // Cleanup
