@@ -6,9 +6,9 @@ use tokio::sync::mpsc::Sender;
 use tokio::sync::oneshot;
 
 use crate::inference::{LLMProvider, ProviderRegistry};
-use crate::mesh::{MeshMessage, Payload};
 use crate::mesh::remote::RemoteRouter;
 use crate::mesh::types::{NodeId, NodeInfo};
+use crate::mesh::{MeshMessage, Payload};
 use crate::store::{PrefixPolicy, SqlStore};
 use crate::vfs::manager::SessionManager;
 use crate::ws::{BroadcastMessage, Broadcaster, WsPatch};
@@ -38,9 +38,13 @@ impl BrioHostState {
     }
 
     /// Creates a new BrioHostState with distributed mesh support
-    pub async fn new_distributed(db_url: &str, registry: ProviderRegistry, node_id: NodeId) -> Result<Self> {
+    pub async fn new_distributed(
+        db_url: &str,
+        registry: ProviderRegistry,
+        _node_id: NodeId,
+    ) -> Result<Self> {
         let pool = SqlitePoolOptions::new().connect(db_url).await?;
-        let remote_router = RemoteRouter::new(node_id);
+        let remote_router = RemoteRouter::new();
 
         Ok(Self {
             mesh_router: std::sync::RwLock::new(HashMap::new()),
@@ -117,9 +121,11 @@ impl BrioHostState {
 
         // 2. Try remote routing if enabled and target is formatted as "node_id/component"
         // Explicit remote addressing: "node_id/component_id"
-        if let (Some(router), Some((node_id_str, component))) = (&self.remote_router, target.split_once('/')) {
+        if let (Some(router), Some((node_id_str, component))) =
+            (&self.remote_router, target.split_once('/'))
+        {
             let node_id = NodeId::from(node_id_str.to_string());
-            
+
             // If the target is a different node, route via gRPC
             let message = MeshMessage {
                 target: component.to_string(),
@@ -127,11 +133,14 @@ impl BrioHostState {
                 payload,
                 reply_tx: oneshot::channel().0, // Reply handling is managed by RemoteRouter's request/response flow
             };
-            
+
             return router.send(&node_id, message).await;
         }
 
-        Err(anyhow!("Target component '{}' not found. Ensure format is 'component' (local) or 'node_id/component' (remote).", target))
+        Err(anyhow!(
+            "Target component '{}' not found. Ensure format is 'component' (local) or 'node_id/component' (remote).",
+            target
+        ))
     }
 
     pub fn begin_session(&self, base_path: String) -> Result<String, String> {
@@ -159,4 +168,3 @@ impl BrioHostState {
         self.provider_registry.get_default()
     }
 }
-

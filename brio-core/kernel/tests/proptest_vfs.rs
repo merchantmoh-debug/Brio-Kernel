@@ -17,30 +17,6 @@ fn content_strategy() -> impl Strategy<Value = String> {
     "[a-zA-Z0-9 ]{1,50}"
 }
 
-/// Represents a file operation in a session
-#[allow(dead_code)]
-#[derive(Debug, Clone)]
-enum FileOp {
-    Create { name: String, content: String },
-    Modify { name: String, content: String },
-    Delete { name: String },
-}
-
-/// Strategy to generate a sequence of file operations
-#[allow(dead_code)]
-fn file_ops_strategy() -> impl Strategy<Value = Vec<FileOp>> {
-    prop::collection::vec(
-        prop_oneof![
-            (file_name_strategy(), content_strategy())
-                .prop_map(|(name, content)| FileOp::Create { name, content }),
-            (file_name_strategy(), content_strategy())
-                .prop_map(|(name, content)| FileOp::Modify { name, content }),
-            file_name_strategy().prop_map(|name| FileOp::Delete { name }),
-        ],
-        1..5, // 1 to 5 operations per test
-    )
-}
-
 proptest! {
     #![proptest_config(ProptestConfig::with_cases(20))]
 

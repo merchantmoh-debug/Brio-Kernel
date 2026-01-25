@@ -1,10 +1,10 @@
+use anyhow::{Result, anyhow};
 use std::collections::HashMap;
 use std::sync::{Arc, RwLock};
-use anyhow::{Result, anyhow};
 use tonic::transport::Channel;
 
-use crate::mesh::types::{NodeId, NodeInfo, NodeAddress};
 use crate::mesh::grpc::mesh_transport_client::MeshTransportClient;
+use crate::mesh::types::{NodeAddress, NodeId, NodeInfo};
 use crate::mesh::{MeshMessage, Payload};
 
 /// Router for dispatching mesh calls to remote nodes via gRPC.
@@ -13,16 +13,13 @@ use crate::mesh::{MeshMessage, Payload};
 pub struct RemoteRouter {
     registry: Arc<RwLock<NodeRegistry>>,
     clients: Arc<RwLock<HashMap<NodeId, MeshTransportClient<Channel>>>>,
-    #[allow(dead_code)]
-    local_node_id: NodeId,
 }
 
 impl RemoteRouter {
-    pub fn new(local_node_id: NodeId) -> Self {
+    pub fn new() -> Self {
         Self {
             registry: Arc::new(RwLock::new(NodeRegistry::new())),
             clients: Arc::new(RwLock::new(HashMap::new())),
-            local_node_id,
         }
     }
 
@@ -38,7 +35,7 @@ impl RemoteRouter {
 
     pub async fn send(&self, target_node: &NodeId, message: MeshMessage) -> Result<Payload> {
         let client = self.get_or_connect(target_node).await?;
-        
+
         let request = tonic::Request::new(crate::mesh::grpc::MeshRequest {
             target: message.target,
             method: message.method,
@@ -50,13 +47,15 @@ impl RemoteRouter {
 
         // We need a mutable client for the call, so we clone the channel which is cheap
         let mut client = client.clone();
-        
+
         let response = client.call(request).await?.into_inner();
-        
+
         match response.payload {
             Some(crate::mesh::grpc::mesh_response::Payload::Json(s)) => Ok(Payload::Json(s)),
             Some(crate::mesh::grpc::mesh_response::Payload::Binary(b)) => Ok(Payload::Binary(b)),
-            Some(crate::mesh::grpc::mesh_response::Payload::Error(e)) => Err(anyhow!("Remote error: {}", e)),
+            Some(crate::mesh::grpc::mesh_response::Payload::Error(e)) => {
+                Err(anyhow!("Remote error: {}", e))
+            }
             None => Err(anyhow!("Empty response payload")),
         }
     }
@@ -71,7 +70,8 @@ impl RemoteRouter {
         }
 
         // Slow path: connect
-        let address = self.get_node_address(node_id)
+        let address = self
+            .get_node_address(node_id)
             .ok_or_else(|| anyhow!("Node {} not found in registry", node_id))?;
 
         // Format as http URL for tonic
@@ -113,7 +113,7 @@ impl NodeRegistry {
     pub fn get(&self, id: &NodeId) -> Option<&NodeInfo> {
         self.nodes.get(id)
     }
-    
+
     pub fn list(&self) -> Vec<NodeInfo> {
         self.nodes.values().cloned().collect()
     }
@@ -136,7 +136,7 @@ mod tests {
 
         registry.register(info.clone());
         assert!(registry.get(&id).is_some());
-        
+
         let list = registry.list();
         assert_eq!(list.len(), 1);
         assert_eq!(list[0].id, id);
