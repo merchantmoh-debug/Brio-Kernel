@@ -229,7 +229,9 @@ struct FailingMockProvider;
 #[async_trait::async_trait]
 impl LLMProvider for FailingMockProvider {
     async fn chat(&self, _request: ChatRequest) -> Result<ChatResponse, InferenceError> {
-        Err(InferenceError::ProviderError("Simulated failure".to_string()))
+        Err(InferenceError::ProviderError(
+            "Simulated failure".to_string(),
+        ))
     }
 }
 
@@ -244,5 +246,8 @@ async fn test_failing_provider_returns_error() {
 
     let result = provider.chat(request).await;
     assert!(result.is_err());
-    assert!(matches!(result.unwrap_err(), InferenceError::ProviderError(_)));
+    assert!(matches!(
+        result.unwrap_err(),
+        InferenceError::ProviderError(_)
+    ));
 }

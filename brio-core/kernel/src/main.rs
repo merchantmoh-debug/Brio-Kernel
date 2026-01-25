@@ -30,13 +30,16 @@ async fn main() -> anyhow::Result<()> {
 
     let db_url = config.database.url.expose_secret();
 
-
     // Clean Code: Configure Provider (DIP)
-    let openai_key = config.inference.as_ref()
+    let openai_key = config
+        .inference
+        .as_ref()
         .and_then(|i| i.openai_api_key.clone())
         .unwrap_or_else(|| secrecy::SecretString::new("sk-placeholder".into()));
 
-    let openai_base = config.inference.as_ref()
+    let openai_base = config
+        .inference
+        .as_ref()
         .and_then(|i| i.openai_base_url.clone())
         .unwrap_or("https://openrouter.ai/api/v1/".to_string());
 
@@ -45,7 +48,7 @@ async fn main() -> anyhow::Result<()> {
         reqwest::Url::parse(&openai_base).expect("Invalid OpenAI Base URL"),
     );
     let provider = brio_kernel::inference::OpenAIProvider::new(provider_config);
-    
+
     // Create registry (common for both modes)
     let registry = brio_kernel::inference::ProviderRegistry::new();
     registry.register_arc("default", std::sync::Arc::new(provider));
@@ -53,8 +56,15 @@ async fn main() -> anyhow::Result<()> {
 
     // Check for distributed config
     let mesh_config = config.mesh.clone();
-    let node_id = mesh_config.as_ref().and_then(|m| m.node_id.clone()).map(brio_kernel::mesh::types::NodeId::from);
-    let mesh_port = mesh_config.as_ref().and_then(|m| m.port).map(|p| p.to_string()).unwrap_or("50051".to_string());
+    let node_id = mesh_config
+        .as_ref()
+        .and_then(|m| m.node_id.clone())
+        .map(brio_kernel::mesh::types::NodeId::from);
+    let mesh_port = mesh_config
+        .as_ref()
+        .and_then(|m| m.port)
+        .map(|p| p.to_string())
+        .unwrap_or("50051".to_string());
 
     let state = if let Some(ref id) = node_id {
         info!("Initializing in Distributed Mode (Node ID: {})", id);
@@ -75,24 +85,30 @@ async fn main() -> anyhow::Result<()> {
             }
         }
     };
-    
+
     // Start gRPC server if distributed
     if let Some(id) = node_id {
         let state_clone = state.clone();
         let port = mesh_port.clone();
         tokio::spawn(async move {
-             let addr = format!("0.0.0.0:{}", port).parse().expect("Invalid mesh address");
-             let service = brio_kernel::mesh::service::MeshService::new(state_clone, id);
-             
-             info!("Mesh gRPC server listening on {}", addr);
-             
-             if let Err(e) = tonic::transport::Server::builder()
-                .add_service(brio_kernel::mesh::grpc::mesh_transport_server::MeshTransportServer::new(service))
+            let addr = format!("0.0.0.0:{}", port)
+                .parse()
+                .expect("Invalid mesh address");
+            let service = brio_kernel::mesh::service::MeshService::new(state_clone, id);
+
+            info!("Mesh gRPC server listening on {}", addr);
+
+            if let Err(e) = tonic::transport::Server::builder()
+                .add_service(
+                    brio_kernel::mesh::grpc::mesh_transport_server::MeshTransportServer::new(
+                        service,
+                    ),
+                )
                 .serve(addr)
-                .await 
-             {
-                 error!("Mesh gRPC server failed: {:?}", e);
-             }
+                .await
+            {
+                error!("Mesh gRPC server failed: {:?}", e);
+            }
         });
     }
 

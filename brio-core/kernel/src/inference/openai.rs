@@ -108,16 +108,12 @@ impl OpenAIProvider {
         &self,
         provider_req: &OpenAIChatRequest,
     ) -> Result<ChatResponse, (InferenceError, bool)> {
-        let url = self
-            .config
-            .base_url
-            .join("chat/completions")
-            .map_err(|e| {
-                (
-                    InferenceError::ConfigError(format!("Invalid URL join: {}", e)),
-                    false, // Don't retry config errors
-                )
-            })?;
+        let url = self.config.base_url.join("chat/completions").map_err(|e| {
+            (
+                InferenceError::ConfigError(format!("Invalid URL join: {}", e)),
+                false, // Don't retry config errors
+            )
+        })?;
 
         let res = self
             .client
@@ -254,8 +250,8 @@ fn rand_jitter() -> f64 {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use secrecy::SecretString;
     use reqwest::Url;
+    use secrecy::SecretString;
 
     #[test]
     fn test_openai_config_creation() {

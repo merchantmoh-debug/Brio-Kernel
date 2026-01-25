@@ -2,7 +2,9 @@
 //!
 //! Uses wiremock to simulate various HTTP responses from the OpenAI API.
 
-use brio_kernel::inference::{ChatRequest, InferenceError, LLMProvider, Message, OpenAIConfig, OpenAIProvider, Role};
+use brio_kernel::inference::{
+    ChatRequest, InferenceError, LLMProvider, Message, OpenAIConfig, OpenAIProvider, Role,
+};
 use reqwest::Url;
 use secrecy::SecretString;
 use wiremock::matchers::{method, path};

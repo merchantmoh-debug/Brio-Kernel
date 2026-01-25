@@ -2,13 +2,12 @@ use std::sync::Arc;
 use tonic::{Request, Response, Status};
 
 use crate::host::BrioHostState;
-use crate::mesh::grpc::{
-    mesh_transport_server::MeshTransport,
-    MeshRequest, MeshResponse, HeartbeatRequest, HeartbeatResponse,
-    mesh_response::Payload as ResponsePayload,
-    mesh_request::Payload as RequestPayload,
-};
 use crate::mesh::Payload;
+use crate::mesh::grpc::{
+    HeartbeatRequest, HeartbeatResponse, MeshRequest, MeshResponse,
+    mesh_request::Payload as RequestPayload, mesh_response::Payload as ResponsePayload,
+    mesh_transport_server::MeshTransport,
+};
 use crate::mesh::types::NodeId;
 
 /// gRPC Service Implementation for MeshTransport.
@@ -28,7 +27,7 @@ impl MeshService {
 impl MeshTransport for MeshService {
     async fn call(&self, request: Request<MeshRequest>) -> Result<Response<MeshResponse>, Status> {
         let req = request.into_inner();
-        
+
         let payload = match req.payload {
             Some(RequestPayload::Json(s)) => Payload::Json(s),
             Some(RequestPayload::Binary(b)) => Payload::Binary(b),
@@ -50,7 +49,10 @@ impl MeshTransport for MeshService {
         }
     }
 
-    async fn heartbeat(&self, _request: Request<HeartbeatRequest>) -> Result<Response<HeartbeatResponse>, Status> {
+    async fn heartbeat(
+        &self,
+        _request: Request<HeartbeatRequest>,
+    ) -> Result<Response<HeartbeatResponse>, Status> {
         Ok(Response::new(HeartbeatResponse {
             node_id: self.node_id.to_string(),
             ready: true,

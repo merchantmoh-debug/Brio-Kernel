@@ -59,7 +59,8 @@ async fn test_host_state_inference_access() -> Result<()> {
 
 #[tokio::test]
 async fn test_register_and_call_component() -> Result<()> {
-    let host = Arc::new(BrioHostState::with_provider("sqlite::memory:", Box::new(MockProvider)).await?);
+    let host =
+        Arc::new(BrioHostState::with_provider("sqlite::memory:", Box::new(MockProvider)).await?);
 
     let (tx, mut rx) = mpsc::channel::<MeshMessage>(10);
     host.register_component("test-component".to_string(), tx);
@@ -104,7 +105,8 @@ async fn test_mesh_call_to_missing_target() -> Result<()> {
 
 #[tokio::test]
 async fn test_register_multiple_components() -> Result<()> {
-    let host = Arc::new(BrioHostState::with_provider("sqlite::memory:", Box::new(MockProvider)).await?);
+    let host =
+        Arc::new(BrioHostState::with_provider("sqlite::memory:", Box::new(MockProvider)).await?);
 
     let (tx1, mut rx1) = mpsc::channel::<MeshMessage>(10);
     let (tx2, mut rx2) = mpsc::channel::<MeshMessage>(10);
@@ -181,7 +183,9 @@ async fn test_session_begin_and_commit() -> Result<()> {
     std::fs::create_dir_all(&temp)?;
     std::fs::write(temp.join("test.txt"), "hello")?;
 
-    let session_id = host.begin_session(temp.to_str().unwrap().to_string()).unwrap();
+    let session_id = host
+        .begin_session(temp.to_str().unwrap().to_string())
+        .unwrap();
     assert!(!session_id.is_empty());
 
     // Commit should succeed
@@ -220,7 +224,8 @@ async fn test_broadcast_patch() -> Result<()> {
 
 #[tokio::test]
 async fn test_binary_payload_routing() -> Result<()> {
-    let host = Arc::new(BrioHostState::with_provider("sqlite::memory:", Box::new(MockProvider)).await?);
+    let host =
+        Arc::new(BrioHostState::with_provider("sqlite::memory:", Box::new(MockProvider)).await?);
 
     let (tx, mut rx) = mpsc::channel::<MeshMessage>(10);
     host.register_component("binary-handler".to_string(), tx);

@@ -30,7 +30,8 @@ pub fn log_audit(event: AuditEvent) {
     let _enter = span.enter();
 
     // Serialize to JSON for machine-readable audit logs
-    let json = serde_json::to_string(&event).unwrap_or_else(|e| format!("{{\"error\": \"{}\"}}", e));
+    let json =
+        serde_json::to_string(&event).unwrap_or_else(|e| format!("{{\"error\": \"{}\"}}", e));
     info!(target: "audit", audit_json = %json, "Security Audit Event");
 }
 

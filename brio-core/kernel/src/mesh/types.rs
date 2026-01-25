@@ -80,7 +80,7 @@ mod tests {
             capabilities: vec!["mesh".to_string()],
             last_seen: 100,
         };
-        
+
         let json = serde_json::to_string(&info).unwrap();
         let deserialized: NodeInfo = serde_json::from_str(&json).unwrap();
         assert_eq!(deserialized.id, info.id);

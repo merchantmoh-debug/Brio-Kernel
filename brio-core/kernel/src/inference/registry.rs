@@ -99,9 +99,9 @@ impl ProviderRegistry {
         provider_name: &str,
         request: ChatRequest,
     ) -> Result<ChatResponse, InferenceError> {
-        let provider = self.get(provider_name).ok_or_else(|| {
-            InferenceError::ProviderNotFound(provider_name.to_string())
-        })?;
+        let provider = self
+            .get(provider_name)
+            .ok_or_else(|| InferenceError::ProviderNotFound(provider_name.to_string()))?;
 
         provider.chat(request).await
     }
@@ -156,9 +156,12 @@ mod tests {
     #[test]
     fn test_registry_register_and_get() {
         let registry = ProviderRegistry::new();
-        registry.register("openai", MockProvider {
-            response: "OpenAI response".to_string(),
-        });
+        registry.register(
+            "openai",
+            MockProvider {
+                response: "OpenAI response".to_string(),
+            },
+        );
 
         assert!(!registry.is_empty());
         assert_eq!(registry.len(), 1);
@@ -169,12 +172,18 @@ mod tests {
     #[test]
     fn test_registry_multiple_providers() {
         let registry = ProviderRegistry::new();
-        registry.register("openai", MockProvider {
-            response: "OpenAI".to_string(),
-        });
-        registry.register("anthropic", MockProvider {
-            response: "Anthropic".to_string(),
-        });
+        registry.register(
+            "openai",
+            MockProvider {
+                response: "OpenAI".to_string(),
+            },
+        );
+        registry.register(
+            "anthropic",
+            MockProvider {
+                response: "Anthropic".to_string(),
+            },
+        );
 
         assert_eq!(registry.len(), 2);
         assert!(registry.get("openai").is_some());
@@ -184,12 +193,18 @@ mod tests {
     #[test]
     fn test_registry_list_providers() {
         let registry = ProviderRegistry::new();
-        registry.register("openai", MockProvider {
-            response: "test".to_string(),
-        });
-        registry.register("anthropic", MockProvider {
-            response: "test".to_string(),
-        });
+        registry.register(
+            "openai",
+            MockProvider {
+                response: "test".to_string(),
+            },
+        );
+        registry.register(
+            "anthropic",
+            MockProvider {
+                response: "test".to_string(),
+            },
+        );
 
         let providers = registry.list_providers();
         assert_eq!(providers.len(), 2);
@@ -200,12 +215,18 @@ mod tests {
     #[test]
     fn test_registry_default_provider() {
         let registry = ProviderRegistry::new();
-        registry.register("openai", MockProvider {
-            response: "OpenAI".to_string(),
-        });
-        registry.register("anthropic", MockProvider {
-            response: "Anthropic".to_string(),
-        });
+        registry.register(
+            "openai",
+            MockProvider {
+                response: "OpenAI".to_string(),
+            },
+        );
+        registry.register(
+            "anthropic",
+            MockProvider {
+                response: "Anthropic".to_string(),
+            },
+        );
         registry.set_default("anthropic");
 
         assert!(registry.get_default().is_some());
@@ -214,9 +235,12 @@ mod tests {
     #[test]
     fn test_registry_remove() {
         let registry = ProviderRegistry::new();
-        registry.register("openai", MockProvider {
-            response: "test".to_string(),
-        });
+        registry.register(
+            "openai",
+            MockProvider {
+                response: "test".to_string(),
+            },
+        );
 
         assert!(registry.get("openai").is_some());
         let removed = registry.remove("openai");
@@ -228,9 +252,12 @@ mod tests {
     #[tokio::test]
     async fn test_registry_chat() {
         let registry = ProviderRegistry::new();
-        registry.register("openai", MockProvider {
-            response: "Hello from OpenAI".to_string(),
-        });
+        registry.register(
+            "openai",
+            MockProvider {
+                response: "Hello from OpenAI".to_string(),
+            },
+        );
 
         let request = ChatRequest {
             model: "gpt-4".to_string(),
@@ -255,15 +282,21 @@ mod tests {
 
         let result = registry.chat("nonexistent", request).await;
         assert!(result.is_err());
-        assert!(matches!(result.unwrap_err(), InferenceError::ProviderNotFound(_)));
+        assert!(matches!(
+            result.unwrap_err(),
+            InferenceError::ProviderNotFound(_)
+        ));
     }
 
     #[tokio::test]
     async fn test_registry_chat_default() {
         let registry = ProviderRegistry::new();
-        registry.register("anthropic", MockProvider {
-            response: "Anthropic response".to_string(),
-        });
+        registry.register(
+            "anthropic",
+            MockProvider {
+                response: "Anthropic response".to_string(),
+            },
+        );
         registry.set_default("anthropic");
 
         let request = ChatRequest {

@@ -74,8 +74,12 @@ impl SessionManager {
     fn cleanup_session_dir(&self, session_id: &str) -> Result<(), String> {
         let session_path = self.root_temp_dir.join(session_id);
         if session_path.exists() {
-            fs::remove_dir_all(&session_path)
-                .map_err(|e| format!("Failed to cleanup session directory {:?}: {}", session_path, e))?;
+            fs::remove_dir_all(&session_path).map_err(|e| {
+                format!(
+                    "Failed to cleanup session directory {:?}: {}",
+                    session_path, e
+                )
+            })?;
             debug!("Cleaned up session directory: {:?}", session_path);
         }
         Ok(())
@@ -180,7 +184,10 @@ impl SessionManager {
         self.sessions.remove(&session_id);
         self.cleanup_session_dir(&session_id)?;
 
-        info!("Session {} committed and cleaned up successfully", session_id);
+        info!(
+            "Session {} committed and cleaned up successfully",
+            session_id
+        );
         Ok(())
     }
 
@@ -227,15 +234,14 @@ impl SessionManager {
             let path = entry.path();
 
             if path.is_dir() {
-                let dir_name = path.file_name()
-                    .and_then(|n| n.to_str())
-                    .unwrap_or("");
+                let dir_name = path.file_name().and_then(|n| n.to_str()).unwrap_or("");
 
                 // If this directory is not tracked, it's orphaned
                 if !self.sessions.contains_key(dir_name) {
                     info!("Cleaning up orphaned session directory: {:?}", path);
-                    fs::remove_dir_all(&path)
-                        .map_err(|e| format!("Failed to remove orphaned directory {:?}: {}", path, e))?;
+                    fs::remove_dir_all(&path).map_err(|e| {
+                        format!("Failed to remove orphaned directory {:?}: {}", path, e)
+                    })?;
                     cleaned += 1;
                 }
             }

@@ -191,16 +191,12 @@ impl AnthropicProvider {
         &self,
         provider_req: &AnthropicChatRequest,
     ) -> Result<ChatResponse, (InferenceError, bool)> {
-        let url = self
-            .config
-            .base_url
-            .join("messages")
-            .map_err(|e| {
-                (
-                    InferenceError::ConfigError(format!("Invalid URL join: {}", e)),
-                    false,
-                )
-            })?;
+        let url = self.config.base_url.join("messages").map_err(|e| {
+            (
+                InferenceError::ConfigError(format!("Invalid URL join: {}", e)),
+                false,
+            )
+        })?;
 
         let res = self
             .client
@@ -243,12 +239,8 @@ impl AnthropicProvider {
                 })
             }
             // Anthropic uses 529 for overloaded, 429 for rate limit
-            StatusCode::TOO_MANY_REQUESTS => {
-                Err((InferenceError::RateLimit, true))
-            }
-            status if status.as_u16() == 529 => {
-                Err((InferenceError::RateLimit, true))
-            }
+            StatusCode::TOO_MANY_REQUESTS => Err((InferenceError::RateLimit, true)),
+            status if status.as_u16() == 529 => Err((InferenceError::RateLimit, true)),
             StatusCode::BAD_REQUEST => {
                 let text = res.text().await.unwrap_or_default();
                 if text.contains("context_length") || text.contains("max_tokens") {
@@ -362,10 +354,7 @@ mod tests {
     fn test_anthropic_config_with_api_key() {
         let api_key = SecretString::new("test-key".into());
         let config = AnthropicConfig::with_api_key(api_key);
-        assert_eq!(
-            config.base_url.as_str(),
-            "https://api.anthropic.com/v1/"
-        );
+        assert_eq!(config.base_url.as_str(), "https://api.anthropic.com/v1/");
     }
 
     #[test]
