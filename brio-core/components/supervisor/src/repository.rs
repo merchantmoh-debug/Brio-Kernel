@@ -82,6 +82,23 @@ pub trait TaskRepository {
     /// # Errors
     /// Returns `RepositoryError` if the update fails.
     fn mark_failed(&self, task_id: TaskId, reason: &str) -> Result<(), RepositoryError>;
+
+    /// Creates a new task in the repository.
+    ///
+    /// # Errors
+    /// Returns `RepositoryError` if the creation fails.
+    fn create_task(
+        &self,
+        content: String,
+        priority: Priority,
+        parent_id: Option<TaskId>,
+    ) -> Result<TaskId, RepositoryError>;
+
+    /// Fetches all subtasks for a given parent task.
+    ///
+    /// # Errors
+    /// Returns `RepositoryError` if the query fails.
+    fn fetch_subtasks(&self, parent_id: TaskId) -> Result<Vec<Task>, RepositoryError>;
 }
 
 // =============================================================================
@@ -120,6 +137,14 @@ impl WitTaskRepository {
 
         let status = TaskStatus::parse(get_value("status")?)?;
 
+        let parent_id = get_value("parent_id").ok().and_then(|v| {
+            if v == "NULL" || v.is_empty() {
+                None
+            } else {
+                v.parse::<u64>().ok().map(TaskId::new)
+            }
+        });
+
         let assigned_agent = get_value("assigned_agent").ok().and_then(|v| {
             if v == "NULL" || v.is_empty() {
                 None
@@ -133,6 +158,7 @@ impl WitTaskRepository {
             content,
             Priority::new(priority),
             status,
+            parent_id,
             assigned_agent,
         ))
     }
@@ -147,15 +173,16 @@ impl Default for WitTaskRepository {
 impl TaskRepository for WitTaskRepository {
     fn fetch_active_tasks(&self) -> Result<Vec<Task>, RepositoryError> {
         // Fetch all non-terminal states
-        let sql = "SELECT id, content, priority, status, assigned_agent \
+        let sql = "SELECT id, content, priority, status, parent_id, assigned_agent \
                    FROM tasks \
-                   WHERE status IN (?, ?, ?, ?) \
+                   WHERE status IN (?, ?, ?, ?, ?) \
                    ORDER BY priority DESC";
 
         let params = vec![
             TaskStatus::Pending.as_str().to_string(),
             TaskStatus::Planning.as_str().to_string(),
             TaskStatus::Executing.as_str().to_string(),
+            TaskStatus::Coordinating.as_str().to_string(),
             TaskStatus::Verifying.as_str().to_string(),
         ];
 
@@ -247,5 +274,70 @@ impl TaskRepository for WitTaskRepository {
         }
 
         Ok(())
+    }
+
+    fn create_task(
+        &self,
+        content: String,
+        priority: Priority,
+        parent_id: Option<TaskId>,
+    ) -> Result<TaskId, RepositoryError> {
+        let sql = "INSERT INTO tasks (content, priority, status, parent_id) \
+                   VALUES (?, ?, ?, ?) \
+                   RETURNING id";
+
+        let parent_id_str = parent_id
+            .map(|id| id.inner().to_string())
+            .unwrap_or_else(|| "NULL".to_string());
+
+        let params = vec![
+            content,
+            priority.inner().to_string(),
+            TaskStatus::Pending.as_str().to_string(),
+            parent_id_str,
+        ];
+
+        // Use query instead of execute to get the RETURNING id
+        let rows =
+            wit_bindings::sql_state::query(sql, &params).map_err(RepositoryError::SqlError)?;
+
+        let row = rows.first().ok_or_else(|| {
+            RepositoryError::SqlError("INSERT failed to return any rows".to_string())
+        })?;
+
+        // Assuming Column "id" is returned.
+        // We find the index of "id" or just take the first value if it's the only one returned which is robust.
+        let id_val = if let Some(idx) = row.columns.iter().position(|c| c == "id") {
+            row.values.get(idx).ok_or_else(|| {
+                RepositoryError::ParseError("Returned row missing id value".to_string())
+            })?
+        } else {
+            // Fallback: take first column
+            row.values.first().ok_or_else(|| {
+                RepositoryError::ParseError("Returned row has no values".to_string())
+            })?
+        };
+
+        let id = id_val
+            .parse::<u64>()
+            .map_err(|e| RepositoryError::ParseError(format!("Invalid id returned: {e}")))?;
+
+        Ok(TaskId::new(id))
+    }
+
+    fn fetch_subtasks(&self, parent_id: TaskId) -> Result<Vec<Task>, RepositoryError> {
+        let sql = "SELECT id, content, priority, status, parent_id, assigned_agent \
+                   FROM tasks \
+                   WHERE parent_id = ? \
+                   ORDER BY priority DESC";
+
+        let params = vec![parent_id.inner().to_string()];
+
+        let rows =
+            wit_bindings::sql_state::query(sql, &params).map_err(RepositoryError::SqlError)?;
+
+        rows.iter()
+            .map(|row| Self::parse_row(&row.columns, &row.values))
+            .collect()
     }
 }

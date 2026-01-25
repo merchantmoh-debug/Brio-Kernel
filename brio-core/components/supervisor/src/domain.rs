@@ -108,6 +108,8 @@ pub enum TaskStatus {
     Planning,
     /// Task sub-items are being actively worked on.
     Executing,
+    /// Task is waiting for sub-tasks to complete.
+    Coordinating,
     /// Task is being verified for correctness.
     Verifying,
     /// Task has been assigned to an agent (Legacy/Simple mode).
@@ -128,6 +130,7 @@ impl TaskStatus {
             "pending" => Ok(Self::Pending),
             "planning" => Ok(Self::Planning),
             "executing" => Ok(Self::Executing),
+            "coordinating" => Ok(Self::Coordinating),
             "verifying" => Ok(Self::Verifying),
             "assigned" => Ok(Self::Assigned),
             "completed" => Ok(Self::Completed),
@@ -143,6 +146,7 @@ impl TaskStatus {
             Self::Pending => "pending",
             Self::Planning => "planning",
             Self::Executing => "executing",
+            Self::Coordinating => "coordinating",
             Self::Verifying => "verifying",
             Self::Assigned => "assigned",
             Self::Completed => "completed",
@@ -174,6 +178,7 @@ pub struct Task {
     content: String,
     priority: Priority,
     status: TaskStatus,
+    parent_id: Option<TaskId>,
     assigned_agent: Option<AgentId>,
 }
 
@@ -185,6 +190,7 @@ impl Task {
         content: String,
         priority: Priority,
         status: TaskStatus,
+        parent_id: Option<TaskId>,
         assigned_agent: Option<AgentId>,
     ) -> Self {
         Self {
@@ -192,6 +198,7 @@ impl Task {
             content,
             priority,
             status,
+            parent_id,
             assigned_agent,
         }
     }
@@ -220,6 +227,12 @@ impl Task {
         self.status
     }
 
+    /// Returns the parent task ID, if any.
+    #[must_use]
+    pub const fn parent_id(&self) -> Option<TaskId> {
+        self.parent_id
+    }
+
     /// Returns the assigned agent, if any.
     #[must_use]
     pub fn assigned_agent(&self) -> Option<&AgentId> {
@@ -240,6 +253,7 @@ impl Task {
             TaskStatus::Pending
                 | TaskStatus::Planning
                 | TaskStatus::Executing
+                | TaskStatus::Coordinating
                 | TaskStatus::Verifying
         )
     }
@@ -300,6 +314,7 @@ mod tests {
             "Fix bug".to_string(),
             Priority::DEFAULT,
             TaskStatus::Pending,
+            None,
             None,
         );
 

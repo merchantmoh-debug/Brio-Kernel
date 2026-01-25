@@ -7,7 +7,7 @@
 //!
 //! Dependencies are injected via traits (DIP), enabling testability.
 
-use crate::domain::{AgentId, Task, TaskStatus};
+use crate::domain::{AgentId, Priority, Task, TaskStatus};
 use crate::mesh_client::{AgentDispatcher, DispatchResult, MeshError};
 use crate::repository::{RepositoryError, TaskRepository};
 
@@ -21,7 +21,7 @@ pub trait Planner {
     ///
     /// # Errors
     /// Returns error if planning fails.
-    fn plan(&self, objective: &str) -> Result<(), PlannerError>;
+    fn plan(&self, objective: &str) -> Result<Option<Vec<String>>, PlannerError>;
 }
 
 /// Errors occurring during planning.
@@ -142,37 +142,79 @@ where
     fn process_task(&self, task: &Task) -> Result<bool, SupervisorError> {
         match task.status() {
             TaskStatus::Pending => {
-                // Pending -> Planning
                 self.repository
                     .update_status(task.id(), TaskStatus::Planning)
                     .map_err(SupervisorError::StatusUpdateFailure)?;
                 Ok(true)
             }
             TaskStatus::Planning => {
-                // Planning -> Executing
-                self.planner
+                match self
+                    .planner
                     .plan(task.content())
-                    .map_err(SupervisorError::PlanningFailure)?;
+                    .map_err(SupervisorError::PlanningFailure)?
+                {
+                    Some(subtasks) if !subtasks.is_empty() => {
+                        for sub_content in subtasks {
+                            self.repository
+                                .create_task(sub_content, Priority::DEFAULT, Some(task.id()))
+                                .map_err(SupervisorError::RepositoryFailure)?;
+                        }
 
-                self.repository
-                    .update_status(task.id(), TaskStatus::Executing)
-                    .map_err(SupervisorError::StatusUpdateFailure)?;
+                        self.repository
+                            .update_status(task.id(), TaskStatus::Coordinating)
+                            .map_err(SupervisorError::StatusUpdateFailure)?;
+                    }
+                    _ => {
+                        self.repository
+                            .update_status(task.id(), TaskStatus::Executing)
+                            .map_err(SupervisorError::StatusUpdateFailure)?;
+                    }
+                }
                 Ok(true)
             }
+            TaskStatus::Coordinating => {
+                let subtasks = self
+                    .repository
+                    .fetch_subtasks(task.id())
+                    .map_err(SupervisorError::RepositoryFailure)?;
+
+                if subtasks.is_empty() {
+                    self.repository
+                        .update_status(task.id(), TaskStatus::Verifying)
+                        .map_err(SupervisorError::StatusUpdateFailure)?;
+                    return Ok(true);
+                }
+
+                if subtasks
+                    .iter()
+                    .any(|t| matches!(t.status(), TaskStatus::Failed))
+                {
+                    self.repository
+                        .mark_failed(task.id(), "Subtask failed")
+                        .map_err(SupervisorError::StatusUpdateFailure)?;
+                    return Ok(true);
+                }
+
+                if subtasks
+                    .iter()
+                    .all(|t| matches!(t.status(), TaskStatus::Completed))
+                {
+                    self.repository
+                        .update_status(task.id(), TaskStatus::Verifying)
+                        .map_err(SupervisorError::StatusUpdateFailure)?;
+                    return Ok(true);
+                }
+
+                Ok(false)
+            }
             TaskStatus::Executing => {
-                // Executing -> Assigned (Dispatch)
-                // We dispatch if not already assigned.
                 if task.assigned_agent().is_some() {
-                    // Already assigned. Waiting for external completion (or Agent to update status).
-                    // For now, we do nothing and return false to indicate no state transition by Supervisor.
                     return Ok(false);
                 }
 
                 let agent = self.select_agent(task);
                 match self.dispatcher.dispatch(&agent, task)? {
                     DispatchResult::Accepted => {
-                        // Mark as assigned but KEEP status as Executing so we stay in the active loop
-                        // (or relies on Agent to move it to Verifying/Completed)
                         self.repository
                             .assign_agent(task.id(), &agent)
                             .map_err(SupervisorError::StatusUpdateFailure)?;
@@ -182,7 +224,6 @@ where
                 }
             }
             TaskStatus::Verifying => {
-                // Verifying -> Completed (Placeholder)
                 self.repository
                     .mark_completed(task.id())
                     .map_err(SupervisorError::StatusUpdateFailure)?;
@@ -222,7 +263,7 @@ mod tests {
 
     /// Shared mock repository state.
     struct MockRepositoryInner {
-        tasks: Vec<Task>,
+        tasks: RefCell<Vec<Task>>,
         assigned: RefCell<Vec<(TaskId, AgentId)>>,
         completed: RefCell<Vec<TaskId>>,
         failed: RefCell<Vec<(TaskId, String)>>,
@@ -235,11 +276,25 @@ mod tests {
     impl MockRepository {
         fn new(tasks: Vec<Task>) -> Self {
             Self(Rc::new(MockRepositoryInner {
-                tasks,
+                tasks: RefCell::new(tasks),
                 assigned: RefCell::new(vec![]),
                 completed: RefCell::new(vec![]),
                 failed: RefCell::new(vec![]),
             }))
+        }
+
+        fn get_task(&self, id: TaskId) -> Option<Task> {
+            self.0.tasks.borrow().iter().find(|t| t.id() == id).cloned()
+        }
+
+        #[allow(dead_code)]
+        fn add_task(&self, task: Task) {
+            let mut tasks = self.0.tasks.borrow_mut();
+            if let Some(pos) = tasks.iter().position(|t| t.id() == task.id()) {
+                tasks[pos] = task;
+            } else {
+                tasks.push(task);
+            }
         }
 
         fn assigned(&self) -> std::cell::Ref<'_, Vec<(TaskId, AgentId)>> {
@@ -252,6 +307,7 @@ mod tests {
             Ok(self
                 .0
                 .tasks
+                .borrow()
                 .iter()
                 .filter(|t| t.is_active())
                 .cloned()
@@ -260,25 +316,71 @@ mod tests {
 
         fn update_status(
             &self,
-            _task_id: TaskId,
-            _status: TaskStatus,
+            task_id: TaskId,
+            status: TaskStatus,
         ) -> Result<(), RepositoryError> {
-            // Mock implementation: success (state change not persisted in this simple mock)
+            let mut tasks = self.0.tasks.borrow_mut();
+            if let Some(t) = tasks.iter_mut().find(|t| t.id() == task_id) {
+                *t = Task::new(
+                    t.id(),
+                    t.content().to_string(),
+                    t.priority(),
+                    status,
+                    t.parent_id(),
+                    t.assigned_agent().cloned(),
+                );
+            }
             Ok(())
         }
 
         fn assign_agent(&self, task_id: TaskId, agent: &AgentId) -> Result<(), RepositoryError> {
             self.0.assigned.borrow_mut().push((task_id, agent.clone()));
+
+            let mut tasks = self.0.tasks.borrow_mut();
+            if let Some(t) = tasks.iter_mut().find(|t| t.id() == task_id) {
+                *t = Task::new(
+                    t.id(),
+                    t.content().to_string(),
+                    t.priority(),
+                    t.status(),
+                    t.parent_id(),
+                    Some(agent.clone()),
+                );
+            }
             Ok(())
         }
 
         fn mark_assigned(&self, task_id: TaskId, agent: &AgentId) -> Result<(), RepositoryError> {
             self.0.assigned.borrow_mut().push((task_id, agent.clone()));
+
+            let mut tasks = self.0.tasks.borrow_mut();
+            if let Some(t) = tasks.iter_mut().find(|t| t.id() == task_id) {
+                *t = Task::new(
+                    t.id(),
+                    t.content().to_string(),
+                    t.priority(),
+                    TaskStatus::Assigned,
+                    t.parent_id(),
+                    Some(agent.clone()),
+                );
+            }
             Ok(())
         }
 
         fn mark_completed(&self, task_id: TaskId) -> Result<(), RepositoryError> {
             self.0.completed.borrow_mut().push(task_id);
+
+            let mut tasks = self.0.tasks.borrow_mut();
+            if let Some(t) = tasks.iter_mut().find(|t| t.id() == task_id) {
+                *t = Task::new(
+                    t.id(),
+                    t.content().to_string(),
+                    t.priority(),
+                    TaskStatus::Completed,
+                    t.parent_id(),
+                    t.assigned_agent().cloned(),
+                );
+            }
             Ok(())
         }
 
@@ -287,14 +389,60 @@ mod tests {
                 .failed
                 .borrow_mut()
                 .push((task_id, reason.to_string()));
+
+            // Also update status in main list so fetch_subtasks works correctly
+            let mut tasks = self.0.tasks.borrow_mut();
+            if let Some(t) = tasks.iter_mut().find(|t| t.id() == task_id) {
+                *t = Task::new(
+                    t.id(),
+                    t.content().to_string(),
+                    t.priority(),
+                    TaskStatus::Failed,
+                    t.parent_id(),
+                    t.assigned_agent().cloned(),
+                );
+            }
             Ok(())
+        }
+
+        fn create_task(
+            &self,
+            content: String,
+            priority: Priority,
+            parent_id: Option<TaskId>,
+        ) -> Result<TaskId, RepositoryError> {
+            let mut tasks = self.0.tasks.borrow_mut();
+            // Simple auto-increment
+            let max_id = tasks.iter().map(|t| t.id().inner()).max().unwrap_or(0);
+            let new_id = TaskId::new(max_id + 1);
+            tasks.push(Task::new(
+                new_id,
+                content,
+                priority,
+                TaskStatus::Pending,
+                parent_id,
+                None,
+            ));
+            Ok(new_id)
+        }
+
+        fn fetch_subtasks(&self, parent_id: TaskId) -> Result<Vec<Task>, RepositoryError> {
+            Ok(self
+                .0
+                .tasks
+                .borrow()
+                .iter()
+                .filter(|t| t.parent_id() == Some(parent_id))
+                .cloned()
+                .collect())
         }
     }
 
     struct MockPlanner;
     impl Planner for MockPlanner {
-        fn plan(&self, _objective: &str) -> Result<(), PlannerError> {
-            Ok(())
+        fn plan(&self, _objective: &str) -> Result<Option<Vec<String>>, PlannerError> {
+            // Default: no decomposition
+            Ok(None)
         }
     }
 
@@ -315,6 +463,7 @@ mod tests {
             content.to_string(),
             Priority::DEFAULT,
             TaskStatus::Pending,
+            None,
             None,
         )
     }
@@ -343,6 +492,7 @@ mod tests {
             Priority::DEFAULT,
             TaskStatus::Executing,
             None,
+            None,
         );
         let repo = MockRepository::new(vec![task]);
         let planner = MockPlanner;
@@ -366,6 +516,7 @@ mod tests {
             Priority::DEFAULT,
             TaskStatus::Executing,
             None,
+            None,
         );
         // Manually assign
         task = Task::new(
@@ -373,6 +524,7 @@ mod tests {
             task.content().to_string(),
             task.priority(),
             task.status(),
+            task.parent_id(),
             Some(AgentId::new("agent_coder")),
         );
 
@@ -398,6 +550,7 @@ mod tests {
             Priority::DEFAULT,
             TaskStatus::Executing,
             None,
+            None,
         );
         let repo = MockRepository::new(vec![task]);
         let repo_clone = repo.clone();
@@ -413,5 +566,73 @@ mod tests {
         let assigned = repo_clone.assigned();
         assert_eq!(assigned.len(), 1);
         assert_eq!(assigned[0].0.inner(), 42);
+    }
+
+    struct DecomposingPlanner {
+        subtasks: Vec<String>,
+    }
+
+    impl Planner for DecomposingPlanner {
+        fn plan(&self, _objective: &str) -> Result<Option<Vec<String>>, PlannerError> {
+            Ok(Some(self.subtasks.clone()))
+        }
+    }
+
+    #[test]
+    fn test_task_decomposition_flow() {
+        // Setup: 1 pending task, Planner returns 2 subtasks
+        let root_task = Task::new(
+            TaskId::new(1),
+            "Build Death Star".to_string(),
+            Priority::DEFAULT,
+            TaskStatus::Pending,
+            None,
+            None,
+        );
+        let repo = MockRepository::new(vec![root_task]);
+        let planner = DecomposingPlanner {
+            subtasks: vec!["Get Plans".to_string(), "Find Weakness".to_string()],
+        };
+        let dispatcher = MockDispatcher {
+            result: DispatchResult::Accepted,
+        };
+
+        let supervisor = Supervisor::new(repo.clone(), dispatcher, planner);
+
+        // 1. Poll: Pending -> Planning
+        let count = supervisor.poll_tasks().unwrap();
+        assert_eq!(count, 1);
+        let t1 = repo.get_task(TaskId::new(1)).unwrap();
+        assert_eq!(t1.status(), TaskStatus::Planning);
+
+        // 2. Poll: Planning -> Coordinating + Subtasks Created
+        let count = supervisor.poll_tasks().unwrap();
+        assert_eq!(count, 1);
+        let t1 = repo.get_task(TaskId::new(1)).unwrap();
+        assert_eq!(t1.status(), TaskStatus::Coordinating);
+
+        // Verify subtasks created
+        let subtasks = repo.fetch_subtasks(TaskId::new(1)).unwrap();
+        assert_eq!(subtasks.len(), 2);
+        assert_eq!(subtasks[0].content(), "Get Plans");
+        assert_eq!(subtasks[0].status(), TaskStatus::Pending);
+
+        // 3. Poll: Coordinating -> checks subtasks (all Pending/Executing) -> Stays Coordinating
+
+        let count = supervisor.poll_tasks().unwrap();
+        assert_eq!(count, 2);
+
+        // 4. Manually complete subtasks to test completion flow
+        repo.update_status(TaskId::new(2), TaskStatus::Completed)
+            .unwrap();
+        repo.update_status(TaskId::new(3), TaskStatus::Completed)
+            .unwrap();
+
+        // 5. Poll: Root checks logic.
+        let count = supervisor.poll_tasks().unwrap();
+        assert_eq!(count, 1);
+
+        let t1 = repo.get_task(TaskId::new(1)).unwrap();
+        assert_eq!(t1.status(), TaskStatus::Verifying);
     }
 }

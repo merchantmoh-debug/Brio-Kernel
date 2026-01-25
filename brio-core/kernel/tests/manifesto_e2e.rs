@@ -52,7 +52,8 @@ impl TestEnvironment {
                 priority INTEGER NOT NULL,
                 status TEXT NOT NULL,
                 assigned_agent TEXT,
-                failure_reason TEXT
+                failure_reason TEXT,
+                parent_id INTEGER
             );
             "#,
         )
@@ -85,8 +86,8 @@ impl LLMProvider for MockProvider {
 
 struct MockPlanner;
 impl Planner for MockPlanner {
-    fn plan(&self, _objective: &str) -> Result<(), PlannerError> {
-        Ok(())
+    fn plan(&self, _objective: &str) -> Result<Option<Vec<String>>, PlannerError> {
+        Ok(None)
     }
 }
 
@@ -117,13 +118,14 @@ impl TaskRepository for TestTaskRepository {
                         let assigned_agent_str: Option<String> = r.try_get("assigned_agent").unwrap_or(None);
                         let assigned_agent = assigned_agent_str.map(AgentId::new);
 
-                        Ok(Task::new(
-                            TaskId::new(id as u64),
-                            content,
-                            Priority::new(priority as u8),
-                            status,
-                            assigned_agent,
-                        ))
+                            Ok(Task::new(
+                                TaskId::new(id as u64),
+                                content,
+                                Priority::new(priority as u8),
+                                status,
+                                None, // parent_id
+                                assigned_agent,
+                            ))
                     })
                     .collect()
             })
@@ -197,6 +199,71 @@ impl TaskRepository for TestTaskRepository {
                     .await
                     .map_err(|e| RepositoryError::SqlError(e.to_string()))?;
                 Ok(())
+            })
+        })
+    }
+
+    fn create_task(
+        &self,
+        content: String,
+        priority: Priority,
+        parent_id: Option<TaskId>,
+    ) -> Result<TaskId, RepositoryError> {
+        tokio::task::block_in_place(|| {
+            tokio::runtime::Handle::current().block_on(async {
+                let id = sqlx::query(
+                    "INSERT INTO tasks (content, priority, status, parent_id) VALUES (?, ?, ?, ?) RETURNING id",
+                )
+                .bind(content)
+                .bind(priority.inner() as i64)
+                .bind(TaskStatus::Pending.as_str())
+                .bind(parent_id.map(|id| id.inner() as i64))
+                .fetch_one(self.host.db())
+                .await
+                .map_err(|e| RepositoryError::SqlError(e.to_string()))?
+                .get::<i64, _>("id");
+
+                Ok(TaskId::new(id as u64))
+            })
+        })
+    }
+
+    fn fetch_subtasks(&self, parent_id: TaskId) -> Result<Vec<Task>, RepositoryError> {
+        tokio::task::block_in_place(|| {
+            tokio::runtime::Handle::current().block_on(async {
+                let rows =
+                    sqlx::query("SELECT * FROM tasks WHERE parent_id = ? ORDER BY priority DESC")
+                        .bind(parent_id.inner() as i64)
+                        .fetch_all(self.host.db())
+                        .await
+                        .map_err(|e| RepositoryError::SqlError(e.to_string()))?;
+
+                rows.into_iter()
+                    .map(|r| {
+                        let id: i64 = r.try_get("id").unwrap();
+                        let content: String = r.try_get("content").unwrap();
+                        let priority: i64 = r.try_get("priority").unwrap();
+                        let status_str: String = r.try_get("status").unwrap();
+                        let status = TaskStatus::parse(&status_str)
+                            .map_err(|e| RepositoryError::ParseError(e.to_string()))?;
+
+                        let assigned_agent_str: Option<String> =
+                            r.try_get("assigned_agent").unwrap_or(None);
+                        let assigned_agent = assigned_agent_str.map(AgentId::new);
+
+                        let parent_id_val: Option<i64> = r.try_get("parent_id").unwrap_or(None);
+                        let parent_id = parent_id_val.map(|v| TaskId::new(v as u64));
+
+                        Ok(Task::new(
+                            TaskId::new(id as u64),
+                            content,
+                            Priority::new(priority as u8),
+                            status,
+                            parent_id,
+                            assigned_agent,
+                        ))
+                    })
+                    .collect()
             })
         })
     }

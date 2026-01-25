@@ -23,15 +23,21 @@ impl Default for WitPlanner {
 }
 
 impl Planner for WitPlanner {
-    fn plan(&self, objective: &str) -> Result<(), PlannerError> {
+    fn plan(&self, objective: &str) -> Result<Option<Vec<String>>, PlannerError> {
         // Call the WIT interface
-        // Note: The current WIT definition returns a result<plan, string>.
-        // For this MVP, we just trigger the decomposition and ignore the plan content
-        // (assuming side effects or purely state transition focus for now).
-        // In a real implementation, we would store the subtasks.
+        // Note: The WIT definition returns a Plan struct with Subtasks.
+        // We map these to simple strings for this MVP step.
 
         match wit_bindings::brio::core::planner::decompose(objective) {
-            Ok(_plan) => Ok(()),
+            Ok(plan) => {
+                if plan.steps.is_empty() {
+                    Ok(None)
+                } else {
+                    Ok(Some(
+                        plan.steps.into_iter().map(|s| s.description).collect(),
+                    ))
+                }
+            }
             Err(e) => Err(PlannerError(e)),
         }
     }
