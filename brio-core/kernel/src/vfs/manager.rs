@@ -22,14 +22,14 @@ pub struct SessionManager {
 }
 
 impl SessionManager {
-    pub fn new(sandbox: SandboxSettings) -> Self {
+    pub fn new(sandbox: SandboxSettings) -> Result<Self, String> {
         // Use standard temp dir or default to /tmp/brio
         let temp = std::env::temp_dir().join("brio");
-        Self {
+        Ok(Self {
             sessions: HashMap::new(),
             root_temp_dir: temp,
-            policy: SandboxPolicy::new(&sandbox),
-        }
+            policy: SandboxPolicy::new(&sandbox).map_err(|e| e.to_string())?,
+        })
     }
 
     /// Cleans up the temporary session directory.
@@ -70,8 +70,10 @@ impl SessionManager {
             return Err(format!("Base path does not exist: {}", base_path));
         }
 
-        // 2. Enforce Sandbox Limits (Delegated)
-        self.policy.validate_path(&canonical_base)?;
+        // 2. Enforce Sandbox Limits
+        self.policy
+            .validate_path(&canonical_base)
+            .map_err(|e| e.to_string())?;
 
         let session_id = Uuid::new_v4().to_string();
         let session_path = self.root_temp_dir.join(&session_id);
@@ -230,6 +232,10 @@ impl SessionManager {
 
 impl Default for SessionManager {
     fn default() -> Self {
-        Self::new(Default::default())
+        Self {
+            sessions: HashMap::new(),
+            root_temp_dir: std::env::temp_dir().join("brio"),
+            policy: SandboxPolicy::new_empty(),
+        }
     }
 }
