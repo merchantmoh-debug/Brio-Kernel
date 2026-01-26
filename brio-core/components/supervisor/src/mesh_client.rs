@@ -47,6 +47,8 @@ pub enum DispatchResult {
     Accepted,
     /// Agent is currently busy.
     AgentBusy,
+    /// Agent completed the task synchronously.
+    Completed(String),
 }
 
 // =============================================================================
@@ -113,27 +115,24 @@ impl Default for WitAgentDispatcher {
 
 impl AgentDispatcher for WitAgentDispatcher {
     fn dispatch(&self, agent: &AgentId, task: &Task) -> Result<DispatchResult, MeshError> {
-        let request = TaskDispatchRequest {
-            task_id: task.id().inner(),
-            content: task.content().to_string(),
-            priority: task.priority().inner(),
-        };
-
-        let payload_json = request.to_json()?;
+        // Construct standard TaskContext payload
+        let payload_json = format!(
+            r#"{{"task_id":"{}","description":"{}","input_files":[]}}"#,
+            task.id().to_string(),
+            task.content().replace('\\', "\\\\").replace('"', "\\\"")
+        );
         let payload = wit_bindings::service_mesh::Payload::Json(payload_json);
 
-        let response = wit_bindings::service_mesh::call(agent.as_str(), "execute", payload)
+        // Call the "run" method on the agent (routed by Kernel)
+        let response = wit_bindings::service_mesh::call(agent.as_str(), "run", payload)
             .map_err(MeshError::TransportError)?;
 
         match response {
-            wit_bindings::service_mesh::Payload::Json(json) => {
-                if json.contains("accepted") {
-                    Ok(DispatchResult::Accepted)
-                } else if json.contains("busy") {
-                    Ok(DispatchResult::AgentBusy)
-                } else {
-                    Err(MeshError::AgentError(json))
-                }
+            wit_bindings::service_mesh::Payload::Json(result) => {
+                // Determine result. Since "run" returns a summary string on success, we assume completion.
+                // In future, if async, we might get "Accepted" message.
+                // For Phase 3, we assume synchronous completion for simplicy.
+                Ok(DispatchResult::Completed(result))
             }
             wit_bindings::service_mesh::Payload::Binary(_) => Err(MeshError::SerializationError(
                 "Unexpected binary response".to_string(),

@@ -223,6 +223,12 @@ where
                             .map_err(SupervisorError::StatusUpdateFailure)?;
                         Ok(true)
                     }
+                    DispatchResult::Completed(_) => {
+                        self.repository
+                            .mark_completed(task.id())
+                            .map_err(SupervisorError::StatusUpdateFailure)?;
+                        Ok(true)
+                    }
                     DispatchResult::AgentBusy => Ok(false),
                 }
             }
