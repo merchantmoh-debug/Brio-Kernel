@@ -73,7 +73,6 @@ pub trait AgentDispatcher {
 // =============================================================================
 
 /// Payload sent to an agent for task execution.
-/// Payload sent to an agent for task execution (Matches agent-runner TaskContext).
 #[derive(Debug)]
 struct TaskContextDto {
     task_id: String,
@@ -84,9 +83,15 @@ struct TaskContextDto {
 impl TaskContextDto {
     fn to_json(&self) -> Result<String, MeshError> {
         // formatting manually to avoid serde dependency
-        let files_json = "[]"; // empty for now
+        let files_json = self
+            .input_files
+            .iter()
+            .map(|f| format!("\"{}\"", f.replace('\\', "\\\\").replace('"', "\\\"")))
+            .collect::<Vec<_>>()
+            .join(",");
+
         Ok(format!(
-            r#"{{"task-id":"{}","description":"{}","input-files":{}}}"#,
+            r#"{{"task-id":"{}","description":"{}","input-files":[{}]}}"#,
             self.task_id,
             self.description.replace('\\', "\\\\").replace('"', "\\\""),
             files_json
