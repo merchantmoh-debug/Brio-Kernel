@@ -48,7 +48,7 @@ fn run_inner() -> Result<u32, orchestrator::SupervisorError> {
     let repository = WitTaskRepository::new();
     let dispatcher = WitAgentDispatcher::new();
     let planner = WitPlanner::new();
-    let selector = KeywordAgentSelector::default();
+    let selector = KeywordAgentSelector;
     let supervisor = Supervisor::new(repository, dispatcher, planner, selector);
 
     supervisor.poll_tasks()

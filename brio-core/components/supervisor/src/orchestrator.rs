@@ -490,7 +490,7 @@ mod tests {
         let dispatcher = MockDispatcher {
             result: DispatchResult::Accepted,
         };
-        let selector = KeywordAgentSelector::default();
+        let selector = KeywordAgentSelector;
 
         let supervisor = Supervisor::new(repo, dispatcher, planner, selector);
         let count = supervisor.poll_tasks().unwrap();
@@ -516,7 +516,7 @@ mod tests {
         let dispatcher = MockDispatcher {
             result: DispatchResult::Accepted,
         };
-        let selector = KeywordAgentSelector::default();
+        let selector = KeywordAgentSelector;
 
         let supervisor = Supervisor::new(repo, dispatcher, planner, selector);
         let count = supervisor.poll_tasks().unwrap();
@@ -553,7 +553,7 @@ mod tests {
         let dispatcher = MockDispatcher {
             result: DispatchResult::Accepted,
         };
-        let selector = KeywordAgentSelector::default();
+        let selector = KeywordAgentSelector;
 
         let supervisor = Supervisor::new(repo, dispatcher, planner, selector);
         let count = supervisor.poll_tasks().unwrap();
@@ -581,7 +581,7 @@ mod tests {
         let dispatcher = MockDispatcher {
             result: DispatchResult::Accepted,
         };
-        let selector = KeywordAgentSelector::default();
+        let selector = KeywordAgentSelector;
 
         let supervisor = Supervisor::new(repo, dispatcher, planner, selector);
         supervisor.poll_tasks().unwrap();
@@ -620,7 +620,7 @@ mod tests {
         let dispatcher = MockDispatcher {
             result: DispatchResult::Accepted,
         };
-        let selector = KeywordAgentSelector::default();
+        let selector = KeywordAgentSelector;
 
         let supervisor = Supervisor::new(repo.clone(), dispatcher, planner, selector);
 
@@ -678,7 +678,7 @@ mod tests {
         let dispatcher = MockDispatcher {
             result: DispatchResult::Accepted,
         };
-        let selector = KeywordAgentSelector::default();
+        let selector = KeywordAgentSelector;
 
         let supervisor = Supervisor::new(repo, dispatcher, planner, selector);
         let agent_id = supervisor.select_agent(&task);

@@ -18,11 +18,11 @@ async fn spawn_node(id: &str, port: u16) -> (Arc<BrioHostState>, String) {
     // In-memory DB for tests
     let db_url = "sqlite::memory:";
 
-    let state =
-        BrioHostState::new_distributed(db_url, registry, node_id.clone(), Default::default())
+    let host_state =
+        BrioHostState::new_distributed(db_url, registry, None, node_id.clone(), Default::default())
             .await
             .expect("Failed to create host state");
-    let state = Arc::new(state);
+    let state = Arc::new(host_state);
 
     // Spawn server
     let state_clone = state.clone();

@@ -160,6 +160,8 @@ impl BrioHostState {
         }
 
         // 3. Try on-demand plugin execution
+        #[allow(clippy::collapsible_if)]
+        // Cannot collapse effectively due to dependency on `registry` for engine access
         if let Some(registry) = &self.plugin_registry {
             if let Some(metadata) = registry.get(target) {
                 use crate::engine::runner::{AgentRunner, TaskContext};

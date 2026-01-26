@@ -3,13 +3,13 @@ use brio_kernel::host::BrioHostState;
 use brio_kernel::inference::{ChatRequest, ChatResponse, InferenceError, LLMProvider};
 use brio_kernel::mesh::{MeshMessage, Payload};
 use sqlx::Row;
+use std::collections::HashSet;
 use std::sync::Arc;
 use supervisor::domain::{AgentId, Priority, Task, TaskId, TaskStatus};
 use supervisor::mesh_client::{AgentDispatcher, DispatchResult, MeshError};
 use supervisor::orchestrator::{Planner, PlannerError, Supervisor};
 use supervisor::repository::{RepositoryError, TaskRepository};
 use tokio::sync::mpsc;
-use std::collections::HashSet;
 
 // =============================================================================
 // Fixtures (Encapsulation)
@@ -349,7 +349,9 @@ async fn run_supervisor_cycle(host: Arc<BrioHostState>) -> Result<u32> {
         let repo = TestTaskRepository { host: host.clone() };
         let dispatcher = TestDispatcher { host };
         let planner = MockPlanner;
-        let supervisor = Supervisor::new(repo, dispatcher, planner);
+        // Use default selector for test
+        let selector = supervisor::selector::KeywordAgentSelector;
+        let supervisor = Supervisor::new(repo, dispatcher, planner, selector);
         let mut total = 0;
         loop {
             let n = supervisor.poll_tasks().unwrap();
