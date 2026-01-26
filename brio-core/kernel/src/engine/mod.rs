@@ -1,4 +1,5 @@
 pub mod linker;
+pub mod runner;
 pub mod runtime;
 
 pub use linker::{create_engine_config, create_linker};

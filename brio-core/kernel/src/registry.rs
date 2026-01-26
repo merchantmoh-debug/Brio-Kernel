@@ -31,6 +31,10 @@ impl PluginRegistry {
         }
     }
 
+    pub fn engine(&self) -> &Engine {
+        &self.engine
+    }
+
     /// Scans a directory for .wasm files and registers them.
     pub async fn load_from_directory<P: AsRef<Path>>(&mut self, path: P) -> Result<()> {
         let path = path.as_ref();
@@ -100,5 +104,9 @@ impl PluginRegistry {
 
     pub fn list_plugins(&self) -> Vec<PluginMetadata> {
         self.plugins.values().cloned().collect()
+    }
+
+    pub fn get(&self, id: &str) -> Option<PluginMetadata> {
+        self.plugins.get(id).cloned()
     }
 }
