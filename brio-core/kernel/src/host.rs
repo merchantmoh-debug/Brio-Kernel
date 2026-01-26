@@ -44,7 +44,9 @@ impl BrioHostState {
             remote_router: None, // Default to standalone mode
             db_pool: pool,
             broadcaster: Broadcaster::new(),
-            session_manager: Arc::new(std::sync::Mutex::new(SessionManager::new(sandbox))),
+            session_manager: Arc::new(std::sync::Mutex::new(
+                SessionManager::new(sandbox).map_err(|e| anyhow!(e))?,
+            )),
             provider_registry: Arc::new(registry),
             permissions: Arc::new(std::collections::HashSet::new()),
             plugin_registry,
@@ -69,7 +71,9 @@ impl BrioHostState {
             remote_router: Some(remote_router),
             db_pool: pool,
             broadcaster: Broadcaster::new(),
-            session_manager: Arc::new(std::sync::Mutex::new(SessionManager::new(sandbox))),
+            session_manager: Arc::new(std::sync::Mutex::new(
+                SessionManager::new(sandbox).map_err(|e| anyhow!(e))?,
+            )),
             provider_registry: Arc::new(registry),
             permissions: Arc::new(std::collections::HashSet::new()),
             plugin_registry,
