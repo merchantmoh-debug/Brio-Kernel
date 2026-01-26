@@ -10,7 +10,8 @@ generate!({
 struct Component;
 
 impl exports::brio::core::agent_runner::Guest for Component {
-    fn run() -> Result<String, String> {
+    fn run(context: exports::brio::core::agent_runner::TaskContext) -> Result<String, String> {
+        let _ = context; // abstract for now
         // Coder agent implementation logic would go here
         Ok("Coder Agent: Ready to generate code.".to_string())
     }

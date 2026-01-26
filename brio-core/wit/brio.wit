@@ -14,7 +14,13 @@ world brio-host {
 }
 
 interface agent-runner {
-    run: func() -> result<string, string>;
+    record task-context {
+        task-id: string,
+        description: string,
+        input-files: list<string>,
+    }
+
+    run: func(context: task-context) -> result<string, string>;
 }
 
 world smart-agent {

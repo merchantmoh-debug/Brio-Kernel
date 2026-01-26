@@ -10,9 +10,10 @@ generate!({
 struct Component;
 
 impl exports::brio::core::agent_runner::Guest for Component {
-    fn run() -> Result<String, String> {
-        // Reviewer agent implementation logic would go here
-        Ok("Reviewer Agent: Ready to verify logic.".to_string())
+    fn run(context: exports::brio::core::agent_runner::TaskContext) -> Result<String, String> {
+        let _ = context;
+        // Reviewer agent logic
+        Ok("Reviewer Agent: Ready to review code.".to_string())
     }
 }
 
