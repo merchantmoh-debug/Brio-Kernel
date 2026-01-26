@@ -9,6 +9,7 @@ use crate::inference::{LLMProvider, ProviderRegistry};
 use crate::mesh::remote::RemoteRouter;
 use crate::mesh::types::{NodeId, NodeInfo};
 use crate::mesh::{MeshMessage, Payload};
+use crate::registry::PluginRegistry;
 use crate::store::{PrefixPolicy, SqlStore};
 use crate::vfs::manager::SessionManager;
 use crate::ws::{BroadcastMessage, Broadcaster, WsPatch};
@@ -22,6 +23,7 @@ pub struct BrioHostState {
     session_manager: Arc<std::sync::Mutex<SessionManager>>,
     provider_registry: Arc<ProviderRegistry>,
     permissions: Arc<std::collections::HashSet<String>>,
+    plugin_registry: Option<Arc<PluginRegistry>>,
 }
 
 impl BrioHostState {
@@ -29,6 +31,7 @@ impl BrioHostState {
     pub async fn new(
         db_url: &str,
         registry: ProviderRegistry,
+        plugin_registry: Option<Arc<PluginRegistry>>,
         sandbox: crate::infrastructure::config::SandboxSettings,
     ) -> Result<Self> {
         let pool = SqlitePoolOptions::new().connect(db_url).await?;
@@ -41,6 +44,7 @@ impl BrioHostState {
             session_manager: Arc::new(std::sync::Mutex::new(SessionManager::new(sandbox))),
             provider_registry: Arc::new(registry),
             permissions: Arc::new(std::collections::HashSet::new()),
+            plugin_registry,
         })
     }
 
@@ -48,6 +52,7 @@ impl BrioHostState {
     pub async fn new_distributed(
         db_url: &str,
         registry: ProviderRegistry,
+        plugin_registry: Option<Arc<PluginRegistry>>,
         _node_id: NodeId,
         sandbox: crate::infrastructure::config::SandboxSettings,
     ) -> Result<Self> {
@@ -62,6 +67,7 @@ impl BrioHostState {
             session_manager: Arc::new(std::sync::Mutex::new(SessionManager::new(sandbox))),
             provider_registry: Arc::new(registry),
             permissions: Arc::new(std::collections::HashSet::new()),
+            plugin_registry,
         })
     }
 
@@ -70,7 +76,7 @@ impl BrioHostState {
         let registry = ProviderRegistry::new();
         registry.register_arc("default", Arc::from(provider));
         registry.set_default("default");
-        Self::new(db_url, registry, Default::default()).await
+        Self::new(db_url, registry, None, Default::default()).await
     }
 
     pub fn register_component(&self, id: String, sender: Sender<MeshMessage>) {
@@ -144,6 +150,25 @@ impl BrioHostState {
             };
 
             return router.send(&node_id, message).await;
+        }
+
+        // 3. Try on-demand plugin execution
+        if let Some(registry) = &self.plugin_registry {
+            if let Some(metadata) = registry.get(target) {
+                use crate::engine::runner::{AgentRunner, TaskContext};
+
+                let context: TaskContext = match payload {
+                    Payload::Json(s) => serde_json::from_str(&s)
+                        .map_err(|e| anyhow!("Invalid task context: {}", e))?,
+                    _ => return Err(anyhow!("Agents only support JSON payload")),
+                };
+
+                let runner = AgentRunner::new(registry.engine().clone());
+                let result = runner
+                    .run_agent(&metadata.path, self.clone(), context)
+                    .await?;
+                return Ok(Payload::Json(result));
+            }
         }
 
         Err(anyhow!(

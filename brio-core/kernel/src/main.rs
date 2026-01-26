@@ -46,6 +46,7 @@ async fn main() -> anyhow::Result<()> {
             info!(" - Plugin: {} ({:?})", p.id, p.path);
         }
     }
+    let plugin_registry = std::sync::Arc::new(plugin_registry);
 
     let db_url = config.database.url.expose_secret();
 
@@ -87,8 +88,14 @@ async fn main() -> anyhow::Result<()> {
 
     let state = if let Some(ref id) = node_id {
         info!("Initializing in Distributed Mode (Node ID: {})", id);
-        match BrioHostState::new_distributed(db_url, registry, id.clone(), config.sandbox.clone())
-            .await
+        match BrioHostState::new_distributed(
+            db_url,
+            registry,
+            Some(plugin_registry.clone()),
+            id.clone(),
+            config.sandbox.clone(),
+        )
+        .await
         {
             Ok(s) => std::sync::Arc::new(s),
             Err(e) => {
@@ -98,7 +105,14 @@ async fn main() -> anyhow::Result<()> {
         }
     } else {
         info!("Initializing in Standalone Mode");
-        match BrioHostState::new(db_url, registry, config.sandbox.clone()).await {
+        match BrioHostState::new(
+            db_url,
+            registry,
+            Some(plugin_registry.clone()),
+            config.sandbox.clone(),
+        )
+        .await
+        {
             Ok(s) => std::sync::Arc::new(s),
             Err(e) => {
                 error!("Failed to initialize host state: {:?}", e);
