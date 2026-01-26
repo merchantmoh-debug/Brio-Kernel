@@ -6,6 +6,8 @@ members = [
     "components/tools/shell-tool",
     "components/agents/coder",
     "components/agents/reviewer",
+    "components/agents/council",
+    "components/agents/foreman",
     "integration-tests",
 ]
 
