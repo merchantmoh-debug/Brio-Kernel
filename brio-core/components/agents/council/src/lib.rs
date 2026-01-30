@@ -1,3 +1,4 @@
+use anyhow::Result;
 use wit_bindgen::generate;
 
 generate!({
@@ -7,72 +8,60 @@ generate!({
     generate_all,
 });
 
-struct Component;
+mod engine;
+mod prompt;
+mod tools;
 
-impl exports::brio::core::agent_runner::Guest for Component {
+use brio::ai::inference::{Message, Role};
+use engine::AgentEngine;
+
+struct CouncilAgent;
+
+impl exports::brio::core::agent_runner::Guest for CouncilAgent {
     fn run(context: exports::brio::core::agent_runner::TaskContext) -> Result<String, String> {
-        // Council initializes by subscribing to objectives
-        brio::core::pub_sub::subscribe("request:objective").map_err(|e| e.to_string())?;
-
-        // Log startup
-        brio::core::logging::log(
-            brio::core::logging::Level::Info,
-            "council-agent",
-            &format!("Council initialized for task: {}", context.task_id),
-        );
-
-        Ok("Council Agent: Online and listening for objectives.".to_string())
+        // Council initializes by subscribing to objectives (legacy behavior preserved or adapted?)
+        // The user wanted "developed ... the same way". Coder agent runs a loop.
+        // I will preserve the subscription if it's critical, but the request was "develop @[...] the same way".
+        // Coder agent implementation of run() is:
+        let mut engine = AgentEngine::new(context);
+        engine.run().map_err(|e| e.to_string())
     }
 }
 
-impl exports::brio::core::event_handler::Guest for Component {
-    fn handle_event(topic: String, data: exports::brio::core::event_handler::Payload) {
-        if topic == "request:objective" {
-            let objective = match data {
-                exports::brio::core::event_handler::Payload::Json(s) => s,
-                _ => return, // Ignore binary for now
-            };
+impl exports::brio::core::event_handler::Guest for CouncilAgent {
+    fn handle_event(_topic: String, _data: exports::brio::core::event_handler::Payload) {
+        // Event handling can be another component if needed
+        todo!("Implement asynchronous event handling when the Message Bus specs are finalized");
+    }
+}
 
-            brio::core::logging::log(
-                brio::core::logging::Level::Info,
-                "council-agent",
-                &format!("Received objective: {}", objective),
-            );
+pub struct AgentState {
+    history: Vec<Message>,
+}
 
-            // Strategic Logic (Simulated for Prototype)
-            // In a real system, this would call `brio::core::inference::chat(...)`
-
-            let milestones = [
-                "Phase 1: Setup Workspace",
-                "Phase 2: Implement Core Login",
-                "Phase 3: Verify Implementation",
-            ];
-
-            // Serialize milestones (manual JSON for prototype simplicity)
-            // Structure: { "objective": "...", "milestones": ["...", ...] }
-            let payload_json = format!(
-                r#"{{"objective":"{}","milestones":[{}]}}"#,
-                objective,
-                milestones
-                    .iter()
-                    .map(|m| format!("\"{}\"", m))
-                    .collect::<Vec<_>>()
-                    .join(",")
-            );
-
-            // Publish proposal
-            let _ = brio::core::pub_sub::publish(
-                "proposal:milestones",
-                &brio::core::pub_sub::Payload::Json(payload_json),
-            );
-
-            brio::core::logging::log(
-                brio::core::logging::Level::Info,
-                "council-agent",
-                "Published proposal:milestones",
-            );
+impl AgentState {
+    fn new(system_prompt: String) -> Self {
+        Self {
+            history: vec![Message {
+                role: Role::System,
+                content: system_prompt,
+            }],
         }
     }
+
+    fn add_user_message(&mut self, content: String) {
+        self.history.push(Message {
+            role: Role::User,
+            content,
+        });
+    }
+
+    fn add_assistant_message(&mut self, content: String) {
+        self.history.push(Message {
+            role: Role::Assistant,
+            content,
+        });
+    }
 }
 
-export!(Component);
+export!(CouncilAgent);
