@@ -73,30 +73,11 @@ pub trait AgentDispatcher {
 // =============================================================================
 
 /// Payload sent to an agent for task execution.
-#[derive(Debug)]
+#[derive(Debug, serde::Serialize)]
 struct TaskContextDto {
+    #[serde(rename = "task-id")]
     task_id: String,
     description: String,
-    input_files: Vec<String>,
-}
-
-impl TaskContextDto {
-    fn to_json(&self) -> Result<String, MeshError> {
-        // formatting manually to avoid serde dependency
-        let files_json = self
-            .input_files
-            .iter()
-            .map(|f| format!("\"{}\"", f.replace('\\', "\\\\").replace('"', "\\\"")))
-            .collect::<Vec<_>>()
-            .join(",");
-
-        Ok(format!(
-            r#"{{"task-id":"{}","description":"{}","input-files":[{}]}}"#,
-            self.task_id,
-            self.description.replace('\\', "\\\\").replace('"', "\\\""),
-            files_json
-        ))
-    }
 }
 
 // =============================================================================
@@ -125,10 +106,10 @@ impl AgentDispatcher for WitAgentDispatcher {
         let context = TaskContextDto {
             task_id: task.id().to_string(),
             description: task.content().to_string(),
-            input_files: vec![],
         };
 
-        let payload_json = context.to_json()?;
+        let payload_json = serde_json::to_string(&context)
+            .map_err(|e| MeshError::SerializationError(e.to_string()))?;
         let payload = wit_bindings::service_mesh::Payload::Json(payload_json);
 
         let response = wit_bindings::service_mesh::call(agent.as_str(), "run", payload)
