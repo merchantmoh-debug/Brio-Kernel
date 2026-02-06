@@ -27,6 +27,10 @@ pub struct SandboxPolicy {
 
 impl SandboxPolicy {
     /// Creates a new policy from settings.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if any configured allowed path cannot be canonicalized.
     pub fn new(settings: &SandboxSettings) -> Result<Self, PolicyError> {
         let mut allowed_paths = Vec::with_capacity(settings.allowed_paths.len());
 
@@ -50,6 +54,12 @@ impl SandboxPolicy {
     }
 
     /// Validates that the given path is within one of the allowed sandbox roots.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if:
+    /// - The path cannot be canonicalized
+    /// - The canonicalized path is outside all allowed sandbox roots
     pub fn validate_path(&self, target: &Path) -> Result<(), PolicyError> {
         if self.allowed_paths.is_empty() {
             return Ok(());
@@ -88,12 +98,10 @@ mod tests {
         fs_extra::dir::create_all(&allowed, false).map_err(|e| anyhow::anyhow!(e))?;
 
         let settings = SandboxSettings {
-            allowed_paths: vec![
-                allowed
-                    .to_str()
-                    .ok_or_else(|| anyhow::anyhow!("Invalid path"))?
-                    .to_string(),
-            ],
+            allowed_paths: vec![allowed
+                .to_str()
+                .ok_or_else(|| anyhow::anyhow!("Invalid path"))?
+                .to_string()],
         };
 
         let policy = SandboxPolicy::new(&settings).map_err(|e| anyhow::anyhow!(e))?;

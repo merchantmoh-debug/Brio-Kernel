@@ -3,6 +3,7 @@ use std::collections::HashMap;
 use std::fs;
 use std::io::{self, Read};
 use std::path::{Path, PathBuf};
+use std::sync::Arc;
 use std::time::SystemTime;
 use tracing::{debug, info, warn};
 use walkdir::WalkDir;
@@ -17,12 +18,14 @@ pub enum FileChange {
 #[derive(Debug, Clone)]
 struct FileMetadata {
     size: u64,
-    #[allow(dead_code)]
+    // This field stores the file modification time for future use in incremental diff operations.
+    // It's currently unused but preserved for the complete file metadata API.
+    #[expect(dead_code)]
     modified: SystemTime,
-    hash: Option<String>,
+    hash: Option<Arc<str>>,
 }
 
-fn compute_hash(path: &Path) -> io::Result<String> {
+fn compute_hash(path: &Path) -> io::Result<Arc<str>> {
     let mut file = fs::File::open(path)?;
     let mut hasher = Sha256::new();
     let mut buffer = [0; 8192];
@@ -35,7 +38,7 @@ fn compute_hash(path: &Path) -> io::Result<String> {
         hasher.update(&buffer[..count]);
     }
 
-    Ok(hex::encode(hasher.finalize()))
+    Ok(Arc::from(hex::encode(hasher.finalize())))
 }
 
 fn scan_directory(root: &Path) -> io::Result<HashMap<PathBuf, FileMetadata>> {
@@ -63,10 +66,17 @@ fn scan_directory(root: &Path) -> io::Result<HashMap<PathBuf, FileMetadata>> {
     Ok(map)
 }
 
+/// Computes the difference between a session directory and a base directory.
+///
+/// # Errors
+///
+/// Returns an error if directory scanning or file hashing fails.
 pub fn compute_diff(session_path: &Path, base_path: &Path) -> io::Result<Vec<FileChange>> {
     let session_files = scan_directory(session_path)?;
     let base_files = scan_directory(base_path)?;
-    let mut changes = Vec::new();
+    // Pre-allocate: max possible changes is all session files + all deletions
+    let max_changes = session_files.len() + base_files.len();
+    let mut changes = Vec::with_capacity(max_changes);
 
     for (rel_path, session_meta) in &session_files {
         match base_files.get(rel_path) {
@@ -108,6 +118,11 @@ pub fn compute_diff(session_path: &Path, base_path: &Path) -> io::Result<Vec<Fil
     Ok(changes)
 }
 
+/// Applies file changes from a session directory to a base directory.
+///
+/// # Errors
+///
+/// Returns an error if file operations fail during the apply process.
 pub fn apply_changes(
     session_path: &Path,
     base_path: &Path,

@@ -5,6 +5,10 @@ use tracing::{debug, info};
 use walkdir::WalkDir;
 
 /// Recursively copies a directory using reflink if possible, falling back to standard copy.
+///
+/// # Errors
+///
+/// Returns an error if directory creation or file copy operations fail.
 pub fn copy_dir_reflink(src: &Path, dst: &Path) -> std::io::Result<()> {
     if !dst.exists() {
         fs::create_dir_all(dst)?;
@@ -15,9 +19,8 @@ pub fn copy_dir_reflink(src: &Path, dst: &Path) -> std::io::Result<()> {
         let path = entry.path();
 
         // Calculate relative path from src
-        let relative_path = match path.strip_prefix(src) {
-            Ok(p) => p,
-            Err(_) => continue, // Should not happen given WalkDir logic
+        let Ok(relative_path) = path.strip_prefix(src) else {
+            continue; // Should not happen given WalkDir logic
         };
 
         if relative_path.as_os_str().is_empty() {
@@ -31,7 +34,7 @@ pub fn copy_dir_reflink(src: &Path, dst: &Path) -> std::io::Result<()> {
         } else {
             // Attempt reflink
             match reflink::reflink(path, &target_path) {
-                Ok(_) => {
+                Ok(()) => {
                     debug!("Reflinked: {:?} -> {:?}", path, target_path);
                 }
                 Err(e) => {
