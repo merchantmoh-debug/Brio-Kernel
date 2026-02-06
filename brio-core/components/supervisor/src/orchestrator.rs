@@ -14,10 +14,6 @@ use crate::selector::AgentSelector;
 
 use crate::handlers;
 
-// =============================================================================
-// Planner Trait
-// =============================================================================
-
 /// Task decomposition capability.
 pub trait Planner {
     /// Decomposes a task into subtasks or a plan.
@@ -36,10 +32,6 @@ impl core::fmt::Display for PlannerError {
         write!(f, "Planning error: {}", self.0)
     }
 }
-
-// =============================================================================
-// Error Types
-// =============================================================================
 
 /// Errors that can occur during supervision.
 #[derive(Debug)]
@@ -78,10 +70,6 @@ impl From<MeshError> for SupervisorError {
         Self::DispatchFailure(e)
     }
 }
-
-// =============================================================================
-// Supervisor
-// =============================================================================
 
 /// Coordinates task fetching, agent dispatch, and status updates.
 /// Dependencies are injected via generic trait bounds.
@@ -138,7 +126,7 @@ where
         };
 
         for task in active_tasks {
-            match self.process_task_with_handlers(&ctx, &task) {
+            match Self::process_task_with_handlers(&ctx, &task) {
                 Ok(true) => processed_count += 1,
                 Ok(false) => { /* Task checked but no state transition occurred */ }
                 Err(e) => {
@@ -151,7 +139,6 @@ where
     }
 
     fn process_task_with_handlers(
-        &self,
         ctx: &handlers::SupervisorContext<R, D, P, S>,
         task: &Task,
     ) -> Result<bool, SupervisorError> {
@@ -171,14 +158,16 @@ where
     /// Handles failures during task dispatch.
     fn handle_failure(&self, task: &Task, error: &SupervisorError) {
         let reason = error.to_string();
-        // Best-effort status update; ignore secondary failures
-        let _ = self.repository.mark_failed(task.id(), &reason);
+        // Best-effort status update; ignore secondary failures but log them
+        if let Err(e) = self.repository.mark_failed(task.id(), &reason) {
+            eprintln!(
+                "[supervisor] Failed to mark task {} as failed: {}",
+                task.id(),
+                e
+            );
+        }
     }
 }
-
-// =============================================================================
-// Unit Tests
-// =============================================================================
 
 #[cfg(test)]
 mod tests {
@@ -212,11 +201,13 @@ mod tests {
             }))
         }
 
-        fn get_task(&self, id: TaskId) -> Option<Task> {
+        fn task(&self, id: TaskId) -> Option<Task> {
             self.0.tasks.borrow().iter().find(|t| t.id() == id).cloned()
         }
 
-        #[allow(dead_code)]
+        // This method is part of the test API for the mock store.
+        // It's currently unused but preserved for test extensibility.
+        #[expect(dead_code)]
         fn add_task(&self, task: Task) {
             let mut tasks = self.0.tasks.borrow_mut();
             if let Some(pos) = tasks.iter().position(|t| t.id() == task.id()) {
@@ -552,13 +543,13 @@ mod tests {
         // 1. Poll: Pending -> Planning
         let count = supervisor.poll_tasks()?;
         assert_eq!(count, 1);
-        let t1 = repo.get_task(TaskId::new(1)).expect("Task 1 should exist");
+        let t1 = repo.task(TaskId::new(1)).expect("Task 1 should exist");
         assert_eq!(t1.status(), TaskStatus::Planning);
 
         // 2. Poll: Planning -> Coordinating + Subtasks Created
         let count = supervisor.poll_tasks()?;
         assert_eq!(count, 1);
-        let t1 = repo.get_task(TaskId::new(1)).expect("Task 1 should exist");
+        let t1 = repo.task(TaskId::new(1)).expect("Task 1 should exist");
         assert_eq!(t1.status(), TaskStatus::Coordinating);
 
         // Verify subtasks created
@@ -580,7 +571,7 @@ mod tests {
         let count = supervisor.poll_tasks()?;
         assert_eq!(count, 1);
 
-        let t1 = repo.get_task(TaskId::new(1)).expect("Task 1 should exist");
+        let t1 = repo.task(TaskId::new(1)).expect("Task 1 should exist");
         assert_eq!(t1.status(), TaskStatus::Verifying);
         Ok(())
     }
