@@ -1,0 +1,16 @@
+package brio:core;
+
+/// World for session-aware tools that operate within isolated workspace sessions.
+/// Tools running in this world can perform filesystem operations that are
+/// sandboxed to a specific session, with changes tracked and commitable.
+world session-aware-tool {
+    /// Import the session management interface for creating and managing sessions.
+    import session-fs;
+
+    /// Import the session filesystem operations interface for reading and writing
+    /// files within a specific session context.
+    import session-fs-ops;
+
+    /// Export the standard tool interface that the host will call.
+    export tool;
+}

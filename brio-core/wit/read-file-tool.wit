@@ -1,0 +1,7 @@
+package brio:core;
+
+/// World for the read-file tool component.
+/// Exports only the tool-read-file interface.
+world read-file-tool {
+    export tool-read-file;
+}

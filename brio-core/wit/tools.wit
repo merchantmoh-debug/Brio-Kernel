@@ -19,8 +19,32 @@ interface tool-read-file {
     read-file-range: func(path: string, start-line: u32, end-line: u32) -> result<string, string>;
 }
 
-world tool-runner {
-    import session-fs;
-    export tool-grep;
-    export tool-read-file;
+/// Filesystem operations within a specific session context.
+/// All operations are sandboxed to the session's isolated workspace.
+interface session-fs-ops {
+    /// Represents a single entry in a directory listing.
+    record directory-entry {
+        /// The name of the file or directory.
+        name: string,
+        /// True if this entry is a directory, false if it's a file.
+        is-directory: bool,
+        /// Size of the file in bytes (0 for directories).
+        size: u64,
+    }
+
+    /// Reads the entire contents of a file within a session.
+    /// Returns the file content as a string on success.
+    read-file: func(session-id: string, path: string) -> result<string, string>;
+
+    /// Reads a specific range of lines from a file within a session.
+    /// Line numbers are 1-indexed and inclusive (both start-line and end-line).
+    read-file-range: func(session-id: string, path: string, start-line: u32, end-line: u32) -> result<string, string>;
+
+    /// Writes content to a file within a session.
+    /// Creates the file if it doesn't exist, overwrites if it does.
+    write-file: func(session-id: string, path: string, content: string) -> result<tuple<>, string>;
+
+    /// Lists the contents of a directory within a session.
+    /// Returns a list of directory entries on success.
+    list-directory: func(session-id: string, path: string) -> result<list<directory-entry>, string>;
 }

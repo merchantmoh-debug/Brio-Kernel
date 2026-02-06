@@ -1,22 +1,42 @@
 package brio:core;
 
-// Standard interface that all agent tools must implement
+/// Standard interface that all agent tools must implement.
+/// Tools can optionally declare themselves as session-aware to operate
+/// within isolated workspace sessions.
 interface tool {
+    /// Metadata about the tool including its capabilities and requirements.
     record tool-info {
+        /// The unique name of the tool.
         name: string,
+        /// A description of what the tool does.
         description: string,
+        /// The version of the tool (e.g., "1.0.0").
         version: string,
+        /// Whether this tool requires a session context to execute.
+        /// If true, the tool will receive a session-id when executed.
+        /// If false, the tool operates without session isolation.
+        requires-session: bool,
     }
 
-    // Returns metadata about the tool
+    /// Returns metadata about the tool including its session requirements.
     get-info: func() -> tool-info;
 
-    // Executes the tool with JSON parameters
-    // params: JSON string matching the tool's schema
-    // returns: JSON string result or error message
-    execute: func(params: string) -> result<string, string>;
+    /// Executes the tool with JSON parameters and optional session context.
+    /// 
+    /// # Parameters
+    /// - `params`: JSON string matching the tool's input schema
+    /// - `session-id`: Optional session identifier for session-aware tools.
+    ///   When `requires-session` is true in tool-info, this will contain
+    ///   a valid session id. When false, this will be `none`.
+    ///
+    /// # Returns
+    /// - JSON string result on success
+    /// - Error message string on failure
+    execute: func(params: string, session-id: option<string>) -> result<string, string>;
 }
 
+/// World for standard tools that don't require session isolation.
 world standard-tool {
+    /// Export the standard tool interface.
     export tool;
 }

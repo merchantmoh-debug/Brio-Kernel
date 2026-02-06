@@ -1,0 +1,7 @@
+package brio:core;
+
+/// World for the grep tool component.
+/// Exports only the tool-grep interface.
+world grep-tool {
+    export tool-grep;
+}

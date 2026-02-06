@@ -11,10 +11,23 @@ interface sql-state {
     execute: func(sql: string, params: list<string>) -> result<u32, string>;
 }
 
+/// Session-aware filesystem interface for managing isolated workspace sessions.
+/// Sessions provide sandboxed copies of directories that can be modified
+/// independently and later committed or rolled back.
 interface session-fs {
-    // Creates a sandboxed copy of the target directory
+    /// Creates a sandboxed copy of the target directory.
+    /// Returns a unique session identifier on success.
     begin-session: func(base-path: string) -> result<string, string>;
 
-    // Applies changes back to the original directory
+    /// Applies changes from the session back to the original directory.
+    /// On success, the session is closed and changes are persisted.
     commit-session: func(session-id: string) -> result<tuple<>, string>;
+
+    /// Returns the filesystem path for a given session.
+    /// This path can be used to access files within the session's sandbox.
+    get-session-path: func(session-id: string) -> result<string, string>;
+
+    /// Discards all changes made in the session and removes the sandbox.
+    /// The original directory remains unchanged.
+    rollback-session: func(session-id: string) -> result<tuple<>, string>;
 }
