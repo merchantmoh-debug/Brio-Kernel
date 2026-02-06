@@ -19,6 +19,10 @@ pub enum PolicyError {
 /// Defines the authorization contract for SQL execution.
 pub trait QueryPolicy: Send + Sync {
     /// Verify if the given SQL is allowed for the given scope.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the SQL parsing fails or if the query violates the policy.
     fn authorize(&self, scope: &str, sql: &str) -> Result<(), PolicyError>;
 }
 
@@ -47,7 +51,7 @@ struct TableVisitor<'a> {
     scope: &'a str,
 }
 
-impl<'a> Visitor for TableVisitor<'a> {
+impl Visitor for TableVisitor<'_> {
     type Break = PolicyError;
 
     fn pre_visit_table_factor(&mut self, table_factor: &TableFactor) -> ControlFlow<Self::Break> {

@@ -8,7 +8,6 @@ async fn setup_store() -> Result<(SqlStore, sqlx::SqlitePool)> {
 
     let store = SqlStore::new(pool.clone(), Box::new(PrefixPolicy));
 
-    // Setup initial schema
     sqlx::query("CREATE TABLE agent_1_data (id INTEGER PRIMARY KEY, content TEXT)")
         .execute(&pool)
         .await?;
@@ -20,7 +19,6 @@ async fn setup_store() -> Result<(SqlStore, sqlx::SqlitePool)> {
 async fn test_store_query_success() -> Result<()> {
     let (store, _pool) = setup_store().await?;
 
-    // Insert data (bypass store policy for setup or use valid query)
     store
         .execute(
             "agent_1",
@@ -29,7 +27,6 @@ async fn test_store_query_success() -> Result<()> {
         )
         .await?;
 
-    // Query data
     let rows = store
         .query("agent_1", "SELECT * FROM agent_1_data", vec![])
         .await?;
@@ -44,15 +41,14 @@ async fn test_store_query_success() -> Result<()> {
 async fn test_store_policy_violation() -> Result<()> {
     let (store, _) = setup_store().await?;
 
-    // Try to access table with wrong scope
     let result = store
         .query("agent_2", "SELECT * FROM agent_1_data", vec![])
         .await;
 
     assert!(result.is_err());
     match result.unwrap_err() {
-        StoreError::PolicyError(_) => {} // Expected
-        err => panic!("Unexpected error: {:?}", err),
+        StoreError::PolicyError(_) => {}
+        err => panic!("Unexpected error: {err:?}"),
     }
 
     Ok(())

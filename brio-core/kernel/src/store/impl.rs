@@ -30,12 +30,17 @@ pub struct SqlStore {
 }
 
 impl SqlStore {
+    #[must_use] 
     pub fn new(pool: SqlitePool, policy: Box<dyn QueryPolicy>) -> Self {
         Self { pool, policy }
     }
 
     /// Execute a query that returns rows (SELECT).
     /// Enforces policy before execution.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the policy check fails or if the query execution fails.
     #[instrument(skip(self, sql), fields(scope = %scope))]
     pub async fn query(
         &self,
@@ -71,6 +76,10 @@ impl SqlStore {
 
     /// Execute a statement that modifies state (INSERT, UPDATE, DELETE).
     /// Enforces policy before execution.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the policy check fails or if the statement execution fails.
     #[instrument(skip(self, sql), fields(scope = %scope))]
     pub async fn execute(
         &self,
@@ -90,7 +99,7 @@ impl SqlStore {
         // 3. Execute
         let result = query_builder.execute(&self.pool).await?;
 
-        Ok(result.rows_affected() as u32)
+        Ok(u32::try_from(result.rows_affected()).unwrap_or(u32::MAX))
     }
 }
 
