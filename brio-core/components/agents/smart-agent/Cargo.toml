@@ -3,6 +3,12 @@ name = "smart-agent"
 version = "0.1.0"
 edition = "2024"
 license = "MPL-2.0"
+description = "Smart agent for Brio - general-purpose agent with tool execution"
+repository = "https://github.com/brio-labs/brio"
+readme = "../../../../README.md"
+keywords = ["agent", "smart", "brio", "general-purpose"]
+categories = ["wasm", "development-tools"]
+authors = ["BrioCo <team@brio.build>"]
 
 [lib]
 crate-type = ["cdylib"]
@@ -14,3 +20,7 @@ serde = { workspace = true }
 serde_json = { workspace = true }
 regex = { workspace = true }
 anyhow = { workspace = true }
+once_cell = { workspace = true }
+
+[lints]
+workspace = true

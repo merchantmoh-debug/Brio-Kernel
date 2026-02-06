@@ -3,11 +3,16 @@
 //! This agent uses the agent-sdk to provide comprehensive software engineering
 //! capabilities including code writing, reading, and shell command execution.
 
+// WIT bindings generate many undocumented items - this is expected for auto-generated code
+#![allow(missing_docs)]
+
 use agent_sdk::{
-    AgentConfig, AgentEngineBuilder, InferenceResponse, Message, PromptBuilder, Role, TaskContext,
-    ToolRegistry,
+    agent::tools::{DoneTool, ListDirectoryTool, ReadFileTool},
+    agent::{run_standard_agent, StandardAgent, StandardAgentConfig},
+    tools::{Tool, ToolParser, ToolRegistry},
+    types::{InferenceResponse, Message, Role, TaskContext},
+    AgentConfig, AgentError, PromptBuilder,
 };
-use anyhow::Result;
 use std::collections::HashMap;
 use wit_bindgen::generate;
 
@@ -19,86 +24,72 @@ generate!({
     generate_all,
 });
 
-/// SmartAgent implements the agent-runner and event-handler interfaces.
+/// `SmartAgent` implements the StandardAgent trait for general-purpose tasks.
+#[derive(Clone)]
 pub struct SmartAgent;
 
-impl exports::brio::core::agent_runner::Guest for SmartAgent {
-    fn run(context: exports::brio::core::agent_runner::TaskContext) -> Result<String, String> {
-        // Convert WIT context to SDK TaskContext
-        let task_context = convert_wit_context(&context);
+impl StandardAgent for SmartAgent {
+    const NAME: &'static str = "smart-agent";
 
-        // Load configuration
-        let config_raw =
-            AgentConfig::from_env().map_err(|e| format!("Configuration error: {}", e))?;
-        let config = config_raw
-            .validate()
-            .map_err(|e| format!("Validation error: {}", e))?;
+    fn build_prompt(
+        &self,
+        context: &TaskContext,
+        tools: &ToolRegistry,
+        _config: &StandardAgentConfig,
+    ) -> String {
+        // Use the default AgentConfig for prompt building
+        let agent_config = AgentConfig::default();
+        PromptBuilder::build_smart_agent(context, tools, &agent_config)
+    }
 
-        // Create tool registry with default tools
-        let tools = create_tool_registry(&config);
+    fn create_tool_registry(&self, config: &AgentConfig) -> ToolRegistry {
+        let mut registry = ToolRegistry::new();
 
-        // Build the agent engine
-        let mut engine = AgentEngineBuilder::new()
-            .tools(tools)
-            .config(config.clone())
-            .build(&task_context)
-            .map_err(|e| format!("Failed to initialize agent: {}", e))?;
-
-        // Build system prompt
-        let system_prompt = PromptBuilder::build_smart_agent(
-            &task_context,
-            &create_tool_registry(&config),
-            &config,
+        // Always register core tools
+        registry.register("done", Box::new(DoneTool), create_done_parser());
+        registry.register(
+            "read_file",
+            Box::new(ReadFileTool::new(config.max_file_size)),
+            create_read_parser(),
+        );
+        registry.register(
+            "ls",
+            Box::new(ListDirectoryTool::new(config.max_depth)),
+            create_list_parser(),
         );
 
-        // Create inference function
-        let inference_fn = |model: &str,
-                            history: &[Message]|
-         -> Result<InferenceResponse, agent_sdk::AgentError> {
-            Self::perform_inference(model, history)
-        };
+        // Conditionally register write tool
+        if config.tool_config.enable_write {
+            registry.register("write_file", Box::new(WriteFileTool), create_write_parser());
+        }
 
-        // Run the agent
-        engine
-            .run_with_prompt(system_prompt, &inference_fn)
-            .map_err(|e| format!("Agent execution failed: {}", e))
+        // Conditionally register shell tool with allowlist
+        if config.tool_config.enable_shell {
+            registry.register(
+                "shell",
+                Box::new(ShellTool::new(config.shell_allowlist.clone())),
+                create_shell_parser(),
+            );
+        }
+
+        registry
     }
-}
 
-impl exports::brio::core::event_handler::Guest for SmartAgent {
-    fn handle_event(topic: String, data: exports::brio::core::event_handler::Payload) {
-        let data_str = match &data {
-            exports::brio::core::event_handler::Payload::Json(s) => s.clone(),
-            exports::brio::core::event_handler::Payload::Binary(_) => "[Binary data]".to_string(),
-        };
-
-        brio::core::logging::log(
-            brio::core::logging::Level::Info,
-            "smart-agent",
-            &format!("Received event on topic '{}': {}", topic, data_str),
-        );
-    }
-}
-
-impl SmartAgent {
-    /// Performs inference using the AI interface.
     fn perform_inference(
+        &self,
         model: &str,
         history: &[Message],
-    ) -> Result<InferenceResponse, agent_sdk::AgentError> {
+    ) -> Result<InferenceResponse, AgentError> {
         let wit_messages: Vec<brio::ai::inference::Message> = history
             .iter()
             .map(|msg| brio::ai::inference::Message {
-                role: convert_role(&msg.role),
+                role: convert_role(msg.role),
                 content: msg.content.clone(),
             })
             .collect();
 
         let response = brio::ai::inference::chat(model, &wit_messages).map_err(|e| {
-            agent_sdk::AgentError::Inference(agent_sdk::InferenceError::ApiError(format!(
-                "{:?}",
-                e
-            )))
+            AgentError::Inference(agent_sdk::InferenceError::ApiError(format!("{e:?}")))
         })?;
 
         let tokens_used = response.usage.as_ref().map(|u| u.total_tokens);
@@ -112,8 +103,38 @@ impl SmartAgent {
     }
 }
 
-/// Converts SDK Role to WIT Role.
-fn convert_role(role: &Role) -> brio::ai::inference::Role {
+impl exports::brio::core::agent_runner::Guest for SmartAgent {
+    fn run(context: exports::brio::core::agent_runner::TaskContext) -> Result<String, String> {
+        // Convert WIT context to SDK TaskContext
+        let task_context = TaskContext::new(&context.task_id, &context.description)
+            .with_files(context.input_files.clone());
+
+        // Create standard agent configuration
+        let config = StandardAgentConfig::default();
+
+        // Run the standard agent
+        run_standard_agent(&SmartAgent, &task_context, &config)
+            .map_err(|e| format!("Agent execution failed: {e}"))
+    }
+}
+
+impl exports::brio::core::event_handler::Guest for SmartAgent {
+    fn handle_event(topic: String, data: exports::brio::core::event_handler::Payload) {
+        let data_str = match &data {
+            exports::brio::core::event_handler::Payload::Json(s) => s.clone(),
+            exports::brio::core::event_handler::Payload::Binary(_) => "[Binary data]".to_string(),
+        };
+
+        brio::core::logging::log(
+            brio::core::logging::Level::Info,
+            "smart-agent",
+            &format!("Received event on topic '{topic}': {data_str}"),
+        );
+    }
+}
+
+/// Converts SDK `Role` to WIT `Role`.
+fn convert_role(role: Role) -> brio::ai::inference::Role {
     match role {
         Role::System => brio::ai::inference::Role::System,
         Role::User => brio::ai::inference::Role::User,
@@ -121,52 +142,9 @@ fn convert_role(role: &Role) -> brio::ai::inference::Role {
     }
 }
 
-/// Converts WIT TaskContext to SDK TaskContext.
-fn convert_wit_context(context: &exports::brio::core::agent_runner::TaskContext) -> TaskContext {
-    TaskContext::new(&context.task_id, &context.description).with_files(context.input_files.clone())
-}
-
-/// Creates a tool registry with default tools based on configuration.
-fn create_tool_registry(config: &AgentConfig) -> ToolRegistry {
-    let mut registry = ToolRegistry::new();
-
-    // Always register done tool
-    registry.register("done", Box::new(DoneTool), create_done_parser());
-
-    // Register read tool
-    registry.register(
-        "read_file",
-        Box::new(ReadFileTool::new(config.max_file_size)),
-        create_read_parser(),
-    );
-
-    // Register list tool
-    registry.register(
-        "ls",
-        Box::new(ListDirectoryTool::new(config.max_depth)),
-        create_list_parser(),
-    );
-
-    // Register write tool if enabled
-    if config.tool_config.enable_write {
-        registry.register("write_file", Box::new(WriteFileTool), create_write_parser());
-    }
-
-    // Register shell tool if enabled
-    if config.tool_config.enable_shell {
-        registry.register(
-            "shell",
-            Box::new(ShellTool::new(config.shell_allowlist.clone())),
-            create_shell_parser(),
-        );
-    }
-
-    registry
-}
-
-fn create_done_parser() -> agent_sdk::tools::ToolParser {
-    use std::collections::HashMap;
-    agent_sdk::tools::ToolParser::new(r#"<done>\s*(.*?)\s*</done>"#, |caps: &regex::Captures| {
+// Tool parsers
+fn create_done_parser() -> ToolParser {
+    ToolParser::new(r"<done>\s*(.*?)\s*</done>", |caps: &regex::Captures| {
         let mut args = HashMap::new();
         args.insert("summary".to_string(), caps[1].to_string());
         args
@@ -174,9 +152,8 @@ fn create_done_parser() -> agent_sdk::tools::ToolParser {
     .expect("Invalid regex pattern")
 }
 
-fn create_read_parser() -> agent_sdk::tools::ToolParser {
-    use std::collections::HashMap;
-    agent_sdk::tools::ToolParser::new(
+fn create_read_parser() -> ToolParser {
+    ToolParser::new(
         r#"<read_file\s+path="([^"]+)"\s*/?>"#,
         |caps: &regex::Captures| {
             let mut args = HashMap::new();
@@ -187,9 +164,8 @@ fn create_read_parser() -> agent_sdk::tools::ToolParser {
     .expect("Invalid regex pattern")
 }
 
-fn create_list_parser() -> agent_sdk::tools::ToolParser {
-    use std::collections::HashMap;
-    agent_sdk::tools::ToolParser::new(r#"<ls\s+path="([^"]+)"\s*/?>"#, |caps: &regex::Captures| {
+fn create_list_parser() -> ToolParser {
+    ToolParser::new(r#"<ls\s+path="([^"]+)"\s*/?>"#, |caps: &regex::Captures| {
         let mut args = HashMap::new();
         args.insert("path".to_string(), caps[1].to_string());
         args
@@ -197,9 +173,8 @@ fn create_list_parser() -> agent_sdk::tools::ToolParser {
     .expect("Invalid regex pattern")
 }
 
-fn create_write_parser() -> agent_sdk::tools::ToolParser {
-    use std::collections::HashMap;
-    agent_sdk::tools::ToolParser::new(
+fn create_write_parser() -> ToolParser {
+    ToolParser::new(
         r#"<write_file\s+path="([^"]+)">\s*(.*?)\s*</write_file>"#,
         |caps: &regex::Captures| {
             let mut args = HashMap::new();
@@ -211,9 +186,8 @@ fn create_write_parser() -> agent_sdk::tools::ToolParser {
     .expect("Invalid regex pattern")
 }
 
-fn create_shell_parser() -> agent_sdk::tools::ToolParser {
-    use std::collections::HashMap;
-    agent_sdk::tools::ToolParser::new(r#"<shell>\s*(.*?)\s*</shell>"#, |caps: &regex::Captures| {
+fn create_shell_parser() -> ToolParser {
+    ToolParser::new(r"<shell>\s*(.*?)\s*</shell>", |caps: &regex::Captures| {
         let mut args = HashMap::new();
         args.insert("command".to_string(), caps[1].to_string());
         args
@@ -221,22 +195,21 @@ fn create_shell_parser() -> agent_sdk::tools::ToolParser {
     .expect("Invalid regex pattern")
 }
 
-// Tool implementations that wrap the SDK tools
-use agent_sdk::Tool;
+// Smart-agent-specific tool implementations
 use agent_sdk::error::ToolError;
 
 struct WriteFileTool;
 
 impl Tool for WriteFileTool {
-    fn name(&self) -> &str {
+    fn name(&self) -> &'static str {
         "write_file"
     }
 
-    fn description(&self) -> &str {
-        r#"\u003cwrite_file path="path/to/file"\u003econtent\u003c/write_file\u003e - Write content to a file"#
+    fn description(&self) -> &'static str {
+        r#"<write_file path="path/to/file">content</write_file> - Write content to a file"#
     }
 
-    fn execute(&self, args: HashMap<String, String>) -> Result<String, ToolError> {
+    fn execute(&self, args: &HashMap<String, String>) -> Result<String, ToolError> {
         let path = args
             .get("path")
             .ok_or_else(|| ToolError::InvalidArguments {
@@ -255,107 +228,7 @@ impl Tool for WriteFileTool {
             source: Box::new(e),
         })?;
 
-        Ok(format!("Wrote {} bytes to {}", content.len(), path))
-    }
-}
-
-struct ReadFileTool {
-    max_size: u64,
-}
-
-impl ReadFileTool {
-    fn new(max_size: u64) -> Self {
-        Self { max_size }
-    }
-}
-
-impl Tool for ReadFileTool {
-    fn name(&self) -> &str {
-        "read_file"
-    }
-
-    fn description(&self) -> &str {
-        r#"\u003cread_file path="path/to/file" /\u003e - Read content from a file"#
-    }
-
-    fn execute(&self, args: HashMap<String, String>) -> Result<String, ToolError> {
-        let path = args
-            .get("path")
-            .ok_or_else(|| ToolError::InvalidArguments {
-                tool: "read_file".to_string(),
-                reason: "Missing 'path' argument".to_string(),
-            })?;
-
-        // Check file size first
-        let metadata = std::fs::metadata(path).map_err(|e| ToolError::ExecutionFailed {
-            tool: "read_file".to_string(),
-            source: Box::new(e),
-        })?;
-
-        if metadata.len() > self.max_size {
-            return Err(ToolError::ResourceLimitExceeded {
-                tool: "read_file".to_string(),
-                resource: format!(
-                    "file size ({} bytes, max: {})",
-                    metadata.len(),
-                    self.max_size
-                ),
-            });
-        }
-
-        std::fs::read_to_string(path).map_err(|e| ToolError::ExecutionFailed {
-            tool: "read_file".to_string(),
-            source: Box::new(e),
-        })
-    }
-}
-
-struct ListDirectoryTool {
-    #[allow(dead_code)]
-    max_depth: usize,
-}
-
-impl ListDirectoryTool {
-    fn new(max_depth: usize) -> Self {
-        Self { max_depth }
-    }
-}
-
-impl Tool for ListDirectoryTool {
-    fn name(&self) -> &str {
-        "ls"
-    }
-
-    fn description(&self) -> &str {
-        r#"\u003cls path="path/to/directory" /\u003e - List directory contents"#
-    }
-
-    fn execute(&self, args: HashMap<String, String>) -> Result<String, ToolError> {
-        let path = args
-            .get("path")
-            .ok_or_else(|| ToolError::InvalidArguments {
-                tool: "ls".to_string(),
-                reason: "Missing 'path' argument".to_string(),
-            })?;
-
-        let entries: Vec<String> = std::fs::read_dir(path)
-            .map_err(|e| ToolError::ExecutionFailed {
-                tool: "ls".to_string(),
-                source: Box::new(e),
-            })?
-            .filter_map(|entry| entry.ok())
-            .map(|entry| {
-                let name = entry.file_name().to_string_lossy().to_string();
-                let ty = if entry.file_type().map(|t| t.is_dir()).unwrap_or(false) {
-                    "📁"
-                } else {
-                    "📄"
-                };
-                format!("{} {}", ty, name)
-            })
-            .collect();
-
-        Ok(entries.join("\n"))
+        Ok(format!("Wrote {} bytes to {path}", content.len()))
     }
 }
 
@@ -370,15 +243,15 @@ impl ShellTool {
 }
 
 impl Tool for ShellTool {
-    fn name(&self) -> &str {
+    fn name(&self) -> &'static str {
         "shell"
     }
 
-    fn description(&self) -> &str {
-        r#"\u003cshell\u003ecommand\u003c/shell\u003e - Execute a shell command"#
+    fn description(&self) -> &'static str {
+        r"<shell>command</shell> - Execute a shell command"
     }
 
-    fn execute(&self, args: HashMap<String, String>) -> Result<String, ToolError> {
+    fn execute(&self, args: &HashMap<String, String>) -> Result<String, ToolError> {
         let command = args
             .get("command")
             .ok_or_else(|| ToolError::InvalidArguments {
@@ -409,30 +282,14 @@ impl Tool for ShellTool {
         if !output.status.success() {
             return Err(ToolError::ExecutionFailed {
                 tool: "shell".to_string(),
-                source: Box::new(std::io::Error::new(
-                    std::io::ErrorKind::Other,
-                    format!("Exit code {:?}: {}", output.status.code(), stderr),
-                )),
+                source: Box::new(std::io::Error::other(format!(
+                    "Exit code {:?}: {stderr}",
+                    output.status.code()
+                ))),
             });
         }
 
         Ok(stdout.to_string())
-    }
-}
-
-struct DoneTool;
-
-impl Tool for DoneTool {
-    fn name(&self) -> &str {
-        "done"
-    }
-
-    fn description(&self) -> &str {
-        r#"\u003cdone\u003esummary of completion\u003c/done\u003e - Mark task as complete"#
-    }
-
-    fn execute(&self, _args: HashMap<String, String>) -> Result<String, ToolError> {
-        Ok("Task marked as complete".to_string())
     }
 }
 
@@ -445,36 +302,67 @@ mod tests {
     #[test]
     fn test_role_conversion() {
         assert!(matches!(
-            convert_role(&Role::System),
+            convert_role(Role::System),
             brio::ai::inference::Role::System
         ));
         assert!(matches!(
-            convert_role(&Role::User),
+            convert_role(Role::User),
             brio::ai::inference::Role::User
         ));
         assert!(matches!(
-            convert_role(&Role::Assistant),
+            convert_role(Role::Assistant),
             brio::ai::inference::Role::Assistant
         ));
         assert!(matches!(
-            convert_role(&Role::Tool),
+            convert_role(Role::Tool),
             brio::ai::inference::Role::Assistant
         ));
     }
 
     #[test]
-    fn test_context_conversion() {
-        let wit_ctx = exports::brio::core::agent_runner::TaskContext {
-            task_id: "test-123".to_string(),
-            description: "Test task".to_string(),
-            input_files: vec!["file1.rs".to_string(), "file2.rs".to_string()],
-        };
+    fn test_standard_agent_trait() {
+        let agent = SmartAgent;
+        let context = TaskContext::new("test", "Do something");
+        let config = StandardAgentConfig::default();
+        let tools = ToolRegistry::new();
 
-        let ctx = convert_wit_context(&wit_ctx);
+        let prompt = agent.build_prompt(&context, &tools, &config);
+        assert!(prompt.contains("Smart Agent"));
+        assert!(prompt.contains("Do something"));
+    }
 
-        assert_eq!(ctx.task_id, "test-123");
-        assert_eq!(ctx.description, "Test task");
-        assert_eq!(ctx.file_count(), 2);
-        assert!(ctx.has_input_files());
+    #[test]
+    fn test_tool_registry_with_all_tools() {
+        let agent = SmartAgent;
+        let mut config = AgentConfig::default();
+        config.tool_config.enable_write = true;
+        config.tool_config.enable_shell = true;
+        config.shell_allowlist = vec!["ls".to_string(), "cat".to_string()];
+
+        let registry = agent.create_tool_registry(&config);
+        let tools = registry.available_tools();
+
+        assert!(tools.contains(&"done"));
+        assert!(tools.contains(&"read_file"));
+        assert!(tools.contains(&"ls"));
+        assert!(tools.contains(&"write_file"));
+        assert!(tools.contains(&"shell"));
+    }
+
+    #[test]
+    fn test_tool_registry_without_conditional_tools() {
+        let agent = SmartAgent;
+        let mut config = AgentConfig::default();
+        config.tool_config.enable_write = false;
+        config.tool_config.enable_shell = false;
+
+        let registry = agent.create_tool_registry(&config);
+        let tools = registry.available_tools();
+
+        assert!(tools.contains(&"done"));
+        assert!(tools.contains(&"read_file"));
+        assert!(tools.contains(&"ls"));
+        assert!(!tools.contains(&"write_file"));
+        assert!(!tools.contains(&"shell"));
     }
 }
