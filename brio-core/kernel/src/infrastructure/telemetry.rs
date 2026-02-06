@@ -1,12 +1,13 @@
 use anyhow::{Context, Result};
+use opentelemetry::trace::TracerProvider;
 use opentelemetry_otlp::WithExportConfig;
-use opentelemetry_sdk::{Resource, propagation::TraceContextPropagator, trace::Sampler};
+use opentelemetry_sdk::{propagation::TraceContextPropagator, trace::Sampler, Resource};
 use opentelemetry_semantic_conventions::resource;
 use tracing_subscriber::{
-    EnvFilter, Layer, Registry,
     fmt::{self, format::FmtSpan},
     layer::SubscriberExt,
     util::SubscriberInitExt,
+    EnvFilter, Layer, Registry,
 };
 
 /// Builder for setting up telemetry (Logging, Tracing, Metrics).
@@ -33,27 +34,38 @@ impl TelemetryBuilder {
         }
     }
 
+    #[must_use]
     pub fn with_tracing(mut self, endpoint: impl Into<String>) -> Self {
         self.enable_tracing = true;
         self.otlp_endpoint = Some(endpoint.into());
         self
     }
 
+    #[must_use]
     pub fn with_metrics(mut self) -> Self {
         self.enable_metrics = true;
         self
     }
 
+    #[must_use]
     pub fn with_log_level(mut self, level: impl Into<String>) -> Self {
         self.log_level = level.into();
         self
     }
 
+    #[must_use]
     pub fn with_sampling_ratio(mut self, ratio: f64) -> Self {
         self.sampling_ratio = ratio;
         self
     }
 
+    /// Initializes the telemetry system with configured exporters.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if:
+    /// - The OTLP span exporter cannot be built
+    /// - The tracing subscriber cannot be initialized
     pub fn init(self) -> Result<()> {
         opentelemetry::global::set_text_map_propagator(TraceContextPropagator::new());
 
@@ -98,7 +110,6 @@ impl TelemetryBuilder {
 
                 opentelemetry::global::set_tracer_provider(provider.clone());
 
-                use opentelemetry::trace::TracerProvider;
                 let tracer = provider.tracer("brio-kernel");
 
                 let telemetry_layer = tracing_opentelemetry::layer().with_tracer(tracer);

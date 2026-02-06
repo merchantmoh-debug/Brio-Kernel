@@ -56,6 +56,11 @@ pub struct InferenceSettings {
 }
 
 impl Settings {
+    /// Creates a new settings instance from environment variables and defaults.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the configuration cannot be built or deserialized.
     pub fn new() -> Result<Self, ConfigError> {
         let _run_mode = std::env::var("BRIO_ENV").unwrap_or_else(|_| "development".into());
 
@@ -77,7 +82,16 @@ impl Settings {
 pub struct BindAddress(pub String, pub u16);
 
 impl BindAddress {
-    pub fn to_socket_addr(&self) -> String {
-        format!("{}:{}", self.0, self.1)
+    /// Converts the bind address to a `SocketAddr`.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the IP address string cannot be parsed.
+    pub fn to_socket_addr(&self) -> anyhow::Result<std::net::SocketAddr> {
+        let ip = self
+            .0
+            .parse()
+            .map_err(|e| anyhow::anyhow!("Invalid IP address '{}': {e}", self.0))?;
+        Ok(std::net::SocketAddr::new(ip, self.1))
     }
 }
