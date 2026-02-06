@@ -1,0 +1,25 @@
+[package]
+name = "agent-sdk"
+version = "0.1.0"
+edition = "2024"
+license = "MPL-2.0"
+description = "Shared SDK for building Brio-Kernel agents"
+rust-version = "1.85"
+
+[lib]
+
+[dependencies]
+wit-bindgen = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+regex = { workspace = true }
+thiserror = { workspace = true }
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true, features = ["env-filter"] }
+dirs = { workspace = true }
+walkdir = { workspace = true }
+parking_lot = { workspace = true }
+once_cell = { workspace = true }
+
+[dev-dependencies]
+tempfile = { workspace = true }
