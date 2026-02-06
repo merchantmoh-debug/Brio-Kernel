@@ -4,7 +4,12 @@ version = "0.1.0"
 edition = "2024"
 license = "MPL-2.0"
 description = "Shared SDK for building Brio-Kernel agents"
-rust-version = "1.85"
+repository = "https://github.com/brio-labs/brio"
+readme = "../../../README.md"
+keywords = ["agent", "sdk", "brio", "wasm"]
+categories = ["wasm", "development-tools"]
+authors = ["BrioCo <team@brio.build>"]
+rust-version = "1.93"
 
 [lib]
 
@@ -19,7 +24,10 @@ tracing-subscriber = { workspace = true, features = ["env-filter"] }
 dirs = { workspace = true }
 walkdir = { workspace = true }
 parking_lot = { workspace = true }
-once_cell = { workspace = true }
+bitflags = "2"
 
 [dev-dependencies]
 tempfile = { workspace = true }
+
+[lints]
+workspace = true
