@@ -1,3 +1,7 @@
+//! Handler for the Coordinating task state.
+//!
+//! Manages tasks that are coordinating between multiple subtasks.
+
 use super::{SupervisorContext, TaskStateHandler};
 use crate::domain::{Task, TaskStatus};
 use crate::mesh_client::AgentDispatcher;
@@ -5,6 +9,7 @@ use crate::orchestrator::{Planner, SupervisorError};
 use crate::repository::TaskRepository;
 use crate::selector::AgentSelector;
 
+/// Handler for coordinating tasks between subtasks.
 pub struct CoordinatingHandler;
 
 impl<R, D, P, S> TaskStateHandler<R, D, P, S> for CoordinatingHandler

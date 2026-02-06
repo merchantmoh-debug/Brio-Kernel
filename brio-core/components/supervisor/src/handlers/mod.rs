@@ -10,9 +10,13 @@ use crate::selector::AgentSelector;
 
 /// Context passed to state handlers containing all necessary dependencies.
 pub struct SupervisorContext<'a, R, D, P, S> {
+    /// Repository for task persistence.
     pub repository: &'a R,
+    /// Dispatcher for agent communication.
     pub dispatcher: &'a D,
+    /// Planner for task decomposition.
     pub planner: &'a P,
+    /// Selector for agent assignment.
     pub selector: &'a S,
 }
 
@@ -27,6 +31,9 @@ where
     /// Processes a task in the current state.
     ///
     /// Returns `true` if a state transition or significant action occurred, `false` otherwise.
+    ///
+    /// # Errors
+    /// Returns `SupervisorError` if processing fails.
     fn handle(
         &self,
         ctx: &SupervisorContext<R, D, P, S>,

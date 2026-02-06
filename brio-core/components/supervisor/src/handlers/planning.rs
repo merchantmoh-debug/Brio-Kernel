@@ -1,3 +1,7 @@
+//! Handler for the Planning task state.
+//!
+//! Decomposes tasks into subtasks using the planner.
+
 use super::{SupervisorContext, TaskStateHandler};
 use crate::domain::{Priority, Task, TaskStatus};
 use crate::mesh_client::AgentDispatcher;
@@ -5,6 +9,7 @@ use crate::orchestrator::{Planner, SupervisorError};
 use crate::repository::TaskRepository;
 use crate::selector::AgentSelector;
 
+/// Handler for planning and decomposing tasks.
 pub struct PlanningHandler;
 
 impl<R, D, P, S> TaskStateHandler<R, D, P, S> for PlanningHandler

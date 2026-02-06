@@ -1,3 +1,7 @@
+//! Handler for the Verifying task state.
+//!
+//! Marks tasks as completed after verification.
+
 use super::{SupervisorContext, TaskStateHandler};
 use crate::domain::Task;
 use crate::mesh_client::AgentDispatcher;
@@ -5,6 +9,7 @@ use crate::orchestrator::{Planner, SupervisorError};
 use crate::repository::TaskRepository;
 use crate::selector::AgentSelector;
 
+/// Handler for verifying and completing tasks.
 pub struct VerifyingHandler;
 
 impl<R, D, P, S> TaskStateHandler<R, D, P, S> for VerifyingHandler

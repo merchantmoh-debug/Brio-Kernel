@@ -1,3 +1,7 @@
+//! Handler for the Executing task state.
+//!
+//! Dispatches tasks to agents for execution.
+
 use super::{SupervisorContext, TaskStateHandler};
 use crate::domain::Task;
 use crate::mesh_client::{AgentDispatcher, DispatchResult};
@@ -5,6 +9,7 @@ use crate::orchestrator::{Planner, SupervisorError};
 use crate::repository::TaskRepository;
 use crate::selector::AgentSelector;
 
+/// Handler for dispatching tasks to agents.
 pub struct ExecutingHandler;
 
 impl<R, D, P, S> TaskStateHandler<R, D, P, S> for ExecutingHandler
