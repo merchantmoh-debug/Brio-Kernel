@@ -1,0 +1,17 @@
+[advisories]
+# Ignore specific advisory IDs (empty for now)
+ignore = []
+# Informational warnings about unmaintained crates
+informational_warnings = ["unmaintained", "unsound", "yanked"]
+# Severity threshold for warnings
+severity_threshold = "low"
+
+[output]
+# Don't show the audit trail by default
+show_tree = false
+# Quiet mode - only print warnings and errors
+quiet = false
+
+[packages]
+# Don't audit binary crates separately
+audit_binaries = false
