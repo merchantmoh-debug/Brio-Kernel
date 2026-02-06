@@ -7,10 +7,6 @@
 use crate::domain::{AgentId, ParseStatusError, Priority, Task, TaskId, TaskStatus};
 use crate::wit_bindings;
 
-// =============================================================================
-// Error Types
-// =============================================================================
-
 /// Errors that can occur during repository operations.
 #[derive(Debug)]
 pub enum RepositoryError {
@@ -40,10 +36,6 @@ impl From<ParseStatusError> for RepositoryError {
     }
 }
 
-// =============================================================================
-// Repository Trait (Dependency Inversion)
-// =============================================================================
-
 /// Contract for task state access.
 ///
 /// This trait abstracts the database layer, enabling:
@@ -57,6 +49,9 @@ pub trait TaskRepository {
     fn fetch_active_tasks(&self) -> Result<Vec<Task>, RepositoryError>;
 
     /// Updates task status.
+    ///
+    /// # Errors
+    /// Returns `RepositoryError` if the update fails.
     fn update_status(&self, task_id: TaskId, status: TaskStatus) -> Result<(), RepositoryError>;
 
     /// Assigns an agent to a task without changing its status.
@@ -101,10 +96,6 @@ pub trait TaskRepository {
     fn fetch_subtasks(&self, parent_id: TaskId) -> Result<Vec<Task>, RepositoryError>;
 }
 
-// =============================================================================
-// WIT Implementation
-// =============================================================================
-
 /// Repository implementation using WIT `sql-state` bindings.
 pub struct WitTaskRepository;
 
@@ -117,7 +108,7 @@ impl WitTaskRepository {
 
     /// Parses a single row into a Task.
     fn parse_row(columns: &[String], values: &[String]) -> Result<Task, RepositoryError> {
-        let get_value = |name: &str| -> Result<&String, RepositoryError> {
+        let get_column_value = |name: &str| -> Result<&String, RepositoryError> {
             columns
                 .iter()
                 .position(|c| c == name)
@@ -125,19 +116,19 @@ impl WitTaskRepository {
                 .ok_or_else(|| RepositoryError::ParseError(format!("Missing column: {name}")))
         };
 
-        let id = get_value("id")?
+        let id = get_column_value("id")?
             .parse::<u64>()
             .map_err(|e| RepositoryError::ParseError(format!("Invalid id: {e}")))?;
 
-        let content = get_value("content")?.clone();
+        let content = get_column_value("content")?.clone();
 
-        let priority = get_value("priority")?
+        let priority = get_column_value("priority")?
             .parse::<u8>()
             .map_err(|e| RepositoryError::ParseError(format!("Invalid priority: {e}")))?;
 
-        let status = TaskStatus::parse(get_value("status")?)?;
+        let status = TaskStatus::parse(get_column_value("status")?)?;
 
-        let parent_id = get_value("parent_id").ok().and_then(|v| {
+        let parent_id = get_column_value("parent_id").ok().and_then(|v| {
             if v == "NULL" || v.is_empty() {
                 None
             } else {
@@ -145,7 +136,7 @@ impl WitTaskRepository {
             }
         });
 
-        let assigned_agent = get_value("assigned_agent").ok().and_then(|v| {
+        let assigned_agent = get_column_value("assigned_agent").ok().and_then(|v| {
             if v == "NULL" || v.is_empty() {
                 None
             } else {
@@ -184,9 +175,8 @@ impl TaskRepository for WitTaskRepository {
         let sql = format!(
             "SELECT id, content, priority, status, parent_id, assigned_agent \
              FROM tasks \
-             WHERE status IN ({}) \
-             ORDER BY priority DESC",
-            placeholders
+             WHERE status IN ({placeholders}) \
+             ORDER BY priority DESC"
         );
 
         let params: Vec<String> = active_states
@@ -294,9 +284,8 @@ impl TaskRepository for WitTaskRepository {
                    VALUES (?, ?, ?, ?) \
                    RETURNING id";
 
-        let parent_id_str = parent_id
-            .map(|id| id.inner().to_string())
-            .unwrap_or_else(|| "NULL".to_string());
+        let parent_id_str =
+            parent_id.map_or_else(|| "NULL".to_string(), |id| id.inner().to_string());
 
         let params = vec![
             content,
