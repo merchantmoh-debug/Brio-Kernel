@@ -14,23 +14,20 @@ impl brio::core::service_mesh::Host for BrioHostState {
     ) -> Result<brio::core::service_mesh::Payload, String> {
         self.check_permission("mesh:send")?;
 
-        // Convert WASM payload to internal Payload
         let internal_payload = match args {
-            brio::core::service_mesh::Payload::Json(s) => Payload::Json(s),
-            brio::core::service_mesh::Payload::Binary(b) => Payload::Binary(b),
+            brio::core::service_mesh::Payload::Json(s) => Payload::Json(Box::new(s)),
+            brio::core::service_mesh::Payload::Binary(b) => Payload::Binary(Box::new(b)),
         };
 
-        // Bridge sync to async
         let result = tokio::task::block_in_place(|| {
             tokio::runtime::Handle::current()
                 .block_on(async { self.mesh_call(&target, &method, internal_payload).await })
         });
 
-        // Convert result back to WASM payload
         result
             .map(|p| match p {
-                Payload::Json(s) => brio::core::service_mesh::Payload::Json(s),
-                Payload::Binary(b) => brio::core::service_mesh::Payload::Binary(b),
+                Payload::Json(s) => brio::core::service_mesh::Payload::Json(*s),
+                Payload::Binary(b) => brio::core::service_mesh::Payload::Binary(*b),
             })
             .map_err(|e| e.to_string())
     }
@@ -46,7 +43,7 @@ impl brio::core::sql_state::Host for BrioHostState {
 
         // Use a default scope for WASM guests
         let scope = "wasm_guest";
-        let store = self.get_store(scope);
+        let store = self.store(scope);
 
         let result = tokio::task::block_in_place(|| {
             tokio::runtime::Handle::current()
@@ -68,7 +65,7 @@ impl brio::core::sql_state::Host for BrioHostState {
     fn execute(&mut self, sql: String, params: Vec<String>) -> Result<u32, String> {
         self.check_permission("storage:write")?;
         let scope = "wasm_guest";
-        let store = self.get_store(scope);
+        let store = self.store(scope);
 
         let result = tokio::task::block_in_place(|| {
             tokio::runtime::Handle::current()
@@ -82,17 +79,16 @@ impl brio::core::sql_state::Host for BrioHostState {
 impl brio::core::session_fs::Host for BrioHostState {
     fn begin_session(&mut self, base_path: String) -> Result<String, String> {
         self.check_permission("fs:write")?;
-        BrioHostState::begin_session(self, base_path)
+        BrioHostState::begin_session(self, &base_path).map_err(|e| e.to_string())
     }
 
     fn commit_session(&mut self, session_id: String) -> Result<(), String> {
-        BrioHostState::commit_session(self, session_id)
+        BrioHostState::commit_session(self, &session_id).map_err(|e| e.to_string())
     }
 }
 
 impl brio::core::pub_sub::Host for BrioHostState {
     fn subscribe(&mut self, topic: String) -> Result<(), String> {
-        // Enforce: only plugins can subscribe
         let plugin_id = self
             .current_plugin_id()
             .ok_or_else(|| "Only plugins can subscribe to events".to_string())?
@@ -103,8 +99,6 @@ impl brio::core::pub_sub::Host for BrioHostState {
     }
 
     fn publish(&mut self, topic: String, data: brio::core::pub_sub::Payload) -> Result<(), String> {
-        // TODO: Enforce "mesh:send" permission here if needed.
-
         let subscribers = self.event_bus().subscribers(&topic);
         if subscribers.is_empty() {
             return Ok(());
@@ -112,7 +106,6 @@ impl brio::core::pub_sub::Host for BrioHostState {
 
         let state = self.clone();
 
-        // Convert Payload
         let payload_enum = match data {
             brio::core::pub_sub::Payload::Json(s) => crate::engine::runner::EventPayload::Json(s),
             brio::core::pub_sub::Payload::Binary(b) => {
@@ -127,7 +120,6 @@ impl brio::core::pub_sub::Host for BrioHostState {
 
                 for agent_id in subscribers {
                     if let Some(metadata) = registry.get(&agent_id) {
-                        // Clone data for each subscriber
                         let payload_clone = match &payload_enum {
                             crate::engine::runner::EventPayload::Json(s) => {
                                 crate::engine::runner::EventPayload::Json(s.clone())
@@ -137,7 +129,6 @@ impl brio::core::pub_sub::Host for BrioHostState {
                             }
                         };
 
-                        // Run
                         if let Err(e) = runner
                             .run_event_handler(
                                 &metadata.path,
@@ -170,11 +161,11 @@ impl brio::core::inference::Host for BrioHostState {
         messages: Vec<brio::core::inference::Message>,
     ) -> Result<brio::core::inference::CompletionResponse, brio::core::inference::InferenceError>
     {
+        use crate::inference::{ChatRequest, Message, Role};
+
         if let Err(e) = self.check_permission("ai:inference") {
             return Err(brio::core::inference::InferenceError::ProviderError(e));
         }
-
-        use crate::inference::{ChatRequest, Message, Role};
 
         // Convert WASM messages to internal messages
         let internal_messages: Vec<Message> = messages
@@ -194,13 +185,10 @@ impl brio::core::inference::Host for BrioHostState {
             messages: internal_messages,
         };
 
-        let inference_provider = match self.inference() {
-            Some(provider) => provider,
-            None => {
-                return Err(brio::core::inference::InferenceError::ProviderError(
-                    "No default inference provider configured".to_string(),
-                ));
-            }
+        let Some(inference_provider) = self.inference() else {
+            return Err(brio::core::inference::InferenceError::ProviderError(
+                "No default inference provider configured".to_string(),
+            ));
         };
         let result = tokio::task::block_in_place(|| {
             tokio::runtime::Handle::current()
@@ -254,12 +242,18 @@ impl std::fmt::Display for LogLevel {
     }
 }
 
+/// Creates a new linker with all host interfaces registered.
+///
+/// # Errors
+///
+/// Returns an error if host interface registration fails.
 pub fn create_linker(engine: &Engine) -> Result<Linker<BrioHostState>> {
     let mut linker = Linker::new(engine);
     register_host_interfaces(&mut linker)?;
     Ok(linker)
 }
 
+#[must_use] 
 pub fn create_engine_config() -> Config {
     let mut config = Config::new();
     config.wasm_component_model(true);
