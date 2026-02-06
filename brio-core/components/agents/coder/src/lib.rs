@@ -6,7 +6,7 @@ use agent_sdk::agent::parsers::{
 };
 use agent_sdk::agent::tools::{DoneTool, ListDirectoryTool, ReadFileTool};
 use agent_sdk::agent::{
-    StandardAgent, StandardAgentConfig, handle_standard_event, run_standard_agent,
+    handle_standard_event, run_standard_agent, StandardAgent, StandardAgentConfig,
 };
 use agent_sdk::types::{InferenceResponse, TaskContext};
 use agent_sdk::{
