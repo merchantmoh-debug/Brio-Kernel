@@ -11,7 +11,9 @@ pub mod sql_state {
     /// Row returned from a SQL query.
     #[derive(Debug, Clone)]
     pub struct Row {
+        /// Column names for this row.
         pub columns: Vec<String>,
+        /// Values corresponding to each column.
         pub values: Vec<String>,
     }
 
@@ -68,7 +70,9 @@ pub mod service_mesh {
     /// Payload variant for mesh calls.
     #[derive(Debug, Clone)]
     pub enum Payload {
+        /// JSON-encoded payload data.
         Json(String),
+        /// Binary payload data.
         Binary(Vec<u8>),
     }
 
@@ -105,22 +109,30 @@ pub mod service_mesh {
 
 /// Brio Core bindings.
 pub mod brio {
+    /// Core Brio services and interfaces.
     pub mod core {
+        /// Task planning and decomposition services.
         pub mod planner {
             /// Represents a sub-step of a larger task.
             #[derive(Debug, Clone)]
             pub struct Subtask {
+                /// Unique identifier for this subtask.
                 pub id: String,
+                /// Description of what this subtask should accomplish.
                 pub description: String,
             }
 
             /// A sequence of steps to achieve an objective.
             #[derive(Debug, Clone)]
             pub struct Plan {
+                /// Ordered list of subtasks to execute.
                 pub steps: Vec<Subtask>,
             }
 
             /// Decomposes a high-level objective into actionable subtasks.
+            ///
+            /// # Errors
+            /// Returns an error string if decomposition fails.
             pub fn decompose(objective: &str) -> Result<Plan, String> {
                 #[cfg(target_arch = "wasm32")]
                 {
