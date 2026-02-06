@@ -24,6 +24,7 @@ pub struct PluginRegistry {
 
 impl PluginRegistry {
     /// Creates a new, empty registry.
+    #[must_use] 
     pub fn new(engine: Engine) -> Self {
         Self {
             plugins: HashMap::new(),
@@ -31,11 +32,16 @@ impl PluginRegistry {
         }
     }
 
+    #[must_use] 
     pub fn engine(&self) -> &Engine {
         &self.engine
     }
 
     /// Scans a directory for .wasm files and registers them.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the directory cannot be read.
     pub async fn load_from_directory<P: AsRef<Path>>(&mut self, path: P) -> Result<()> {
         let path = path.as_ref();
         if !path.exists() {
@@ -47,14 +53,14 @@ impl PluginRegistry {
         while let Some(entry) = entries.next_entry().await? {
             let path = entry.path();
             if path.extension().and_then(|s| s.to_str()) == Some("wasm") {
-                self.register_plugin(&path).await?;
+                self.register_plugin(&path);
             }
         }
         Ok(())
     }
 
     /// Registers a single plugin file.
-    async fn register_plugin(&mut self, path: &Path) -> Result<()> {
+    fn register_plugin(&mut self, path: &Path) {
         let name = path
             .file_stem()
             .and_then(|s| s.to_str())
@@ -63,20 +69,21 @@ impl PluginRegistry {
 
         info!("Loading plugin: {} from {:?}", name, path);
 
-        // TODO: inspecting the component to verify imports/exports or custom sections.
-        // For now, we assume valid components.
-
         let metadata = PluginMetadata {
             id: name.clone(),
             path: path.to_path_buf(),
-            permissions: vec![], // TODO: Load from custom section or config
+            permissions: vec![],
         };
 
         self.plugins.insert(name, metadata);
-        Ok(())
     }
 
     /// Instantiates a plugin by ID.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the plugin is not found, if the component fails to load,
+    /// or if instantiation fails.
     pub async fn instantiate(
         &self,
         plugin_id: &str,
@@ -85,7 +92,7 @@ impl PluginRegistry {
         let metadata = self
             .plugins
             .get(plugin_id)
-            .ok_or_else(|| anyhow::anyhow!("Plugin not found: {}", plugin_id))?;
+            .ok_or_else(|| anyhow::anyhow!("Plugin not found: {plugin_id}"))?;
 
         let component = Component::from_file(&self.engine, &metadata.path)
             .context("Failed to load component")?;
@@ -103,10 +110,12 @@ impl PluginRegistry {
         Ok(store)
     }
 
+    #[must_use] 
     pub fn list_plugins(&self) -> Vec<PluginMetadata> {
         self.plugins.values().cloned().collect()
     }
 
+    #[must_use] 
     pub fn get(&self, id: &str) -> Option<PluginMetadata> {
         self.plugins.get(id).cloned()
     }
