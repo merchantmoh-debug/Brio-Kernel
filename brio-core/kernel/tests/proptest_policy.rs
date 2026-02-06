@@ -1,6 +1,6 @@
 //! Property-based tests for SQL policy validation.
 //!
-//! Uses proptest to verify that the PrefixPolicy correctly allows or denies
+//! Uses proptest to verify that the `PrefixPolicy` correctly allows or denies
 //! queries based on table name prefixes.
 
 use brio_kernel::store::policy::{PrefixPolicy, QueryPolicy};
@@ -17,7 +17,7 @@ fn non_matching_table_strategy() -> impl Strategy<Value = String> {
         Just("system_config".to_string()),
         Just("admin_users".to_string()),
         Just("public_data".to_string()),
-        "[a-z]{4,8}".prop_map(|s| format!("{}_table", s)),
+        "[a-z]{4,8}".prop_map(|s| format!("{s}_table")),
     ]
 }
 
@@ -29,8 +29,8 @@ proptest! {
     fn select_on_matching_prefix_always_allowed(
         scope in scope_strategy()
     ) {
-        let table = format!("{}_data", scope);
-        let sql = format!("SELECT * FROM {}", table);
+        let table = format!("{scope}_data");
+        let sql = format!("SELECT * FROM {table}");
         let policy = PrefixPolicy;
 
         prop_assert!(policy.authorize(&scope, &sql).is_ok());
@@ -43,11 +43,11 @@ proptest! {
         bad_table in non_matching_table_strategy()
     ) {
         // Skip if table accidentally matches the scope
-        if bad_table.starts_with(&format!("{}_", scope)) {
+        if bad_table.starts_with(&format!("{scope}_")) {
             return Ok(());
         }
 
-        let sql = format!("SELECT * FROM {}", bad_table);
+        let sql = format!("SELECT * FROM {bad_table}");
         let policy = PrefixPolicy;
 
         prop_assert!(policy.authorize(&scope, &sql).is_err());
@@ -58,8 +58,8 @@ proptest! {
     fn insert_on_matching_prefix_allowed(
         scope in scope_strategy()
     ) {
-        let table = format!("{}_records", scope);
-        let sql = format!("INSERT INTO {} (name) VALUES ('test')", table);
+        let table = format!("{scope}_records");
+        let sql = format!("INSERT INTO {table} (name) VALUES ('test')");
         let policy = PrefixPolicy;
 
         prop_assert!(policy.authorize(&scope, &sql).is_ok());
@@ -70,8 +70,8 @@ proptest! {
     fn update_on_matching_prefix_allowed(
         scope in scope_strategy()
     ) {
-        let table = format!("{}_items", scope);
-        let sql = format!("UPDATE {} SET status = 'done' WHERE id = 1", table);
+        let table = format!("{scope}_items");
+        let sql = format!("UPDATE {table} SET status = 'done' WHERE id = 1");
         let policy = PrefixPolicy;
 
         prop_assert!(policy.authorize(&scope, &sql).is_ok());
@@ -82,8 +82,8 @@ proptest! {
     fn delete_on_matching_prefix_allowed(
         scope in scope_strategy()
     ) {
-        let table = format!("{}_logs", scope);
-        let sql = format!("DELETE FROM {} WHERE id > 100", table);
+        let table = format!("{scope}_logs");
+        let sql = format!("DELETE FROM {table} WHERE id > 100");
         let policy = PrefixPolicy;
 
         prop_assert!(policy.authorize(&scope, &sql).is_ok());
@@ -96,14 +96,13 @@ proptest! {
         bad_table in non_matching_table_strategy()
     ) {
         // Skip if bad_table accidentally matches
-        if bad_table.starts_with(&format!("{}_", scope)) {
+        if bad_table.starts_with(&format!("{scope}_")) {
             return Ok(());
         }
 
-        let good_table = format!("{}_data", scope);
+        let good_table = format!("{scope}_data");
         let sql = format!(
-            "SELECT * FROM {} JOIN {} ON {}.id = {}.id",
-            good_table, bad_table, good_table, bad_table
+            "SELECT * FROM {good_table} JOIN {bad_table} ON {good_table}.id = {bad_table}.id"
         );
         let policy = PrefixPolicy;
 
@@ -115,11 +114,10 @@ proptest! {
     fn join_between_matching_tables_allowed(
         scope in scope_strategy()
     ) {
-        let table1 = format!("{}_orders", scope);
-        let table2 = format!("{}_items", scope);
+        let table1 = format!("{scope}_orders");
+        let table2 = format!("{scope}_items");
         let sql = format!(
-            "SELECT * FROM {} JOIN {} ON {}.order_id = {}.id",
-            table1, table2, table1, table2
+            "SELECT * FROM {table1} JOIN {table2} ON {table1}.order_id = {table2}.id"
         );
         let policy = PrefixPolicy;
 
@@ -131,10 +129,9 @@ proptest! {
     fn subquery_with_non_matching_table_denied(
         scope in scope_strategy()
     ) {
-        let good_table = format!("{}_data", scope);
+        let good_table = format!("{scope}_data");
         let sql = format!(
-            "SELECT * FROM {} WHERE id IN (SELECT id FROM system_admin)",
-            good_table
+            "SELECT * FROM {good_table} WHERE id IN (SELECT id FROM system_admin)"
         );
         let policy = PrefixPolicy;
 

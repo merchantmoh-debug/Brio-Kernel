@@ -9,18 +9,17 @@ use brio_kernel::inference::{
 // =============================================================================
 
 #[test]
-fn test_role_variants() {
+fn role_variants_should_be_distinguishable() {
     let system = Role::System;
     let user = Role::User;
     let assistant = Role::Assistant;
 
-    // Ensure all variants are distinct
-    assert_ne!(format!("{:?}", system), format!("{:?}", user));
-    assert_ne!(format!("{:?}", user), format!("{:?}", assistant));
+    assert_ne!(format!("{system:?}"), format!("{:?}", user));
+    assert_ne!(format!("{user:?}"), format!("{:?}", assistant));
 }
 
 #[test]
-fn test_message_construction() {
+fn message_should_construct_with_role_and_content() {
     let msg = Message {
         role: Role::User,
         content: "Hello, world!".to_string(),
@@ -31,7 +30,7 @@ fn test_message_construction() {
 }
 
 #[test]
-fn test_usage_struct() {
+fn usage_should_track_token_counts_correctly() {
     let usage = Usage {
         prompt_tokens: 10,
         completion_tokens: 20,
@@ -44,7 +43,7 @@ fn test_usage_struct() {
 }
 
 #[test]
-fn test_chat_request_construction() {
+fn chat_request_should_construct_with_model_and_messages() {
     let request = ChatRequest {
         model: "gpt-4".to_string(),
         messages: vec![
@@ -64,7 +63,7 @@ fn test_chat_request_construction() {
 }
 
 #[test]
-fn test_chat_response_with_usage() {
+fn chat_response_should_include_usage_when_provided() {
     let response = ChatResponse {
         content: "Hello!".to_string(),
         usage: Some(Usage {
@@ -80,7 +79,7 @@ fn test_chat_response_with_usage() {
 }
 
 #[test]
-fn test_chat_response_without_usage() {
+fn chat_response_should_allow_optional_usage() {
     let response = ChatResponse {
         content: "Response".to_string(),
         usage: None,
@@ -94,39 +93,39 @@ fn test_chat_response_without_usage() {
 // =============================================================================
 
 #[test]
-fn test_inference_error_provider_display() {
+fn provider_error_should_display_with_message() {
     let err = InferenceError::ProviderError("API failed".to_string());
-    let display = format!("{}", err);
+    let display = format!("{err}");
     assert!(display.contains("Provider Error"));
     assert!(display.contains("API failed"));
 }
 
 #[test]
-fn test_inference_error_rate_limit_display() {
+fn rate_limit_error_should_display_appropriately() {
     let err = InferenceError::RateLimit;
-    let display = format!("{}", err);
+    let display = format!("{err}");
     assert!(display.contains("Rate Limit"));
 }
 
 #[test]
-fn test_inference_error_context_length_display() {
+fn context_length_error_should_display_appropriately() {
     let err = InferenceError::ContextLengthExceeded;
-    let display = format!("{}", err);
+    let display = format!("{err}");
     assert!(display.contains("Context Length"));
 }
 
 #[test]
-fn test_inference_error_network_display() {
+fn network_error_should_display_with_message() {
     let err = InferenceError::NetworkError("Connection refused".to_string());
-    let display = format!("{}", err);
+    let display = format!("{err}");
     assert!(display.contains("Network Error"));
     assert!(display.contains("Connection refused"));
 }
 
 #[test]
-fn test_inference_error_config_display() {
+fn config_error_should_display_with_message() {
     let err = InferenceError::ConfigError("Invalid URL".to_string());
-    let display = format!("{}", err);
+    let display = format!("{err}");
     assert!(display.contains("Configuration Error"));
     assert!(display.contains("Invalid URL"));
 }
@@ -136,12 +135,11 @@ fn test_inference_error_config_display() {
 // =============================================================================
 
 #[test]
-fn test_role_serialization() {
+fn role_should_serialize_to_lowercase_string() {
     let system = Role::System;
     let user = Role::User;
     let assistant = Role::Assistant;
 
-    // Verify serde serialization produces expected lowercase values
     let system_json = serde_json::to_string(&system).unwrap();
     let user_json = serde_json::to_string(&user).unwrap();
     let assistant_json = serde_json::to_string(&assistant).unwrap();
@@ -152,7 +150,7 @@ fn test_role_serialization() {
 }
 
 #[test]
-fn test_message_serialization() {
+fn message_should_serialize_to_valid_json() {
     let msg = Message {
         role: Role::User,
         content: "Test message".to_string(),
@@ -164,7 +162,7 @@ fn test_message_serialization() {
 }
 
 #[test]
-fn test_message_deserialization() {
+fn message_should_deserialize_from_valid_json() {
     let json = r#"{"role":"assistant","content":"Hello!"}"#;
     let msg: Message = serde_json::from_str(json).unwrap();
 
@@ -173,7 +171,7 @@ fn test_message_deserialization() {
 }
 
 #[test]
-fn test_usage_serialization_roundtrip() {
+fn usage_should_roundtrip_through_serialization() {
     let usage = Usage {
         prompt_tokens: 100,
         completion_tokens: 50,
@@ -207,7 +205,7 @@ impl LLMProvider for TestMockProvider {
 }
 
 #[tokio::test]
-async fn test_mock_provider_returns_configured_response() {
+async fn mock_provider_should_return_configured_response() {
     let provider = TestMockProvider {
         response: "Mocked response".to_string(),
     };
@@ -236,7 +234,7 @@ impl LLMProvider for FailingMockProvider {
 }
 
 #[tokio::test]
-async fn test_failing_provider_returns_error() {
+async fn failing_provider_should_return_error() {
     let provider = FailingMockProvider;
 
     let request = ChatRequest {

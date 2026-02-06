@@ -1,6 +1,6 @@
-//! HTTP mock tests for the OpenAI provider.
+//! HTTP mock tests for the `OpenAI` provider.
 //!
-//! Uses wiremock to simulate various HTTP responses from the OpenAI API.
+//! Uses wiremock to simulate various HTTP responses from the `OpenAI` API.
 
 use brio_kernel::inference::{
     ChatRequest, InferenceError, LLMProvider, Message, OpenAIConfig, OpenAIProvider, Role,
@@ -10,7 +10,7 @@ use secrecy::SecretString;
 use wiremock::matchers::{method, path};
 use wiremock::{Mock, MockServer, ResponseTemplate};
 
-async fn create_provider_with_mock_server(server: &MockServer) -> OpenAIProvider {
+fn create_provider_with_mock_server(server: &MockServer) -> OpenAIProvider {
     let config = OpenAIConfig::new(
         SecretString::new("test-api-key".into()),
         Url::parse(&format!("{}/", server.uri())).unwrap(),
@@ -43,7 +43,7 @@ async fn test_rate_limit_returns_rate_limit_error() {
         .mount(&server)
         .await;
 
-    let provider = create_provider_with_mock_server(&server).await;
+    let provider = create_provider_with_mock_server(&server);
     let request = create_test_request();
 
     let result = provider.chat(request).await;
@@ -66,17 +66,18 @@ async fn test_server_error_returns_provider_error() {
         .mount(&server)
         .await;
 
-    let provider = create_provider_with_mock_server(&server).await;
+    let provider = create_provider_with_mock_server(&server);
     let request = create_test_request();
 
     let result = provider.chat(request).await;
 
     assert!(result.is_err());
-    if let InferenceError::ProviderError(msg) = result.unwrap_err() {
-        assert!(msg.contains("500"));
-    } else {
-        panic!("Expected ProviderError");
-    }
+    let err = result.unwrap_err();
+    assert!(
+        matches!(&err, InferenceError::ProviderError(msg) if msg.contains("500")),
+        "Expected ProviderError with 500, got {:?}",
+        err
+    );
 }
 
 #[tokio::test]
@@ -89,17 +90,18 @@ async fn test_service_unavailable_returns_provider_error() {
         .mount(&server)
         .await;
 
-    let provider = create_provider_with_mock_server(&server).await;
+    let provider = create_provider_with_mock_server(&server);
     let request = create_test_request();
 
     let result = provider.chat(request).await;
 
     assert!(result.is_err());
-    if let InferenceError::ProviderError(msg) = result.unwrap_err() {
-        assert!(msg.contains("503"));
-    } else {
-        panic!("Expected ProviderError");
-    }
+    let err = result.unwrap_err();
+    assert!(
+        matches!(&err, InferenceError::ProviderError(msg) if msg.contains("503")),
+        "Expected ProviderError with 503, got {:?}",
+        err
+    );
 }
 
 // =============================================================================
@@ -116,24 +118,24 @@ async fn test_malformed_json_returns_provider_error() {
         .mount(&server)
         .await;
 
-    let provider = create_provider_with_mock_server(&server).await;
+    let provider = create_provider_with_mock_server(&server);
     let request = create_test_request();
 
     let result = provider.chat(request).await;
 
     assert!(result.is_err());
-    if let InferenceError::ProviderError(msg) = result.unwrap_err() {
-        assert!(msg.contains("Parse error"));
-    } else {
-        panic!("Expected ProviderError with parse error");
-    }
+    let err = result.unwrap_err();
+    assert!(
+        matches!(&err, InferenceError::ProviderError(msg) if msg.contains("Parse error")),
+        "Expected ProviderError with parse error, got {:?}",
+        err
+    );
 }
 
 #[tokio::test]
 async fn test_empty_choices_returns_provider_error() {
     let server = MockServer::start().await;
 
-    // Valid JSON but empty choices array
     let response_body = r#"{"choices": [], "usage": null}"#;
 
     Mock::given(method("POST"))
@@ -142,17 +144,18 @@ async fn test_empty_choices_returns_provider_error() {
         .mount(&server)
         .await;
 
-    let provider = create_provider_with_mock_server(&server).await;
+    let provider = create_provider_with_mock_server(&server);
     let request = create_test_request();
 
     let result = provider.chat(request).await;
 
     assert!(result.is_err());
-    if let InferenceError::ProviderError(msg) = result.unwrap_err() {
-        assert!(msg.contains("No choices"));
-    } else {
-        panic!("Expected ProviderError about no choices");
-    }
+    let err = result.unwrap_err();
+    assert!(
+        matches!(&err, InferenceError::ProviderError(msg) if msg.contains("No choices")),
+        "Expected ProviderError about no choices, got {:?}",
+        err
+    );
 }
 
 // =============================================================================
@@ -172,7 +175,7 @@ async fn test_context_length_exceeded_returns_correct_error() {
         .mount(&server)
         .await;
 
-    let provider = create_provider_with_mock_server(&server).await;
+    let provider = create_provider_with_mock_server(&server);
     let request = create_test_request();
 
     let result = provider.chat(request).await;
@@ -214,7 +217,7 @@ async fn test_successful_response_parses_correctly() {
         .mount(&server)
         .await;
 
-    let provider = create_provider_with_mock_server(&server).await;
+    let provider = create_provider_with_mock_server(&server);
     let request = create_test_request();
 
     let result = provider.chat(request).await;

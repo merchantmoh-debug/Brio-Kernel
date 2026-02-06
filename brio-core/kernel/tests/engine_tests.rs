@@ -23,10 +23,8 @@ impl LLMProvider for MockProvider {
 // =============================================================================
 
 #[test]
-fn test_engine_config_enables_component_model() {
+fn engine_config_should_create_valid_engine_with_component_model() {
     let config = create_engine_config();
-    // Config should be created successfully
-    // The actual flags are internal, but we can test that it's valid by creating an engine
     let engine = wasmtime::Engine::new(&config);
     assert!(engine.is_ok());
 }
@@ -36,7 +34,7 @@ fn test_engine_config_enables_component_model() {
 // =============================================================================
 
 #[test]
-fn test_create_linker_succeeds() {
+fn create_linker_should_succeed_with_valid_engine() {
     let config = create_engine_config();
     let engine = wasmtime::Engine::new(&config).unwrap();
     let linker = create_linker(&engine);
@@ -48,7 +46,7 @@ fn test_create_linker_succeeds() {
 // =============================================================================
 
 #[test]
-fn test_wasm_engine_creation() {
+fn wasm_engine_should_create_successfully_with_valid_linker() {
     let config = create_engine_config();
     let engine = wasmtime::Engine::new(&config).unwrap();
     let linker = create_linker(&engine).unwrap();
@@ -57,7 +55,7 @@ fn test_wasm_engine_creation() {
 }
 
 #[tokio::test]
-async fn test_wasm_engine_prepare_store() -> Result<()> {
+async fn wasm_engine_should_prepare_store_with_host_state() -> Result<()> {
     let config = create_engine_config();
     let engine = wasmtime::Engine::new(&config)?;
     let linker = create_linker(&engine)?;
@@ -71,18 +69,17 @@ async fn test_wasm_engine_prepare_store() -> Result<()> {
 }
 
 #[test]
-fn test_wasm_engine_linker_accessor() {
+fn wasm_engine_should_provide_linker_access() {
     let config = create_engine_config();
     let engine = wasmtime::Engine::new(&config).unwrap();
     let linker = create_linker(&engine).unwrap();
     let wasm_engine = WasmEngine::new(linker).unwrap();
 
-    // Should be able to access the linker
     let _linker_ref = wasm_engine.linker();
 }
 
 #[test]
-fn test_load_invalid_component_path() {
+fn load_component_should_return_error_for_invalid_path() {
     let config = create_engine_config();
     let engine = wasmtime::Engine::new(&config).unwrap();
     let linker = create_linker(&engine).unwrap();
@@ -98,14 +95,14 @@ fn test_load_invalid_component_path() {
 // =============================================================================
 
 #[tokio::test]
-async fn test_instantiate_empty_component() -> Result<()> {
+async fn instantiate_should_succeed_for_empty_component() -> Result<()> {
     let config = create_engine_config();
     let engine = wasmtime::Engine::new(&config)?;
     let linker = create_linker(&engine)?;
     let wasm_engine = WasmEngine::new(linker)?;
 
     // Create minimal empty component
-    let component = wasmtime::component::Component::new(&engine, r#"(component)"#)?;
+    let component = wasmtime::component::Component::new(&engine, r"(component)")?;
 
     let host_state =
         BrioHostState::with_provider("sqlite::memory:", Box::new(MockProvider)).await?;
@@ -125,25 +122,21 @@ async fn test_instantiate_empty_component() -> Result<()> {
 // Engine Clone Test
 // =============================================================================
 
-#[test]
-fn test_multiple_stores_from_same_engine() {
-    let rt = tokio::runtime::Runtime::new().unwrap();
+#[tokio::test]
+async fn engine_should_support_multiple_stores_concurrently() {
+    let config = create_engine_config();
+    let engine = wasmtime::Engine::new(&config).unwrap();
+    let linker = create_linker(&engine).unwrap();
+    let wasm_engine = WasmEngine::new(linker).unwrap();
 
-    rt.block_on(async {
-        let config = create_engine_config();
-        let engine = wasmtime::Engine::new(&config).unwrap();
-        let linker = create_linker(&engine).unwrap();
-        let wasm_engine = WasmEngine::new(linker).unwrap();
+    // Create multiple stores from the same engine
+    let host1 = BrioHostState::with_provider("sqlite::memory:", Box::new(MockProvider))
+        .await
+        .unwrap();
+    let host2 = BrioHostState::with_provider("sqlite::memory:", Box::new(MockProvider))
+        .await
+        .unwrap();
 
-        // Create multiple stores from the same engine
-        let host1 = BrioHostState::with_provider("sqlite::memory:", Box::new(MockProvider))
-            .await
-            .unwrap();
-        let host2 = BrioHostState::with_provider("sqlite::memory:", Box::new(MockProvider))
-            .await
-            .unwrap();
-
-        let _store1 = wasm_engine.prepare_store(host1);
-        let _store2 = wasm_engine.prepare_store(host2);
-    });
+    let _store1 = wasm_engine.prepare_store(host1);
+    let _store2 = wasm_engine.prepare_store(host2);
 }
