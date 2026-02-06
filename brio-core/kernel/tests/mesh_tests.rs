@@ -1,3 +1,8 @@
+//! Tests for the mesh networking and message routing system.
+//!
+//! Tests component registration, message routing between agents, and
+//! error handling for unknown methods and missing components.
+
 use brio_kernel::host::BrioHostState;
 use brio_kernel::mesh::{MeshMessage, Payload};
 use tokio::sync::mpsc;
@@ -11,31 +16,26 @@ impl brio_kernel::inference::LLMProvider for DummyProvider {
         _request: brio_kernel::inference::ChatRequest,
     ) -> Result<brio_kernel::inference::ChatResponse, brio_kernel::inference::InferenceError> {
         Ok(brio_kernel::inference::ChatResponse {
-            content: "".to_string(),
+            content: String::new(),
             usage: None,
         })
     }
 }
 
 #[tokio::test]
-async fn test_mesh_routing() {
-    // 1. Initialize Host State with in-memory DB
+async fn mesh_should_route_calls_to_registered_components() {
     let state = BrioHostState::with_provider("sqlite::memory:", Box::new(DummyProvider))
         .await
         .expect("Failed to create host");
 
-    // 2. Create a mock agent channel
     let (tx, mut rx) = mpsc::channel::<MeshMessage>(10);
 
-    // 3. Register the agent
     state.register_component("test-agent".to_string(), tx);
 
-    // 4. Spawn a mock agent loop
     tokio::spawn(async move {
         while let Some(msg) = rx.recv().await {
             match msg.method.as_str() {
                 "echo" => {
-                    // Echo the payload back
                     let _ = msg.reply_tx.send(Ok(msg.payload));
                 }
                 _ => {
@@ -45,25 +45,24 @@ async fn test_mesh_routing() {
         }
     });
 
-    // 5. Test Happy Path: Echo
+    // Test Happy Path: Echo
     let response = state
         .mesh_call(
             "test-agent",
             "echo",
-            Payload::Json("Hello Brio".to_string()),
+            Payload::Json(Box::new("Hello Brio".to_string())),
         )
         .await
         .expect("Mesh call failed");
 
     if let Payload::Json(s) = response {
-        assert_eq!(s, "Hello Brio");
+        assert_eq!(*s, "Hello Brio");
     } else {
         panic!("Expected Json payload");
     }
 
-    // 6. Test Error Path: Unknown Method
     let err_response = state
-        .mesh_call("test-agent", "bad_method", Payload::Json("".to_string()))
+        .mesh_call("test-agent", "bad_method", Payload::Json(Box::new(String::new())))
         .await;
 
     assert!(err_response.is_err());
@@ -72,9 +71,8 @@ async fn test_mesh_routing() {
         "Target 'test-agent' returned error: Unknown method"
     );
 
-    // 7. Test Missing Target
     let missing_response = state
-        .mesh_call("ghost", "boo", Payload::Json("".to_string()))
+        .mesh_call("ghost", "boo", Payload::Json(Box::new(String::new())))
         .await;
 
     assert!(missing_response.is_err());
