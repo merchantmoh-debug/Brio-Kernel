@@ -1,4 +1,4 @@
-//! Agent engine with ReAct loop and state management.
+//! Agent engine with [`ReAct`] loop and state management.
 
 use crate::config::AgentConfig;
 use crate::error::{AgentError, ResultExt};
@@ -25,6 +25,10 @@ struct AgentState {
 
 impl AgentEngine {
     /// Creates a new agent engine.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the task description is empty.
     pub fn new(
         context: &TaskContext,
         tools: ToolRegistry,
@@ -50,6 +54,14 @@ impl AgentEngine {
     }
 
     /// Runs the agent until completion or max iterations.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if:
+    /// - The timeout is exceeded
+    /// - The maximum number of iterations is exceeded
+    /// - Tool execution fails
+    /// - Inference fails
     pub fn run(&mut self, inference_fn: &InferenceFn) -> Result<String, AgentError> {
         // Add initial user message
         self.state.add_message(
@@ -84,13 +96,13 @@ impl AgentEngine {
             }
 
             // Get model response
-            let response = self.get_model_response(inference_fn)?;
+            let response = self.model_response(inference_fn)?;
 
             // Execute tools from response
             let execution_result = self
                 .tools
                 .execute_all(&response.content)
-                .map_err(|e| AgentError::ToolExecution(e))?;
+                .map_err(AgentError::ToolExecution)?;
 
             // Check for completion
             if execution_result.is_complete {
@@ -105,6 +117,10 @@ impl AgentEngine {
     }
 
     /// Runs the agent with a system prompt.
+    ///
+    /// # Errors
+    ///
+    /// Returns the same errors as [`run`](Self::run).
     pub fn run_with_prompt(
         &mut self,
         system_prompt: impl Into<String>,
@@ -117,10 +133,7 @@ impl AgentEngine {
     }
 
     /// Gets the model response via the inference function.
-    fn get_model_response(
-        &self,
-        inference_fn: &InferenceFn,
-    ) -> Result<InferenceResponse, AgentError> {
+    fn model_response(&self, inference_fn: &InferenceFn) -> Result<InferenceResponse, AgentError> {
         inference_fn(&self.config.model, &self.state.history)
             .with_context(|| "Failed to get model response")
     }
@@ -152,16 +165,19 @@ impl AgentEngine {
     }
 
     /// Returns the current iteration count.
+    #[must_use]
     pub fn iteration(&self) -> u32 {
         self.state.iteration
     }
 
     /// Returns the elapsed time since engine start.
+    #[must_use]
     pub fn elapsed(&self) -> Duration {
         self.start_time.elapsed()
     }
 
     /// Returns a reference to the conversation history.
+    #[must_use]
     pub fn history(&self) -> &[Message] {
         &self.state.history
     }
@@ -189,6 +205,7 @@ pub struct AgentEngineBuilder {
 
 impl AgentEngineBuilder {
     /// Creates a new builder.
+    #[must_use]
     pub fn new() -> Self {
         Self {
             tools: None,
@@ -197,18 +214,24 @@ impl AgentEngineBuilder {
     }
 
     /// Sets the tool registry.
+    #[must_use]
     pub fn tools(mut self, tools: ToolRegistry) -> Self {
         self.tools = Some(tools);
         self
     }
 
     /// Sets the configuration.
+    #[must_use]
     pub fn config(mut self, config: AgentConfig) -> Self {
         self.config = Some(config);
         self
     }
 
     /// Builds the agent engine.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the tool registry is not configured.
     pub fn build(self, context: &TaskContext) -> Result<AgentEngine, AgentError> {
         let tools = self.tools.ok_or_else(|| {
             AgentError::Task(crate::error::TaskError::MissingConfiguration {
@@ -231,7 +254,14 @@ impl Default for AgentEngineBuilder {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::error::ToolError;
+    use crate::tools::{Tool, ToolParser};
     use crate::types::TaskContext;
+    use regex::Captures;
+    use std::collections::HashMap;
+    use std::sync::atomic::{AtomicUsize, Ordering};
+    use std::sync::Arc;
+    use std::time::Duration;
 
     fn create_test_context() -> TaskContext {
         TaskContext::new("test-123", "Test task")
@@ -239,6 +269,120 @@ mod tests {
 
     fn create_test_registry() -> ToolRegistry {
         ToolRegistry::new()
+    }
+
+    fn create_mock_inference(
+        responses: Vec<InferenceResponse>,
+    ) -> impl Fn(&str, &[Message]) -> Result<InferenceResponse, AgentError> {
+        let counter = AtomicUsize::new(0);
+        let responses = Arc::new(responses);
+        move |_model, _history| {
+            let idx = counter.fetch_add(1, Ordering::SeqCst);
+            match responses.get(idx) {
+                Some(resp) => Ok(InferenceResponse {
+                    content: resp.content.clone(),
+                    model: resp.model.clone(),
+                    tokens_used: resp.tokens_used,
+                    finish_reason: resp.finish_reason.clone(),
+                }),
+                None => Ok(InferenceResponse {
+                    content: "<done>Done</done>".to_string(),
+                    model: "test".to_string(),
+                    tokens_used: None,
+                    finish_reason: None,
+                }),
+            }
+        }
+    }
+
+    struct MockTool {
+        name: &'static str,
+        description: &'static str,
+        should_fail: bool,
+    }
+
+    impl MockTool {
+        fn new(name: impl Into<String>) -> Self {
+            let name = name.into();
+            let name: &'static str = Box::leak(name.into_boxed_str());
+            let desc: &'static str = Box::leak(format!("<{} />", name).into_boxed_str());
+            Self {
+                name,
+                description: desc,
+                should_fail: false,
+            }
+        }
+
+        fn failing(name: impl Into<String>) -> Self {
+            let name = name.into();
+            let name: &'static str = Box::leak(name.into_boxed_str());
+            let desc: &'static str = Box::leak(format!("<{} />", name).into_boxed_str());
+            Self {
+                name,
+                description: desc,
+                should_fail: true,
+            }
+        }
+    }
+
+    impl Tool for MockTool {
+        fn name(&self) -> &'static str {
+            self.name
+        }
+
+        fn description(&self) -> &'static str {
+            self.description
+        }
+
+        fn execute(&self, _args: &HashMap<String, String>) -> Result<String, ToolError> {
+            if self.should_fail {
+                Err(ToolError::ExecutionFailed {
+                    tool: self.name.to_string(),
+                    source: Box::new(std::io::Error::new(
+                        std::io::ErrorKind::Other,
+                        "Mock tool failure",
+                    )),
+                })
+            } else {
+                Ok(format!("{} executed successfully", self.name))
+            }
+        }
+    }
+
+    fn create_done_parser() -> Arc<ToolParser> {
+        Arc::new(
+            ToolParser::new(r"<done>(.*?)</done>", |caps: &Captures| {
+                let mut args = HashMap::new();
+                if let Some(m) = caps.get(1) {
+                    args.insert("summary".to_string(), m.as_str().to_string());
+                }
+                args
+            })
+            .unwrap(),
+        )
+    }
+
+    fn create_mock_parser(tool_name: &str) -> Arc<ToolParser> {
+        let pattern = format!(r"<{}>(.*?)</{}>", tool_name, tool_name);
+        let name = tool_name.to_string();
+        Arc::new(
+            ToolParser::new(&pattern, move |caps: &Captures| {
+                let mut args = HashMap::new();
+                if let Some(m) = caps.get(1) {
+                    args.insert("arg".to_string(), m.as_str().to_string());
+                }
+                args.insert("tool_name".to_string(), name.clone());
+                args
+            })
+            .unwrap(),
+        )
+    }
+
+    fn create_registry_with_done_tool() -> ToolRegistry {
+        let mut registry = ToolRegistry::new();
+        let done_tool = Box::new(MockTool::new("done"));
+        registry.register("done", done_tool, create_done_parser());
+        registry
     }
 
     #[test]
@@ -281,5 +425,197 @@ mod tests {
 
         let result = AgentEngineBuilder::new().build(&ctx);
         assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_run_single_iteration_success() {
+        let ctx = create_test_context();
+        let registry = create_registry_with_done_tool();
+        let config = AgentConfig::default();
+
+        let mut engine = AgentEngine::new(&ctx, registry, config).unwrap();
+
+        let mock_inference = create_mock_inference(vec![InferenceResponse {
+            content: "<done>Task completed</done>".to_string(),
+            model: "test".to_string(),
+            tokens_used: Some(100),
+            finish_reason: Some("stop".to_string()),
+        }]);
+
+        let result = engine.run(&mock_inference);
+
+        assert!(result.is_ok());
+        assert_eq!(result.unwrap(), "Task completed");
+        assert_eq!(engine.iteration(), 1);
+    }
+
+    #[test]
+    fn test_run_multiple_iterations() {
+        let ctx = create_test_context();
+        let mut registry = ToolRegistry::new();
+
+        let mock_tool = Box::new(MockTool::new("mock_tool"));
+        registry.register("mock_tool", mock_tool, create_mock_parser("mock_tool"));
+
+        let done_tool = Box::new(MockTool::new("done"));
+        registry.register("done", done_tool, create_done_parser());
+
+        let config = AgentConfig::default();
+        let mut engine = AgentEngine::new(&ctx, registry, config).unwrap();
+
+        let mock_inference = create_mock_inference(vec![
+            InferenceResponse {
+                content: "<mock_tool>test</mock_tool>".to_string(),
+                model: "test".to_string(),
+                tokens_used: Some(50),
+                finish_reason: None,
+            },
+            InferenceResponse {
+                content: "<done>All done</done>".to_string(),
+                model: "test".to_string(),
+                tokens_used: Some(100),
+                finish_reason: Some("stop".to_string()),
+            },
+        ]);
+
+        let result = engine.run(&mock_inference);
+
+        assert!(result.is_ok());
+        assert_eq!(result.unwrap(), "All done");
+        assert_eq!(engine.iteration(), 2);
+
+        let history = engine.history();
+        assert!(history.len() >= 3); // Initial user message + assistant + tool messages
+    }
+
+    #[test]
+    fn test_run_timeout() {
+        let ctx = create_test_context();
+        let registry = create_registry_with_done_tool();
+        let config = AgentConfig::builder()
+            .timeout(Duration::from_millis(10))
+            .build()
+            .unwrap();
+
+        let mut engine = AgentEngine::new(&ctx, registry, config).unwrap();
+
+        let mock_inference = |_model: &str, _history: &[Message]| {
+            std::thread::sleep(Duration::from_millis(50));
+            Ok(InferenceResponse {
+                content: "Still working...".to_string(),
+                model: "test".to_string(),
+                tokens_used: None,
+                finish_reason: None,
+            })
+        };
+
+        let result = engine.run(&mock_inference);
+
+        assert!(result.is_err());
+        assert!(matches!(result.unwrap_err(), AgentError::Timeout { .. }));
+    }
+
+    #[test]
+    fn test_run_max_iterations_exceeded() {
+        let ctx = create_test_context();
+        let registry = create_test_registry();
+        let config = AgentConfig::builder().max_iterations(2).build().unwrap();
+
+        let mut engine = AgentEngine::new(&ctx, registry, config).unwrap();
+
+        let mock_inference = |_model: &str, _history: &[Message]| {
+            Ok(InferenceResponse {
+                content: "Let me think...".to_string(),
+                model: "test".to_string(),
+                tokens_used: None,
+                finish_reason: None,
+            })
+        };
+
+        let result = engine.run(&mock_inference);
+
+        assert!(result.is_err());
+        match result.unwrap_err() {
+            AgentError::MaxIterationsExceeded { max } => {
+                assert_eq!(max, 2);
+            }
+            _ => panic!("Expected MaxIterationsExceeded error"),
+        }
+    }
+
+    #[test]
+    fn test_run_tool_execution_failure() {
+        let ctx = create_test_context();
+        let mut registry = ToolRegistry::new();
+
+        let failing_tool = Box::new(MockTool::failing("failing_tool"));
+        registry.register(
+            "failing_tool",
+            failing_tool,
+            create_mock_parser("failing_tool"),
+        );
+
+        let config = AgentConfig::default();
+        let mut engine = AgentEngine::new(&ctx, registry, config).unwrap();
+
+        let mock_inference = create_mock_inference(vec![InferenceResponse {
+            content: "<failing_tool>trigger</failing_tool>".to_string(),
+            model: "test".to_string(),
+            tokens_used: None,
+            finish_reason: None,
+        }]);
+
+        let result = engine.run(&mock_inference);
+
+        assert!(result.is_err());
+        assert!(matches!(
+            result.unwrap_err(),
+            AgentError::ToolExecution { .. }
+        ));
+    }
+
+    #[test]
+    fn test_state_update_with_results() {
+        let ctx = create_test_context();
+        let mut registry = ToolRegistry::new();
+
+        let mock_tool = Box::new(MockTool::new("mock_tool"));
+        registry.register("mock_tool", mock_tool, create_mock_parser("mock_tool"));
+
+        let done_tool = Box::new(MockTool::new("done"));
+        registry.register("done", done_tool, create_done_parser());
+
+        let config = AgentConfig::default();
+        let mut engine = AgentEngine::new(&ctx, registry, config).unwrap();
+
+        let initial_history_len = engine.history().len();
+
+        let mock_inference = create_mock_inference(vec![
+            InferenceResponse {
+                content: "<mock_tool>execute</mock_tool>".to_string(),
+                model: "test".to_string(),
+                tokens_used: None,
+                finish_reason: None,
+            },
+            InferenceResponse {
+                content: "<done>Complete</done>".to_string(),
+                model: "test".to_string(),
+                tokens_used: None,
+                finish_reason: Some("stop".to_string()),
+            },
+        ]);
+
+        let result = engine.run(&mock_inference);
+
+        assert!(result.is_ok());
+
+        let history = engine.history();
+        assert!(history.len() > initial_history_len);
+
+        let has_assistant = history.iter().any(|m| m.role == Role::Assistant);
+        let has_tool = history.iter().any(|m| m.role == Role::Tool);
+
+        assert!(has_assistant, "History should contain assistant messages");
+        assert!(has_tool, "History should contain tool messages");
     }
 }
