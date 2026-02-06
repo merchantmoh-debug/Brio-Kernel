@@ -19,7 +19,7 @@ interface tool {
     }
 
     /// Returns metadata about the tool including its session requirements.
-    get-info: func() -> tool-info;
+    info: func() -> tool-info;
 
     /// Executes the tool with JSON parameters and optional session context.
     /// 

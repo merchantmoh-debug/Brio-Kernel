@@ -81,9 +81,9 @@ impl ShellTool {
     /// # Security
     ///
     /// Checks for:
-    /// - Shell metacharacters (|, ;, &, $, `, etc.)
-    /// - Path traversal attempts (../)
-    /// - Dangerous commands (rm -rf, mkfs, etc.)
+    /// - Shell metacharacters (`|`, `;`, `&`, `$`, `` ` ``, etc.)
+    /// - Path traversal attempts (`../`)
+    /// - Dangerous commands (`rm -rf`, `mkfs`, etc.)
     fn validate_command(command: &str) -> Result<(), ShellError> {
         // Check for shell metacharacters that could enable injection
         const DANGEROUS_CHARS: &[char] = &['|', ';', '&', '$', '`', '>', '<', '(', ')', '{', '}'];
@@ -153,7 +153,7 @@ impl ShellTool {
                     ))
                 } else {
                     // Return valid portion with warning indicator
-                    Ok(format!("{}[INVALID_UTF8_TRUNCATED]", valid))
+                    Ok(format!("{valid}[INVALID_UTF8_TRUNCATED]"))
                 }
             }
         }
@@ -161,7 +161,7 @@ impl ShellTool {
 }
 
 impl exports::brio::core::tool::Guest for ShellTool {
-    fn get_info() -> exports::brio::core::tool::ToolInfo {
+    fn info() -> exports::brio::core::tool::ToolInfo {
         exports::brio::core::tool::ToolInfo {
             name: "shell".to_string(),
             description: "Executes shell commands safely with input validation. Use with caution."
@@ -192,7 +192,7 @@ impl exports::brio::core::tool::Guest for ShellTool {
             .map_err(|e| ShellError::ExecutionFailed(e.to_string()))?;
 
         if output.status.success() {
-            Self::bytes_to_string(output.stdout).map_err(|e| e.into())
+            Self::bytes_to_string(output.stdout).map_err(std::convert::Into::into)
         } else {
             let stderr = Self::bytes_to_string(output.stderr).unwrap_or_default();
             let code = output.status.code().unwrap_or(-1);
