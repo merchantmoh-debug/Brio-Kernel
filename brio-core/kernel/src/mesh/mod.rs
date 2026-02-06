@@ -11,8 +11,8 @@ use tokio::sync::oneshot;
 
 #[derive(Debug, Clone)]
 pub enum Payload {
-    Json(String),
-    Binary(Vec<u8>),
+    Json(Box<String>),
+    Binary(Box<Vec<u8>>),
 }
 
 pub struct MeshMessage {

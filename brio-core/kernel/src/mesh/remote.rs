@@ -1,6 +1,7 @@
 use anyhow::{Result, anyhow};
+use parking_lot::RwLock;
 use std::collections::HashMap;
-use std::sync::{Arc, RwLock};
+use std::sync::Arc;
 use tonic::transport::Channel;
 
 use crate::mesh::grpc::mesh_transport_client::MeshTransportClient;
@@ -22,6 +23,7 @@ impl Default for RemoteRouter {
 }
 
 impl RemoteRouter {
+    #[must_use] 
     pub fn new() -> Self {
         Self {
             registry: Arc::new(RwLock::new(NodeRegistry::new())),
@@ -30,24 +32,30 @@ impl RemoteRouter {
     }
 
     pub fn register_node(&self, info: NodeInfo) {
-        let mut registry = self.registry.write().expect("Registry lock poisoned");
+        let mut registry = self.registry.write();
         registry.register(info);
     }
 
-    pub fn get_node_address(&self, node_id: &NodeId) -> Option<NodeAddress> {
-        let registry = self.registry.read().expect("Registry lock poisoned");
+    #[must_use]
+    pub fn node_address(&self, node_id: &NodeId) -> Option<NodeAddress> {
+        let registry = self.registry.read();
         registry.get(node_id).map(|info| info.address.clone())
     }
 
+    /// Sends a message to a target node.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the connection fails or the remote returns an error.
     pub async fn send(&self, target_node: &NodeId, message: MeshMessage) -> Result<Payload> {
-        let client = self.get_or_connect(target_node).await?;
+        let client = self.connect_or_get(target_node).await?;
 
         let request = tonic::Request::new(crate::mesh::grpc::MeshRequest {
             target: message.target,
             method: message.method,
             payload: Some(match message.payload {
-                Payload::Json(s) => crate::mesh::grpc::mesh_request::Payload::Json(s),
-                Payload::Binary(b) => crate::mesh::grpc::mesh_request::Payload::Binary(b),
+                Payload::Json(s) => crate::mesh::grpc::mesh_request::Payload::Json(*s),
+                Payload::Binary(b) => crate::mesh::grpc::mesh_request::Payload::Binary(*b),
             }),
         });
 
@@ -57,19 +65,19 @@ impl RemoteRouter {
         let response = client.call(request).await?.into_inner();
 
         match response.payload {
-            Some(crate::mesh::grpc::mesh_response::Payload::Json(s)) => Ok(Payload::Json(s)),
-            Some(crate::mesh::grpc::mesh_response::Payload::Binary(b)) => Ok(Payload::Binary(b)),
+            Some(crate::mesh::grpc::mesh_response::Payload::Json(s)) => Ok(Payload::Json(Box::new(s))),
+            Some(crate::mesh::grpc::mesh_response::Payload::Binary(b)) => Ok(Payload::Binary(Box::new(b))),
             Some(crate::mesh::grpc::mesh_response::Payload::Error(e)) => {
-                Err(anyhow!("Remote error: {}", e))
+                Err(anyhow!("Remote error: {e}"))
             }
             None => Err(anyhow!("Empty response payload")),
         }
     }
 
-    async fn get_or_connect(&self, node_id: &NodeId) -> Result<MeshTransportClient<Channel>> {
+    async fn connect_or_get(&self, node_id: &NodeId) -> Result<MeshTransportClient<Channel>> {
         // Fast path: check if connected
         {
-            let clients = self.clients.read().expect("Clients lock poisoned");
+            let clients = self.clients.read();
             if let Some(client) = clients.get(node_id) {
                 return Ok(client.clone());
             }
@@ -77,17 +85,17 @@ impl RemoteRouter {
 
         // Slow path: connect
         let address = self
-            .get_node_address(node_id)
-            .ok_or_else(|| anyhow!("Node {} not found in registry", node_id))?;
+            .node_address(node_id)
+            .ok_or_else(|| anyhow!("Node {node_id} not found in registry"))?;
 
         // Format as http URL for tonic
-        let url = format!("http://{}", address); // Assuming HTTP/2 over cleartext for now
+        let url = format!("http://{address}"); // Assuming HTTP/2 over cleartext for now
         let endpoint = Channel::from_shared(url)?;
         let channel = endpoint.connect().await?;
         let client = MeshTransportClient::new(channel);
 
         {
-            let mut clients = self.clients.write().expect("Clients lock poisoned");
+            let mut clients = self.clients.write();
             clients.insert(node_id.clone(), client.clone());
         }
 
@@ -106,6 +114,7 @@ impl Default for NodeRegistry {
 }
 
 impl NodeRegistry {
+    #[must_use] 
     pub fn new() -> Self {
         Self {
             nodes: HashMap::new(),
@@ -116,10 +125,12 @@ impl NodeRegistry {
         self.nodes.insert(info.id.clone(), info);
     }
 
+    #[must_use] 
     pub fn get(&self, id: &NodeId) -> Option<&NodeInfo> {
         self.nodes.get(id)
     }
 
+    #[must_use] 
     pub fn list(&self) -> Vec<NodeInfo> {
         self.nodes.values().cloned().collect()
     }

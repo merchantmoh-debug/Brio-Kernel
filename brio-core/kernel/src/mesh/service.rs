@@ -10,7 +10,7 @@ use crate::mesh::grpc::{
 };
 use crate::mesh::types::NodeId;
 
-/// gRPC Service Implementation for MeshTransport.
+/// gRPC Service Implementation for `MeshTransport`.
 /// Handles incoming RPC calls and routes them to local components via `BrioHostState`.
 pub struct MeshService {
     host: Arc<BrioHostState>,
@@ -18,6 +18,7 @@ pub struct MeshService {
 }
 
 impl MeshService {
+    #[must_use] 
     pub fn new(host: Arc<BrioHostState>, node_id: NodeId) -> Self {
         Self { host, node_id }
     }
@@ -29,8 +30,8 @@ impl MeshTransport for MeshService {
         let req = request.into_inner();
 
         let payload = match req.payload {
-            Some(RequestPayload::Json(s)) => Payload::Json(s),
-            Some(RequestPayload::Binary(b)) => Payload::Binary(b),
+            Some(RequestPayload::Json(s)) => Payload::Json(Box::new(s)),
+            Some(RequestPayload::Binary(b)) => Payload::Binary(Box::new(b)),
             None => return Err(Status::invalid_argument("Missing payload")),
         };
 
@@ -38,10 +39,10 @@ impl MeshTransport for MeshService {
         // Note: We use the raw component ID as the target, assuming incoming requests are for this node
         match self.host.mesh_call(&req.target, &req.method, payload).await {
             Ok(Payload::Json(s)) => Ok(Response::new(MeshResponse {
-                payload: Some(ResponsePayload::Json(s)),
+                payload: Some(ResponsePayload::Json(*s)),
             })),
             Ok(Payload::Binary(b)) => Ok(Response::new(MeshResponse {
-                payload: Some(ResponsePayload::Binary(b)),
+                payload: Some(ResponsePayload::Binary(*b)),
             })),
             Err(e) => Ok(Response::new(MeshResponse {
                 payload: Some(ResponsePayload::Error(e.to_string())),
@@ -53,13 +54,17 @@ impl MeshTransport for MeshService {
         &self,
         _request: Request<HeartbeatRequest>,
     ) -> Result<Response<HeartbeatResponse>, Status> {
+        let timestamp_secs = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_secs();
+        // Safe cast: Unix timestamps won't exceed i64 range until year 292 billion
+        #[expect(clippy::cast_possible_wrap)]
+        let timestamp = timestamp_secs as i64;
         Ok(Response::new(HeartbeatResponse {
             node_id: self.node_id.to_string(),
             ready: true,
-            timestamp: std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)
-                .unwrap_or_default()
-                .as_secs() as i64,
+            timestamp,
         }))
     }
 }
