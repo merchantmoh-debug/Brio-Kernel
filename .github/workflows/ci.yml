@@ -94,11 +94,20 @@ jobs:
       - uses: Swatinem/rust-cache@v2
         with:
           workspaces: ${{ env.WORKING_DIR }}
-      - name: Install cargo-llvm-cov
-        uses: taiki-e/install-action@cargo-llvm-cov
+      - name: Install cargo-tarpaulin
+        uses: taiki-e/install-action@cargo-tarpaulin
       - name: Generate coverage
-        run: cargo llvm-cov --all-features --workspace --lcov --output-path lcov.info
+        run: cargo tarpaulin --all-features --workspace
         working-directory: ${{ env.WORKING_DIR }}
+        timeout-minutes: 15
+      - name: Upload coverage reports
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: coverage-reports
+          path: |
+            brio-core/tarpaulin-report.html
+            brio-core/cobertura.xml
 
   doc:
     name: Documentation

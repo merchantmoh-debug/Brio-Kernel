@@ -1,0 +1,13 @@
+[default]
+# Exclude test files and integration tests from coverage
+exclude-files = ["tests/**/*", "benches/**/*", "**/test_*.rs", "**/tests.rs"]
+# Use LLVM coverage for better accuracy
+engine = "Llvm"
+# Generate coverage for all targets
+all-targets = true
+# Include tests in coverage (to see if tests themselves are covered)
+run-types = ["Tests"]
+# Set timeout for long-running tests (in seconds)
+timeout = "600s"
+# Output formats
+out = ["Html", "Xml"]
