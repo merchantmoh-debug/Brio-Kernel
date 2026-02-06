@@ -3,6 +3,13 @@ name = "integration-tests"
 version = "0.1.0"
 edition = "2024"
 license = "MPL-2.0"
+description = "Integration tests for Brio kernel"
+repository = "https://github.com/brio-labs/brio"
+readme = "../../README.md"
+keywords = ["test", "integration", "brio"]
+categories = ["development-tools"]
+authors = ["BrioCo <team@brio.build>"]
+rust-version = "1.93"
 publish = false
 
 [dev-dependencies]
@@ -17,3 +24,6 @@ reqwest = { version = "0.13.1", default-features = false, features = [
     "rustls",
 ] }
 async-trait = "0.1"
+
+[lints]
+workspace = true

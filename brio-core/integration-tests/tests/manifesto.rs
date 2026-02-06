@@ -1,3 +1,17 @@
+//! Integration tests for the supervisor manifesto scenario.
+//!
+//! Tests end-to-end agent orchestration with real and mock AI providers,
+//! including task lifecycle management and distributed mesh communication.
+
+// Allow casting warnings in tests - these are typically safe conversions for test data
+// where we control the input values and ranges. These casts are necessary for
+// database ID conversions in the test repository implementations.
+#![allow(
+    clippy::cast_possible_wrap,
+    clippy::cast_sign_loss,
+    clippy::cast_possible_truncation
+)]
+
 use anyhow::Result;
 use brio_kernel::host::BrioHostState;
 use brio_kernel::inference::{ChatRequest, ChatResponse, InferenceError, LLMProvider};
@@ -46,7 +60,7 @@ impl TestEnvironment {
 
     async fn init_db(&self) -> Result<()> {
         sqlx::query(
-            r#"
+            r"
             CREATE TABLE tasks (
                 id INTEGER PRIMARY KEY,
                 content TEXT NOT NULL,
@@ -56,14 +70,14 @@ impl TestEnvironment {
                 failure_reason TEXT,
                 parent_id INTEGER
             );
-            "#,
+            ",
         )
         .execute(self.host.db())
         .await?;
         Ok(())
     }
 
-    async fn register_agent(&mut self, id: &str) {
+    fn register_agent(&mut self, id: &str) {
         let (tx, rx) = mpsc::channel(10);
         self.host.register_component(id.to_string(), tx);
         self.agent_msg_rx = Some(rx);
@@ -217,7 +231,7 @@ impl TaskRepository for TestTaskRepository {
                     "INSERT INTO tasks (content, priority, status, parent_id) VALUES (?, ?, ?, ?) RETURNING id",
                 )
                 .bind(content)
-                .bind(priority.inner() as i64)
+                .bind(i64::from(priority.inner()))
                 .bind(TaskStatus::Pending.as_str())
                 .bind(parent_id.map(|id| id.inner() as i64))
                 .fetch_one(self.host.db())
@@ -292,7 +306,7 @@ impl AgentDispatcher for TestDispatcher {
                     .mesh_call(
                         agent.as_str(),
                         "fix",
-                        Payload::Json(task.content().to_string()),
+                        Payload::Json(Box::new(task.content().to_string())),
                     )
                     .await
             })
@@ -308,32 +322,27 @@ impl AgentDispatcher for TestDispatcher {
 
 #[tokio::test(flavor = "multi_thread")]
 async fn manifesto_scenario_agent_fixing_bug() -> Result<()> {
-    // 1. Arrange (KISS: Setup helper)
     let mut env = TestEnvironment::setup().await?;
     let project_file = env.root.join("dummy_bug.txt");
     std::fs::write(&project_file, "bug")?;
 
-    env.register_agent("agent_coder").await;
+    env.register_agent("agent_coder");
     let agent_rx = env.agent_msg_rx.take().expect("Agent receiver missing");
     let agent_host = env.host.clone();
     let project_path = env.root.to_string_lossy().to_string();
 
-    // 2. Act: Spawn Agent
     tokio::spawn(async move {
         agent_logic(agent_host, agent_rx, project_path).await;
     });
 
-    // 3. Act: Create Task
     create_bug_fix_task(&env.host).await?;
 
-    // 4. Act: Run Supervisor
     let processed = run_supervisor_cycle(env.host.clone()).await?;
     assert!(
         processed >= 1,
         "Should process at least 1 task state transition"
     );
 
-    // 5. Assert (State Verification)
     let content = std::fs::read_to_string(project_file)?;
     assert_eq!(content, "fixed");
 
@@ -388,7 +397,7 @@ async fn smart_agent_logic(
         if msg.method == "fix" {
             // 1. Begin Session (Sandboxed)
             let session_id = host
-                .begin_session(path.clone())
+                .begin_session(&path)
                 .expect("Failed to begin session");
             let session_path = std::env::temp_dir().join("brio").join(&session_id);
             let file_path = session_path.join("dummy_bug.txt");
@@ -398,10 +407,9 @@ async fn smart_agent_logic(
 
             // 3. Consult LLM (The "Smart" part)
             let prompt = format!(
-                "You are an automated bug fixer. The file content is '{}'. \
+                "You are an automated bug fixer. The file content is '{content}'. \
                 Your task is to fix it by replacing the content with the word 'fixed'. \
-                Return ONLY the result word 'fixed' with no other text, markdown, or explanation.",
-                content
+                Return ONLY the result word 'fixed' with no other text, markdown, or explanation."
             );
 
             let request = ChatRequest {
@@ -430,11 +438,11 @@ async fn smart_agent_logic(
             std::fs::write(&file_path, fixed_content).expect("Failed to write fix");
 
             // 5. Commit
-            host.commit_session(session_id)
+            host.commit_session(&session_id)
                 .expect("Failed to commit session");
             let _ = msg
                 .reply_tx
-                .send(Ok(Payload::Json(fixed_content.to_string())));
+                .send(Ok(Payload::Json(Box::new(fixed_content.to_string()))));
         }
     }
 }
@@ -443,14 +451,14 @@ async fn agent_logic(host: Arc<BrioHostState>, mut rx: mpsc::Receiver<MeshMessag
     while let Some(msg) = rx.recv().await {
         if msg.method == "fix" {
             let session = host
-                .begin_session(path.clone())
+                .begin_session(&path)
                 .expect("Failed to begin session");
             let session_path = std::env::temp_dir().join("brio").join(&session);
             std::fs::write(session_path.join("dummy_bug.txt"), "fixed")
                 .expect("Failed to write fix");
-            host.commit_session(session)
+            host.commit_session(&session)
                 .expect("Failed to commit session");
-            let _ = msg.reply_tx.send(Ok(Payload::Json("fixed".into())));
+            let _ = msg.reply_tx.send(Ok(Payload::Json(Box::new("fixed".to_string()))));
         }
     }
 }
@@ -462,12 +470,9 @@ async fn agent_logic(host: Arc<BrioHostState>, mut rx: mpsc::Receiver<MeshMessag
 #[tokio::test(flavor = "multi_thread")]
 async fn manifesto_scenario_real_ai() -> Result<()> {
     // 1. Check for Key (Conditional Execution)
-    let api_key = match std::env::var("OPENROUTER_API_KEY") {
-        Ok(k) => k,
-        Err(_) => {
-            println!("Skipping real AI test: OPENROUTER_API_KEY not set");
-            return Ok(());
-        }
+    let api_key = if let Ok(k) = std::env::var("OPENROUTER_API_KEY") { k } else {
+        println!("Skipping real AI test: OPENROUTER_API_KEY not set");
+        return Ok(());
     };
 
     // 2. Setup Real Provider
@@ -478,22 +483,19 @@ async fn manifesto_scenario_real_ai() -> Result<()> {
     );
     let provider = brio_kernel::inference::OpenAIProvider::new(config);
 
-    // 3. Arrange Environment
     let mut env = TestEnvironment::setup_with_provider(Box::new(provider)).await?;
     let project_file = env.root.join("dummy_bug.txt");
     std::fs::write(&project_file, "bug")?;
 
-    env.register_agent("agent_coder").await;
+    env.register_agent("agent_coder");
     let agent_rx = env.agent_msg_rx.take().expect("Agent receiver missing");
     let agent_host = env.host.clone();
     let project_path = env.root.to_string_lossy().to_string();
 
-    // 4. Act: Spawn SMART Agent
     tokio::spawn(async move {
         smart_agent_logic(agent_host, agent_rx, project_path).await;
     });
 
-    // 5. Act: Create Task & Run Supervisor
     create_bug_fix_task(&env.host).await?;
     let processed = run_supervisor_cycle(env.host.clone()).await?;
     assert!(
@@ -501,17 +503,9 @@ async fn manifesto_scenario_real_ai() -> Result<()> {
         "Should process at least 1 task state transition"
     );
 
-    // 6. Assert
-    // Give slight delay for async file I/O propagation if needed,
-    // but supervisor cycle waits for mesh call which waits for commit.
-    // So it should be synchronous enough.
     let content = std::fs::read_to_string(project_file)?;
 
-    // Loose assertion because LLMs can be chatty even with strict prompting
-    // Ideally it returns just "fixed".
-    if !content.contains("fixed") {
-        panic!("LLM failed to fix the bug. Content: '{}'", content);
-    }
+    assert!(content.contains("fixed"), "LLM failed to fix the bug. Content: '{content}'");
 
     Ok(())
 }
