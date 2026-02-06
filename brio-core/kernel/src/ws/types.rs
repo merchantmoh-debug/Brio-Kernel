@@ -8,10 +8,12 @@ use uuid::Uuid;
 pub struct ClientId(Uuid);
 
 impl ClientId {
+    #[must_use]
     pub fn generate() -> Self {
         Self(Uuid::new_v4())
     }
 
+    #[must_use]
     pub fn as_uuid(&self) -> Uuid {
         self.0
     }
@@ -29,14 +31,21 @@ pub struct WsPatch {
 }
 
 impl WsPatch {
+    #[must_use]
     pub fn new(patch: json_patch::Patch) -> Self {
         Self { inner: patch }
     }
 
+    #[must_use]
     pub fn inner(&self) -> &json_patch::Patch {
         &self.inner
     }
 
+    /// Serializes the patch to a JSON string.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the patch cannot be serialized to JSON.
     pub fn to_json(&self) -> Result<String, WsError> {
         serde_json::to_string(&self.inner).map_err(WsError::Serialization)
     }
@@ -44,11 +53,16 @@ impl WsPatch {
 
 #[derive(Debug, Clone)]
 pub enum BroadcastMessage {
-    Patch(WsPatch),
+    Patch(Box<WsPatch>),
     Shutdown,
 }
 
 impl BroadcastMessage {
+    /// Converts the message to a WebSocket frame payload.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if a patch message cannot be serialized to JSON.
     pub fn to_frame_payload(&self) -> Result<String, WsError> {
         match self {
             Self::Patch(patch) => patch.to_json(),
@@ -86,7 +100,7 @@ mod tests {
     #[test]
     fn client_id_display() {
         let id = ClientId::generate();
-        let display = format!("{}", id);
+        let display = format!("{id}");
         assert!(!display.is_empty());
     }
 

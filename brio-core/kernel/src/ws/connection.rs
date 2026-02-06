@@ -33,6 +33,14 @@ impl Connection {
         self.client_id
     }
 
+    /// Runs the connection loop, handling incoming messages and broadcasts.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if:
+    /// - WebSocket communication fails
+    /// - Message handling encounters an error
+    /// - Broadcast channel is closed
     pub async fn run(mut self) -> Result<(), WsError> {
         let mut ping_interval = interval(PING_INTERVAL);
 

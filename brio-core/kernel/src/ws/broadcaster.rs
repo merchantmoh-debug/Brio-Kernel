@@ -16,6 +16,7 @@ pub struct Broadcaster {
 }
 
 impl Broadcaster {
+    #[must_use] 
     pub fn new() -> Self {
         let (sender, _) = broadcast::channel(BROADCAST_CAPACITY);
         Self {
@@ -33,23 +34,27 @@ impl Broadcaster {
         }
     }
 
+    /// Broadcasts a message to all connected clients.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the broadcast channel is closed.
     pub fn broadcast(&self, message: BroadcastMessage) -> Result<(), WsError> {
-        match self.sender.send(message) {
-            Ok(receiver_count) => {
-                debug!(receiver_count, "Broadcast sent");
-                Ok(())
-            }
-            Err(_) => {
-                warn!("Broadcast sent but no clients connected");
-                Ok(())
-            }
+        if let Ok(receiver_count) = self.sender.send(message) {
+            debug!(receiver_count, "Broadcast sent");
+            Ok(())
+        } else {
+            warn!("Broadcast sent but no clients connected");
+            Ok(())
         }
     }
 
+    #[must_use] 
     pub fn client_count(&self) -> usize {
         self.client_count.load(Ordering::SeqCst)
     }
 
+    #[must_use] 
     pub fn sender(&self) -> &broadcast::Sender<BroadcastMessage> {
         &self.sender
     }
@@ -97,13 +102,13 @@ mod tests {
         let broadcaster = Broadcaster::new();
         assert_eq!(broadcaster.client_count(), 0);
 
-        let _rx1 = broadcaster.subscribe();
+        let rx1 = broadcaster.subscribe();
         assert_eq!(broadcaster.client_count(), 1);
 
         let _rx2 = broadcaster.subscribe();
         assert_eq!(broadcaster.client_count(), 2);
 
-        drop(_rx1);
+        drop(rx1);
         assert_eq!(broadcaster.client_count(), 1);
     }
 
