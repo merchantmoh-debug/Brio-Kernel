@@ -3,9 +3,19 @@ name = "tool-grep"
 version = "0.1.0"
 edition = "2024"
 license = "MPL-2.0"
+description = "Grep tool for searching file contents"
+repository = "https://github.com/brio-labs/brio"
+readme = "../../../README.md"
+keywords = ["tool", "grep", "search", "brio"]
+categories = ["wasm", "development-tools"]
+authors = ["BrioCo <team@brio.build>"]
+rust-version = "1.93"
 
 [lib]
 crate-type = ["cdylib"]
 
 [dependencies]
 wit-bindgen = "0.51.0"
+
+[lints]
+workspace = true
