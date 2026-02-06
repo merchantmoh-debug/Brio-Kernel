@@ -3,6 +3,12 @@ name = "foreman-agent"
 version = "0.1.0"
 edition = "2024"
 license = "MPL-2.0"
+description = "Foreman agent for Brio - manages task distribution and milestone tracking"
+repository = "https://github.com/brio-labs/brio"
+readme = "../../../../README.md"
+keywords = ["agent", "foreman", "brio", "task-management"]
+categories = ["wasm", "development-tools"]
+authors = ["BrioCo <team@brio.build>"]
 
 [lib]
 crate-type = ["cdylib"]
@@ -13,3 +19,6 @@ agent-sdk = { path = "../../agent-sdk" }
 serde = { workspace = true }
 serde_json = { workspace = true }
 anyhow = { workspace = true }
+
+[lints]
+workspace = true

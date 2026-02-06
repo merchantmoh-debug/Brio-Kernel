@@ -3,6 +3,9 @@
 //! This agent uses the agent-sdk for task orchestration using pub-sub events.
 //! Unlike other agents, it's event-driven and subscribes to milestone proposals.
 
+// WIT bindings generate many undocumented items - this is expected for auto-generated code
+#![allow(missing_docs)]
+
 use agent_sdk::Tool;
 use anyhow::Result;
 use serde::Deserialize;
@@ -17,13 +20,13 @@ generate!({
     generate_all,
 });
 
-/// ForemanAgent implements the agent-runner and event-handler interfaces.
+/// `ForemanAgent` implements the agent-runner and event-handler interfaces.
 pub struct ForemanAgent;
 
 impl exports::brio::core::agent_runner::Guest for ForemanAgent {
     fn run(context: exports::brio::core::agent_runner::TaskContext) -> Result<String, String> {
         // Subscribe to proposal milestones topic
-        brio::core::pub_sub::subscribe("proposal:milestones").map_err(|e| e.to_string())?;
+        brio::core::pub_sub::subscribe("proposal:milestones").map_err(|e| e.clone())?;
 
         brio::core::logging::log(
             brio::core::logging::Level::Info,
@@ -55,14 +58,14 @@ impl exports::brio::core::event_handler::Guest for ForemanAgent {
                 brio::core::logging::log(
                     brio::core::logging::Level::Error,
                     "foreman-agent",
-                    &format!("Error processing milestones: {}", e),
+                    &format!("Error processing milestones: {e}"),
                 );
             }
         } else {
             brio::core::logging::log(
                 brio::core::logging::Level::Debug,
                 "foreman-agent",
-                &format!("Received event on unhandled topic: {}", topic),
+                &format!("Received event on unhandled topic: {topic}"),
             );
         }
     }
@@ -82,6 +85,7 @@ pub struct ForemanEngine {
 
 impl ForemanEngine {
     /// Creates a new foreman engine with the create task tool.
+    #[must_use]
     pub fn new() -> Self {
         Self {
             create_task_tool: Box::new(CreateTaskTool),
@@ -100,7 +104,7 @@ impl ForemanEngine {
         let event: MilestonesEvent = serde_json::from_str(payload_json).map_err(|e| {
             agent_sdk::error::ToolError::InvalidArguments {
                 tool: "process_milestones".to_string(),
-                reason: format!("Failed to parse MilestonesEvent: {}", e),
+                reason: format!("Failed to parse MilestonesEvent: {e}"),
             }
         })?;
 
@@ -115,16 +119,15 @@ impl ForemanEngine {
                 brio::core::logging::Level::Info,
                 "foreman-agent",
                 &format!(
-                    "Executing tool: {} for milestone '{}'",
-                    self.create_task_tool.name(),
-                    milestone
+                    "Executing tool: {} for milestone '{milestone}'",
+                    self.create_task_tool.name()
                 ),
             );
 
             let mut args = HashMap::new();
             args.insert("milestone".to_string(), milestone.clone());
 
-            match self.create_task_tool.execute(args) {
+            match self.create_task_tool.execute(&args) {
                 Ok(msg) => {
                     brio::core::logging::log(
                         brio::core::logging::Level::Info,
@@ -136,7 +139,7 @@ impl ForemanEngine {
                     brio::core::logging::log(
                         brio::core::logging::Level::Error,
                         "foreman-agent",
-                        &format!("Failed to create task for milestone '{}': {}", milestone, e),
+                        &format!("Failed to create task for milestone '{milestone}': {e}"),
                     );
                 }
             }
@@ -156,17 +159,17 @@ impl Default for ForemanEngine {
 pub struct CreateTaskTool;
 
 impl Tool for CreateTaskTool {
-    fn name(&self) -> &str {
+    fn name(&self) -> &'static str {
         "create_task"
     }
 
-    fn description(&self) -> &str {
+    fn description(&self) -> &'static str {
         "Creates a task from a milestone description in the task database"
     }
 
     fn execute(
         &self,
-        args: HashMap<String, String>,
+        args: &HashMap<String, String>,
     ) -> Result<String, agent_sdk::error::ToolError> {
         let milestone =
             args.get("milestone")
@@ -176,16 +179,13 @@ impl Tool for CreateTaskTool {
                 })?;
 
         let sql = "INSERT INTO tasks (content, priority, status) VALUES (?, 10, 'pending')";
-        let params = vec![milestone.to_string()];
+        let params = vec![milestone.clone()];
 
         brio::core::sql_state::execute(sql, &params)
-            .map(|_| format!("Created task: {}", milestone))
+            .map(|_| format!("Created task: {milestone}"))
             .map_err(|e| agent_sdk::error::ToolError::ExecutionFailed {
                 tool: "create_task".to_string(),
-                source: Box::new(std::io::Error::new(
-                    std::io::ErrorKind::Other,
-                    format!("DB Error: {}", e),
-                )),
+                source: Box::new(std::io::Error::other(format!("DB Error: {e}"))),
             })
     }
 }
