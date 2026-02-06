@@ -1,104 +1,97 @@
 //! Reviewer Agent - A specialized agent for code review and analysis.
 //!
-//! This agent uses the agent-sdk to provide code review capabilities.
-//! Note: This agent intentionally does NOT have write permissions for safety.
+//! This agent uses the agent-sdk StandardAgent trait for a streamlined implementation.
+//!
+//! # Safety Feature: Read-Only Operation
+//!
+//! This agent intentionally does NOT include the `write_file` tool. This is a deliberate
+//! safety feature to prevent the reviewer from accidentally modifying code during review.
+//! The reviewer can read files and provide feedback, but cannot make changes.
+
+#![allow(missing_docs)]
 
 use agent_sdk::{
-    AgentConfig, AgentEngineBuilder, InferenceResponse, Message, PromptBuilder, Role, TaskContext,
-    ToolRegistry,
+    AgentConfig, AgentError, PromptBuilder,
+    agent::{
+        StandardAgent, StandardAgentConfig,
+        parsers::{create_done_parser, create_list_parser, create_read_parser},
+        run_standard_agent,
+        tools::{DoneTool, ListDirectoryTool, ReadFileTool},
+    },
+    tools::ToolRegistry,
+    types::{InferenceResponse, Message, Role, TaskContext},
 };
-use anyhow::Result;
-use std::collections::HashMap;
-use wit_bindgen::generate;
 
 // Generate WIT bindings at crate root level
-generate!({
+wit_bindgen::generate!({
     world: "smart-agent",
     path: "../../../wit",
     skip: ["tool"],
     generate_all,
 });
 
-/// ReviewerAgent implements the agent-runner and event-handler interfaces.
+/// ReviewerAgent implements the StandardAgent trait for code review.
+///
+/// # Safety
+/// This agent does NOT include write capabilities - it is read-only by design.
+/// This prevents accidental code modifications during review.
+#[derive(Clone)]
 pub struct ReviewerAgent;
 
-impl exports::brio::core::agent_runner::Guest for ReviewerAgent {
-    fn run(context: exports::brio::core::agent_runner::TaskContext) -> Result<String, String> {
-        // Convert WIT context to SDK TaskContext
-        let task_context = convert_wit_context(&context);
+impl StandardAgent for ReviewerAgent {
+    const NAME: &'static str = "reviewer-agent";
 
-        // Load configuration
-        let config_raw =
-            AgentConfig::from_env().map_err(|e| format!("Configuration error: {}", e))?;
-        let config = config_raw
-            .validate()
-            .map_err(|e| format!("Validation error: {}", e))?;
+    fn build_prompt(
+        &self,
+        context: &TaskContext,
+        tools: &ToolRegistry,
+        _config: &StandardAgentConfig,
+    ) -> String {
+        // Use the SDK's built-in reviewer prompt builder
+        PromptBuilder::build_reviewer_agent(context, tools, &AgentConfig::default())
+    }
 
-        // Create tool registry with reviewer-specific tools (no write tool for safety)
-        let tools = create_tool_registry(&config);
+    fn create_tool_registry(&self, config: &AgentConfig) -> ToolRegistry {
+        let mut registry = ToolRegistry::new();
 
-        // Build the agent engine
-        let mut engine = AgentEngineBuilder::new()
-            .tools(tools)
-            .config(config.clone())
-            .build(&task_context)
-            .map_err(|e| format!("Failed to initialize agent: {}", e))?;
+        // Always register done tool
+        registry.register("done", Box::new(DoneTool), create_done_parser());
 
-        // Build system prompt
-        let system_prompt = PromptBuilder::build_reviewer_agent(
-            &task_context,
-            &create_tool_registry(&config),
-            &config,
+        // Register read tool
+        registry.register(
+            "read_file",
+            Box::new(ReadFileTool::new(config.max_file_size)),
+            create_read_parser(),
         );
 
-        // Create inference function
-        let inference_fn = |model: &str,
-                            history: &[Message]|
-         -> Result<InferenceResponse, agent_sdk::AgentError> {
-            Self::perform_inference(model, history)
-        };
-
-        // Run the agent
-        engine
-            .run_with_prompt(system_prompt, &inference_fn)
-            .map_err(|e| format!("Agent execution failed: {}", e))
-    }
-}
-
-impl exports::brio::core::event_handler::Guest for ReviewerAgent {
-    fn handle_event(topic: String, data: exports::brio::core::event_handler::Payload) {
-        let data_str = match &data {
-            exports::brio::core::event_handler::Payload::Json(s) => s.clone(),
-            exports::brio::core::event_handler::Payload::Binary(_) => "[Binary data]".to_string(),
-        };
-
-        brio::core::logging::log(
-            brio::core::logging::Level::Info,
-            "reviewer-agent",
-            &format!("Received event on topic '{}': {}", topic, data_str),
+        // Register list tool
+        registry.register(
+            "ls",
+            Box::new(ListDirectoryTool::new(config.max_depth)),
+            create_list_parser(),
         );
-    }
-}
 
-impl ReviewerAgent {
-    /// Performs inference using the AI interface.
+        // SAFETY: Reviewer does NOT have write tool - this is intentional
+        // to prevent accidental code modifications during review.
+
+        registry
+    }
+
     fn perform_inference(
+        &self,
         model: &str,
         history: &[Message],
-    ) -> Result<InferenceResponse, agent_sdk::AgentError> {
+    ) -> Result<InferenceResponse, AgentError> {
         let wit_messages: Vec<brio::ai::inference::Message> = history
             .iter()
             .map(|msg| brio::ai::inference::Message {
-                role: convert_role(&msg.role),
+                role: convert_role(msg.role),
                 content: msg.content.clone(),
             })
             .collect();
 
         let response = brio::ai::inference::chat(model, &wit_messages).map_err(|e| {
-            agent_sdk::AgentError::Inference(agent_sdk::InferenceError::ApiError(format!(
-                "{:?}",
-                e
-            )))
+            AgentError::Inference(agent_sdk::error::InferenceError::ApiError(format!("{e:?}")))
         })?;
 
         let tokens_used = response.usage.as_ref().map(|u| u.total_tokens);
@@ -112,197 +105,41 @@ impl ReviewerAgent {
     }
 }
 
-/// Converts SDK Role to WIT Role.
-fn convert_role(role: &Role) -> brio::ai::inference::Role {
+impl exports::brio::core::agent_runner::Guest for ReviewerAgent {
+    fn run(context: exports::brio::core::agent_runner::TaskContext) -> Result<String, String> {
+        // Convert WIT context to SDK TaskContext
+        let task_context = TaskContext::new(&context.task_id, &context.description)
+            .with_files(context.input_files);
+
+        // Run the standard agent
+        let config = StandardAgentConfig::default();
+
+        run_standard_agent(&ReviewerAgent, &task_context, &config)
+            .map_err(|e| format!("Agent execution failed: {e}"))
+    }
+}
+
+impl exports::brio::core::event_handler::Guest for ReviewerAgent {
+    fn handle_event(topic: String, data: exports::brio::core::event_handler::Payload) {
+        let data_str = match &data {
+            exports::brio::core::event_handler::Payload::Json(s) => s.clone(),
+            exports::brio::core::event_handler::Payload::Binary(_) => "[Binary data]".to_string(),
+        };
+
+        brio::core::logging::log(
+            brio::core::logging::Level::Info,
+            "reviewer-agent",
+            &format!("Received event on topic '{topic}': {data_str}"),
+        );
+    }
+}
+
+/// Converts SDK `Role` to WIT `Role`.
+fn convert_role(role: Role) -> brio::ai::inference::Role {
     match role {
         Role::System => brio::ai::inference::Role::System,
         Role::User => brio::ai::inference::Role::User,
         Role::Assistant | Role::Tool => brio::ai::inference::Role::Assistant,
-    }
-}
-
-/// Converts WIT TaskContext to SDK TaskContext.
-fn convert_wit_context(context: &exports::brio::core::agent_runner::TaskContext) -> TaskContext {
-    TaskContext::new(&context.task_id, &context.description).with_files(context.input_files.clone())
-}
-
-/// Creates a tool registry with reviewer-specific tools.
-/// NOTE: This agent intentionally does NOT have write tool for safety.
-fn create_tool_registry(config: &AgentConfig) -> ToolRegistry {
-    let mut registry = ToolRegistry::new();
-
-    // Always register done tool
-    registry.register("done", Box::new(DoneTool), create_done_parser());
-
-    // Register read tool
-    registry.register(
-        "read_file",
-        Box::new(ReadFileTool::new(config.max_file_size)),
-        create_read_parser(),
-    );
-
-    // Register list tool
-    registry.register(
-        "ls",
-        Box::new(ListDirectoryTool::new(config.max_depth)),
-        create_list_parser(),
-    );
-
-    // Reviewer does NOT have write tool for safety
-
-    registry
-}
-
-fn create_done_parser() -> agent_sdk::tools::ToolParser {
-    use std::collections::HashMap;
-    agent_sdk::tools::ToolParser::new(r#"<done>\s*(.*?)\s*</done>"#, |caps: &regex::Captures| {
-        let mut args = HashMap::new();
-        args.insert("summary".to_string(), caps[1].to_string());
-        args
-    })
-    .expect("Invalid regex pattern")
-}
-
-fn create_read_parser() -> agent_sdk::tools::ToolParser {
-    use std::collections::HashMap;
-    agent_sdk::tools::ToolParser::new(
-        r#"<read_file\s+path="([^"]+)"\s*/?>"#,
-        |caps: &regex::Captures| {
-            let mut args = HashMap::new();
-            args.insert("path".to_string(), caps[1].to_string());
-            args
-        },
-    )
-    .expect("Invalid regex pattern")
-}
-
-fn create_list_parser() -> agent_sdk::tools::ToolParser {
-    use std::collections::HashMap;
-    agent_sdk::tools::ToolParser::new(r#"<ls\s+path="([^"]+)"\s*/?>"#, |caps: &regex::Captures| {
-        let mut args = HashMap::new();
-        args.insert("path".to_string(), caps[1].to_string());
-        args
-    })
-    .expect("Invalid regex pattern")
-}
-
-// Tool implementations that wrap the SDK tools
-use agent_sdk::Tool;
-use agent_sdk::error::ToolError;
-
-struct ReadFileTool {
-    max_size: u64,
-}
-
-impl ReadFileTool {
-    fn new(max_size: u64) -> Self {
-        Self { max_size }
-    }
-}
-
-impl Tool for ReadFileTool {
-    fn name(&self) -> &str {
-        "read_file"
-    }
-
-    fn description(&self) -> &str {
-        r#"<read_file path="path/to/file" /> - Read content from a file"#
-    }
-
-    fn execute(&self, args: HashMap<String, String>) -> Result<String, ToolError> {
-        let path = args
-            .get("path")
-            .ok_or_else(|| ToolError::InvalidArguments {
-                tool: "read_file".to_string(),
-                reason: "Missing 'path' argument".to_string(),
-            })?;
-
-        // Check file size first
-        let metadata = std::fs::metadata(path).map_err(|e| ToolError::ExecutionFailed {
-            tool: "read_file".to_string(),
-            source: Box::new(e),
-        })?;
-
-        if metadata.len() > self.max_size {
-            return Err(ToolError::ResourceLimitExceeded {
-                tool: "read_file".to_string(),
-                resource: format!(
-                    "file size ({} bytes, max: {})",
-                    metadata.len(),
-                    self.max_size
-                ),
-            });
-        }
-
-        std::fs::read_to_string(path).map_err(|e| ToolError::ExecutionFailed {
-            tool: "read_file".to_string(),
-            source: Box::new(e),
-        })
-    }
-}
-
-struct ListDirectoryTool {
-    #[allow(dead_code)]
-    max_depth: usize,
-}
-
-impl ListDirectoryTool {
-    fn new(max_depth: usize) -> Self {
-        Self { max_depth }
-    }
-}
-
-impl Tool for ListDirectoryTool {
-    fn name(&self) -> &str {
-        "ls"
-    }
-
-    fn description(&self) -> &str {
-        r#"<ls path="path/to/directory" /> - List directory contents"#
-    }
-
-    fn execute(&self, args: HashMap<String, String>) -> Result<String, ToolError> {
-        let path = args
-            .get("path")
-            .ok_or_else(|| ToolError::InvalidArguments {
-                tool: "ls".to_string(),
-                reason: "Missing 'path' argument".to_string(),
-            })?;
-
-        let entries: Vec<String> = std::fs::read_dir(path)
-            .map_err(|e| ToolError::ExecutionFailed {
-                tool: "ls".to_string(),
-                source: Box::new(e),
-            })?
-            .filter_map(|entry| entry.ok())
-            .map(|entry| {
-                let name = entry.file_name().to_string_lossy().to_string();
-                let ty = if entry.file_type().map(|t| t.is_dir()).unwrap_or(false) {
-                    "📁"
-                } else {
-                    "📄"
-                };
-                format!("{} {}", ty, name)
-            })
-            .collect();
-
-        Ok(entries.join("\n"))
-    }
-}
-
-struct DoneTool;
-
-impl Tool for DoneTool {
-    fn name(&self) -> &str {
-        "done"
-    }
-
-    fn description(&self) -> &str {
-        r#"<done>summary of completion</done> - Mark task as complete"#
-    }
-
-    fn execute(&self, _args: HashMap<String, String>) -> Result<String, ToolError> {
-        Ok("Task marked as complete".to_string())
     }
 }
 
@@ -313,38 +150,51 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_role_conversion() {
-        assert!(matches!(
-            convert_role(&Role::System),
-            brio::ai::inference::Role::System
-        ));
-        assert!(matches!(
-            convert_role(&Role::User),
-            brio::ai::inference::Role::User
-        ));
-        assert!(matches!(
-            convert_role(&Role::Assistant),
-            brio::ai::inference::Role::Assistant
-        ));
-        assert!(matches!(
-            convert_role(&Role::Tool),
-            brio::ai::inference::Role::Assistant
-        ));
+    fn test_reviewer_agent_implements_standard_agent() {
+        let agent = ReviewerAgent;
+        let context = TaskContext::new("test", "Review this code");
+        let config = StandardAgentConfig::default();
+        let tools = ToolRegistry::new();
+
+        let prompt = agent.build_prompt(&context, &tools, &config);
+        assert!(prompt.contains("Code Reviewer"));
+        assert!(prompt.contains("Review this code"));
     }
 
     #[test]
-    fn test_context_conversion() {
-        let wit_ctx = exports::brio::core::agent_runner::TaskContext {
-            task_id: "test-123".to_string(),
-            description: "Test task".to_string(),
-            input_files: vec!["file1.rs".to_string(), "file2.rs".to_string()],
-        };
+    fn test_tool_registry_excludes_write_tool() {
+        let agent = ReviewerAgent;
+        let config = AgentConfig::default();
+        let registry = agent.create_tool_registry(&config);
+        let tools = registry.available_tools();
 
-        let ctx = convert_wit_context(&wit_ctx);
+        // Verify read tool is present
+        assert!(tools.contains(&"read_file"));
+        // Verify list tool is present
+        assert!(tools.contains(&"ls"));
+        // Verify done tool is present
+        assert!(tools.contains(&"done"));
+        // SAFETY: Verify write tool is NOT present (read-only agent)
+        assert!(!tools.contains(&"write_file"));
+    }
 
-        assert_eq!(ctx.task_id, "test-123");
-        assert_eq!(ctx.description, "Test task");
-        assert_eq!(ctx.file_count(), 2);
-        assert!(ctx.has_input_files());
+    #[test]
+    fn test_role_conversion() {
+        assert!(matches!(
+            convert_role(Role::System),
+            brio::ai::inference::Role::System
+        ));
+        assert!(matches!(
+            convert_role(Role::User),
+            brio::ai::inference::Role::User
+        ));
+        assert!(matches!(
+            convert_role(Role::Assistant),
+            brio::ai::inference::Role::Assistant
+        ));
+        assert!(matches!(
+            convert_role(Role::Tool),
+            brio::ai::inference::Role::Assistant
+        ));
     }
 }
