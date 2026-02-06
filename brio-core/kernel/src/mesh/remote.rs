@@ -23,7 +23,8 @@ impl Default for RemoteRouter {
 }
 
 impl RemoteRouter {
-    #[must_use] 
+    /// Creates a new remote router with an empty registry.
+    #[must_use]
     pub fn new() -> Self {
         Self {
             registry: Arc::new(RwLock::new(NodeRegistry::new())),
@@ -31,11 +32,21 @@ impl RemoteRouter {
         }
     }
 
+    /// Registers a node with the router.
+    ///
+    /// # Arguments
+    ///
+    /// * `info` - Information about the node to register.
     pub fn register_node(&self, info: NodeInfo) {
         let mut registry = self.registry.write();
         registry.register(info);
     }
 
+    /// Returns the address of a node if known.
+    ///
+    /// # Arguments
+    ///
+    /// * `node_id` - The ID of the node to look up.
     #[must_use]
     pub fn node_address(&self, node_id: &NodeId) -> Option<NodeAddress> {
         let registry = self.registry.read();
@@ -65,8 +76,12 @@ impl RemoteRouter {
         let response = client.call(request).await?.into_inner();
 
         match response.payload {
-            Some(crate::mesh::grpc::mesh_response::Payload::Json(s)) => Ok(Payload::Json(Box::new(s))),
-            Some(crate::mesh::grpc::mesh_response::Payload::Binary(b)) => Ok(Payload::Binary(Box::new(b))),
+            Some(crate::mesh::grpc::mesh_response::Payload::Json(s)) => {
+                Ok(Payload::Json(Box::new(s)))
+            }
+            Some(crate::mesh::grpc::mesh_response::Payload::Binary(b)) => {
+                Ok(Payload::Binary(Box::new(b)))
+            }
             Some(crate::mesh::grpc::mesh_response::Payload::Error(e)) => {
                 Err(anyhow!("Remote error: {e}"))
             }
@@ -103,6 +118,7 @@ impl RemoteRouter {
     }
 }
 
+/// Registry for tracking known nodes in the mesh.
 pub struct NodeRegistry {
     nodes: HashMap<NodeId, NodeInfo>,
 }
@@ -114,23 +130,43 @@ impl Default for NodeRegistry {
 }
 
 impl NodeRegistry {
-    #[must_use] 
+    /// Creates a new empty node registry.
+    #[must_use]
     pub fn new() -> Self {
         Self {
             nodes: HashMap::new(),
         }
     }
 
+    /// Registers a node in the registry.
+    ///
+    /// # Arguments
+    ///
+    /// * `info` - Information about the node.
     pub fn register(&mut self, info: NodeInfo) {
         self.nodes.insert(info.id.clone(), info);
     }
 
-    #[must_use] 
+    /// Gets information about a node.
+    ///
+    /// # Arguments
+    ///
+    /// * `id` - The ID of the node to look up.
+    ///
+    /// # Returns
+    ///
+    /// Node information if found.
+    #[must_use]
     pub fn get(&self, id: &NodeId) -> Option<&NodeInfo> {
         self.nodes.get(id)
     }
 
-    #[must_use] 
+    /// Lists all registered nodes.
+    ///
+    /// # Returns
+    ///
+    /// A vector of all node information.
+    #[must_use]
     pub fn list(&self) -> Vec<NodeInfo> {
         self.nodes.values().cloned().collect()
     }

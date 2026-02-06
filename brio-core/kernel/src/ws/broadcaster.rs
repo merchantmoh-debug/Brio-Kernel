@@ -9,6 +9,7 @@ use crate::ws::types::{BroadcastMessage, WsError};
 
 const BROADCAST_CAPACITY: usize = 256;
 
+/// Broadcasts messages to all connected WebSocket clients.
 #[derive(Clone)]
 pub struct Broadcaster {
     sender: broadcast::Sender<BroadcastMessage>,
@@ -16,7 +17,8 @@ pub struct Broadcaster {
 }
 
 impl Broadcaster {
-    #[must_use] 
+    /// Creates a new broadcaster with an empty channel.
+    #[must_use]
     pub fn new() -> Self {
         let (sender, _) = broadcast::channel(BROADCAST_CAPACITY);
         Self {
@@ -25,6 +27,11 @@ impl Broadcaster {
         }
     }
 
+    /// Subscribes a new client to receive broadcast messages.
+    ///
+    /// # Returns
+    ///
+    /// A receiver for the client.
     pub fn subscribe(&self) -> BroadcastReceiver {
         self.client_count.fetch_add(1, Ordering::SeqCst);
         debug!(client_count = self.client_count(), "Client subscribed");
@@ -49,12 +56,14 @@ impl Broadcaster {
         }
     }
 
-    #[must_use] 
+    /// Returns the number of connected clients.
+    #[must_use]
     pub fn client_count(&self) -> usize {
         self.client_count.load(Ordering::SeqCst)
     }
 
-    #[must_use] 
+    /// Returns a reference to the broadcast sender.
+    #[must_use]
     pub fn sender(&self) -> &broadcast::Sender<BroadcastMessage> {
         &self.sender
     }
@@ -66,12 +75,17 @@ impl Default for Broadcaster {
     }
 }
 
+/// Receiver for broadcast messages from a broadcaster.
 pub struct BroadcastReceiver {
     inner: broadcast::Receiver<BroadcastMessage>,
     client_count: Arc<AtomicUsize>,
 }
 
 impl BroadcastReceiver {
+    /// Receive a broadcast message.
+    ///
+    /// # Errors
+    /// Returns `WsError::ChannelClosed` if the channel is closed or the receiver lagged.
     pub async fn recv(&mut self) -> Result<BroadcastMessage, WsError> {
         self.inner.recv().await.map_err(|e| match e {
             broadcast::error::RecvError::Closed => WsError::ChannelClosed,

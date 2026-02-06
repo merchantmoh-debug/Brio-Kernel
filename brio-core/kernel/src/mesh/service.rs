@@ -18,7 +18,13 @@ pub struct MeshService {
 }
 
 impl MeshService {
-    #[must_use] 
+    /// Creates a new mesh service.
+    ///
+    /// # Arguments
+    ///
+    /// * `host` - The host state for routing calls.
+    /// * `node_id` - The ID of this node.
+    #[must_use]
     pub fn new(host: Arc<BrioHostState>, node_id: NodeId) -> Self {
         Self { host, node_id }
     }

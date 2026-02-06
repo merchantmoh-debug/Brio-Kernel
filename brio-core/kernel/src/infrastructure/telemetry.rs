@@ -1,13 +1,13 @@
 use anyhow::{Context, Result};
 use opentelemetry::trace::TracerProvider;
 use opentelemetry_otlp::WithExportConfig;
-use opentelemetry_sdk::{propagation::TraceContextPropagator, trace::Sampler, Resource};
+use opentelemetry_sdk::{Resource, propagation::TraceContextPropagator, trace::Sampler};
 use opentelemetry_semantic_conventions::resource;
 use tracing_subscriber::{
+    EnvFilter, Layer, Registry,
     fmt::{self, format::FmtSpan},
     layer::SubscriberExt,
     util::SubscriberInitExt,
-    EnvFilter, Layer, Registry,
 };
 
 /// Builder for setting up telemetry (Logging, Tracing, Metrics).
@@ -22,6 +22,12 @@ pub struct TelemetryBuilder {
 }
 
 impl TelemetryBuilder {
+    /// Creates a new telemetry builder.
+    ///
+    /// # Arguments
+    ///
+    /// * `service_name` - The name of the service.
+    /// * `service_version` - The version of the service.
     pub fn new(service_name: impl Into<String>, service_version: impl Into<String>) -> Self {
         Self {
             service_name: service_name.into(),
@@ -34,6 +40,11 @@ impl TelemetryBuilder {
         }
     }
 
+    /// Enables distributed tracing with OTLP export.
+    ///
+    /// # Arguments
+    ///
+    /// * `endpoint` - The OTLP endpoint to send traces to.
     #[must_use]
     pub fn with_tracing(mut self, endpoint: impl Into<String>) -> Self {
         self.enable_tracing = true;
@@ -41,18 +52,29 @@ impl TelemetryBuilder {
         self
     }
 
+    /// Enables metrics collection.
     #[must_use]
     pub fn with_metrics(mut self) -> Self {
         self.enable_metrics = true;
         self
     }
 
+    /// Sets the log level filter.
+    ///
+    /// # Arguments
+    ///
+    /// * `level` - The log level (e.g., "info", "debug").
     #[must_use]
     pub fn with_log_level(mut self, level: impl Into<String>) -> Self {
         self.log_level = level.into();
         self
     }
 
+    /// Sets the sampling ratio for traces.
+    ///
+    /// # Arguments
+    ///
+    /// * `ratio` - A value between 0.0 and 1.0 representing the fraction of traces to sample.
     #[must_use]
     pub fn with_sampling_ratio(mut self, ratio: f64) -> Self {
         self.sampling_ratio = ratio;

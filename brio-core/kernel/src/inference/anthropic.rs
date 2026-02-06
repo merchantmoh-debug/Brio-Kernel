@@ -1,3 +1,7 @@
+//! Anthropic API provider implementation.
+//!
+//! This module provides integration with Anthropic's Claude API for chat completions.
+
 use crate::inference::provider::LLMProvider;
 use crate::inference::types::{ChatRequest, ChatResponse, InferenceError, Message, Role, Usage};
 use async_trait::async_trait;
@@ -58,7 +62,9 @@ struct AnthropicChatResponse {
 
 /// Configuration for the Anthropic provider
 pub struct AnthropicConfig {
+    /// The API key for authenticating with Anthropic
     pub api_key: SecretString,
+    /// The base URL for the Anthropic API
     pub base_url: Url,
     /// Maximum number of retries for rate limits and transient errors
     pub max_retries: Option<u32>,
@@ -72,7 +78,7 @@ pub struct AnthropicConfig {
 
 impl AnthropicConfig {
     /// Creates a new config with default settings
-    #[must_use] 
+    #[must_use]
     pub fn new(api_key: SecretString, base_url: Url) -> Self {
         Self {
             api_key,
@@ -98,28 +104,28 @@ impl AnthropicConfig {
     }
 
     /// Sets the maximum number of retries
-    #[must_use] 
+    #[must_use]
     pub fn with_max_retries(mut self, max_retries: u32) -> Self {
         self.max_retries = Some(max_retries);
         self
     }
 
     /// Sets the base delay for exponential backoff
-    #[must_use] 
+    #[must_use]
     pub fn with_base_delay_ms(mut self, delay_ms: u64) -> Self {
         self.base_delay_ms = Some(delay_ms);
         self
     }
 
     /// Sets the API version
-    #[must_use] 
+    #[must_use]
     pub fn with_api_version(mut self, version: String) -> Self {
         self.api_version = Some(version);
         self
     }
 
     /// Sets the maximum tokens to generate
-    #[must_use] 
+    #[must_use]
     pub fn with_max_tokens(mut self, max_tokens: u32) -> Self {
         self.max_tokens = Some(max_tokens);
         self
@@ -130,6 +136,7 @@ impl AnthropicConfig {
 // Provider Implementation
 // =============================================================================
 
+/// Provider implementation for Anthropic's Claude API.
 pub struct AnthropicProvider {
     client: Client,
     config: AnthropicConfig,
@@ -140,7 +147,8 @@ pub struct AnthropicProvider {
 }
 
 impl AnthropicProvider {
-    #[must_use] 
+    /// Creates a new Anthropic provider with the given configuration.
+    #[must_use]
     pub fn new(config: AnthropicConfig) -> Self {
         let max_retries = config.max_retries.unwrap_or(DEFAULT_MAX_RETRIES);
         let base_delay_ms = config.base_delay_ms.unwrap_or(DEFAULT_BASE_DELAY_MS);
@@ -161,12 +169,16 @@ impl AnthropicProvider {
     }
 
     /// Calculates the delay for a given retry attempt with jitter
-    #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss, clippy::cast_precision_loss)]
     fn calculate_backoff_delay(&self, attempt: u32) -> Duration {
         let delay_ms = self.base_delay_ms.saturating_mul(1u64 << attempt);
         let capped_delay = delay_ms.min(MAX_DELAY_MS);
-        let jitter = (capped_delay as f64 * 0.25 * rand_jitter()) as u64;
-        Duration::from_millis(capped_delay + jitter)
+        // Add jitter (0-25% of the delay) using integer arithmetic
+        // rand_jitter_factor returns value in [0, 1000]
+        let jitter_factor = rand_jitter_factor();
+        let jitter = capped_delay
+            .saturating_mul(jitter_factor)
+            .saturating_div(4000);
+        Duration::from_millis(capped_delay.saturating_add(jitter))
     }
 
     /// Converts our Message type to Anthropic format, extracting system message
@@ -347,14 +359,14 @@ impl LLMProvider for AnthropicProvider {
     }
 }
 
-/// Simple pseudo-random jitter between 0.0 and 1.0
-fn rand_jitter() -> f64 {
+/// Simple pseudo-random jitter factor between 0 and 1000 (representing 0% to 100%)
+fn rand_jitter_factor() -> u64 {
     use std::time::SystemTime;
     let nanos = SystemTime::now()
         .duration_since(SystemTime::UNIX_EPOCH)
         .map(|d| d.subsec_nanos())
         .unwrap_or(0);
-    f64::from(nanos % 1000) / 1000.0
+    u64::from(nanos % 1000)
 }
 
 // =============================================================================

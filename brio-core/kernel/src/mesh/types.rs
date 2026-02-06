@@ -6,7 +6,8 @@ use std::fmt;
 pub struct NodeId(pub String);
 
 impl NodeId {
-    #[must_use] 
+    /// Creates a new unique node ID.
+    #[must_use]
     pub fn new() -> Self {
         Self(uuid::Uuid::new_v4().to_string())
     }
@@ -43,16 +44,24 @@ impl fmt::Display for NodeAddress {
 /// Metadata about a registered node
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct NodeInfo {
+    /// Unique identifier for the node.
     pub id: NodeId,
+    /// Network address of the node.
     pub address: NodeAddress,
+    /// Capabilities advertised by the node.
     pub capabilities: Vec<String>,
+    /// Unix timestamp of last heartbeat.
     pub last_seen: u64,
 }
 
+/// Configuration for mesh networking.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct MeshConfig {
+    /// Unique identifier for this node.
     pub node_id: String,
+    /// Address to listen on for incoming connections.
     pub listen_address: String,
+    /// List of bootstrap nodes to connect to.
     pub bootstrap_nodes: Vec<String>,
 }
 

@@ -1,3 +1,10 @@
+//! WebAssembly engine components for the Brio kernel.
+//!
+//! This module provides the core WASM runtime functionality including
+//! the component linker, runner, and runtime management.
+
+#![allow(missing_docs)]
+
 pub mod linker;
 pub mod runner;
 pub mod runtime;

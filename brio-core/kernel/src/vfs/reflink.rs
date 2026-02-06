@@ -1,3 +1,5 @@
+//! Directory copying with reflink support for efficient file cloning.
+
 use reflink;
 use std::fs;
 use std::path::Path;

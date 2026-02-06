@@ -17,7 +17,9 @@ pub enum SessionError {
     /// The base path provided for the session is invalid or does not exist.
     #[error("Invalid base path '{path}': {source}")]
     InvalidBasePath {
+        /// Path that was invalid.
         path: String,
+        /// Source error.
         #[source]
         source: std::io::Error,
     },
@@ -34,10 +36,15 @@ pub enum SessionError {
     #[error("Diff operation failed: {0}")]
     DiffFailed(String),
     /// A conflict was detected between session and base directory.
-    #[error("Conflict: base directory '{path}' has been modified since session started. Original hash: {original_hash}, Current hash: {current_hash}")]
+    #[error(
+        "Conflict: base directory '{path}' has been modified since session started. Original hash: {original_hash}, Current hash: {current_hash}"
+    )]
     Conflict {
+        /// Path where conflict was detected.
         path: PathBuf,
+        /// Original hash of the base directory.
         original_hash: String,
+        /// Current hash of the base directory.
         current_hash: String,
     },
     /// The session directory was lost or deleted.
@@ -46,7 +53,9 @@ pub enum SessionError {
     /// Failed to cleanup session directory.
     #[error("Failed to cleanup session directory {path}: {source}")]
     CleanupFailed {
+        /// Path of the session directory.
         path: PathBuf,
+        /// Source error.
         #[source]
         source: std::io::Error,
     },
@@ -62,6 +71,7 @@ struct SessionInfo {
     base_snapshot_hash: String,
 }
 
+/// Manages isolated file system sessions for agents.
 pub struct SessionManager {
     sessions: HashMap<String, SessionInfo>,
     root_temp_dir: PathBuf,
@@ -143,7 +153,7 @@ impl SessionManager {
         );
 
         let base_snapshot_hash = hashing::compute_directory_hash(&canonical_base)
-            .map_err(|e| SessionError::DiffFailed(e.to_string()))?;
+            .map_err(|e| SessionError::DiffFailed(e.clone()))?;
 
         reflink::copy_dir_reflink(&canonical_base, &session_path)
             .map_err(|e| SessionError::CopyFailed(e.to_string()))?;
@@ -183,14 +193,12 @@ impl SessionManager {
 
         if !session_path.exists() {
             self.sessions.remove(session_id);
-            return Err(SessionError::SessionDirectoryLost(
-                session_path.to_path_buf(),
-            ));
+            return Err(SessionError::SessionDirectoryLost(session_path.clone()));
         }
 
         // Conflict detection: re-hash base and compare
         let current_hash = hashing::compute_directory_hash(&base_path)
-            .map_err(|e| SessionError::DiffFailed(e.to_string()))?;
+            .map_err(|e| SessionError::DiffFailed(e.clone()))?;
         if current_hash != original_hash {
             warn!(
                 "Conflict detected for session {}: base directory has been modified",

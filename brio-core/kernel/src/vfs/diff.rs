@@ -8,10 +8,14 @@ use std::time::SystemTime;
 use tracing::{debug, info, warn};
 use walkdir::WalkDir;
 
+/// Types of changes detected in a file diff.
 #[derive(Debug)]
 pub enum FileChange {
+    /// File was modified.
     Modified(PathBuf),
+    /// File was added.
     Added(PathBuf),
+    /// File was deleted.
     Deleted(PathBuf),
 }
 

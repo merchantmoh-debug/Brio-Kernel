@@ -12,6 +12,7 @@ use crate::ws::types::{BroadcastMessage, ClientId, WsError};
 
 const PING_INTERVAL: Duration = Duration::from_secs(30);
 
+/// A WebSocket connection with a unique client ID.
 pub struct Connection {
     client_id: ClientId,
     stream: WebSocket,
@@ -19,6 +20,12 @@ pub struct Connection {
 }
 
 impl Connection {
+    /// Creates a new WebSocket connection.
+    ///
+    /// # Arguments
+    ///
+    /// * `stream` - The WebSocket stream.
+    /// * `receiver` - The broadcast receiver for messages.
     pub fn new(stream: WebSocket, receiver: BroadcastReceiver) -> Self {
         let client_id = ClientId::generate();
         info!(client_id = %client_id, "WebSocket connection established");
@@ -29,6 +36,7 @@ impl Connection {
         }
     }
 
+    /// Returns the client ID for this connection.
     pub fn client_id(&self) -> ClientId {
         self.client_id
     }

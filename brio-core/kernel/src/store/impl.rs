@@ -7,12 +7,16 @@ use tracing::instrument;
 
 use crate::store::policy::{PolicyError, QueryPolicy};
 
+/// Errors that can occur when using the store.
 #[derive(Debug, thiserror::Error)]
 pub enum StoreError {
+    /// Database-related error.
     #[error("Database Error: {0}")]
     DbError(#[from] sqlx::Error),
+    /// Policy violation error.
     #[error("Policy Violation: {0}")]
     PolicyError(#[from] PolicyError),
+    /// Internal error.
     #[error("Internal Error: {0}")]
     Internal(#[from] anyhow::Error),
 }
@@ -20,17 +24,26 @@ pub enum StoreError {
 /// A generic Row representation matching the WIT definition.
 #[derive(Debug, Clone)]
 pub struct GenericRow {
+    /// Column names.
     pub columns: Vec<String>,
+    /// Row values.
     pub values: Vec<String>,
 }
 
+/// SQL store with policy enforcement.
 pub struct SqlStore {
     pool: SqlitePool,
     policy: Box<dyn QueryPolicy>,
 }
 
 impl SqlStore {
-    #[must_use] 
+    /// Creates a new SQL store.
+    ///
+    /// # Arguments
+    ///
+    /// * `pool` - The `SQLite` connection pool.
+    /// * `policy` - The query policy to enforce.
+    #[must_use]
     pub fn new(pool: SqlitePool, policy: Box<dyn QueryPolicy>) -> Self {
         Self { pool, policy }
     }

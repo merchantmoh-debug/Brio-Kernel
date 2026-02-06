@@ -6,19 +6,30 @@ use tracing::{info, info_span};
 #[derive(Debug, Serialize)]
 #[serde(tag = "event_type", rename_all = "snake_case")]
 pub enum AuditEvent {
+    /// System startup event.
     SystemStartup {
+        /// Component that started.
         component: String,
     },
+    /// System shutdown event.
     SystemShutdown {
+        /// Reason for shutdown.
         reason: String,
     },
+    /// Access denied event.
     AccessDenied {
+        /// User that was denied access.
         user: String,
+        /// Resource that was accessed.
         resource: String,
     },
+    /// Configuration changed event.
     ConfigChanged {
+        /// Configuration key that changed.
         key: String,
+        /// Old value.
         old_val: String,
+        /// New value.
         new_val: String,
     },
 }

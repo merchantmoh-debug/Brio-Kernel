@@ -6,12 +6,16 @@ use sqlparser::{
 use std::ops::ControlFlow;
 use thiserror::Error;
 
+/// Errors that can occur during policy enforcement.
 #[derive(Debug, Error)]
 pub enum PolicyError {
+    /// SQL parsing failed.
     #[error("SQL Parse Error: {0}")]
     ParseError(String),
+    /// Query accessed a table outside its scope.
     #[error("Access Denied: Table '{0}' does not match scope '{1}'")]
     ScopeViolation(String, String),
+    /// General policy violation.
     #[error("Policy Violation: {0}")]
     Violation(String),
 }

@@ -1,3 +1,8 @@
+//! Provider registry for managing multiple LLM backends.
+//!
+//! This module provides the [`ProviderRegistry`] which allows concurrent
+//! registration and use of multiple LLM providers.
+
 use crate::inference::provider::LLMProvider;
 use crate::inference::types::{ChatRequest, ChatResponse, InferenceError};
 use parking_lot::RwLock;
@@ -16,7 +21,7 @@ pub struct ProviderRegistry {
 
 impl ProviderRegistry {
     /// Creates a new empty registry
-    #[must_use] 
+    #[must_use]
     pub fn new() -> Self {
         Self {
             providers: RwLock::new(HashMap::new()),
@@ -61,7 +66,9 @@ impl ProviderRegistry {
             default.clone()
         };
 
-        if let Some(name) = default_name { self.get(&name) } else {
+        if let Some(name) = default_name {
+            self.get(&name)
+        } else {
             // If no default set, return first registered provider
             let providers = self.providers.read();
             providers.values().next().cloned()

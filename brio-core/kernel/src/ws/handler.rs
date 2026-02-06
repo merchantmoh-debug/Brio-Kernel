@@ -9,6 +9,12 @@ use tracing::info;
 use crate::ws::broadcaster::Broadcaster;
 use crate::ws::connection::Connection;
 
+/// Handles WebSocket upgrade requests.
+///
+/// # Arguments
+///
+/// * `ws` - The WebSocket upgrade request.
+/// * `broadcaster` - The broadcaster state.
 pub async fn handle_ws_upgrade(
     ws: WebSocketUpgrade,
     State(broadcaster): State<Broadcaster>,
@@ -24,6 +30,15 @@ pub async fn handle_ws_upgrade(
     })
 }
 
+/// Creates a router with WebSocket handling.
+///
+/// # Arguments
+///
+/// * `broadcaster` - The broadcaster to use for WebSocket connections.
+///
+/// # Returns
+///
+/// An Axum router with WebSocket support.
 pub fn ws_router(broadcaster: Broadcaster) -> axum::Router {
     axum::Router::new()
         .route("/ws", axum::routing::get(handle_ws_upgrade))

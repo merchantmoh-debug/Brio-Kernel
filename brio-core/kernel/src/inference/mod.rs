@@ -1,3 +1,8 @@
+//! Inference provider abstractions for the Brio kernel.
+//!
+//! This module provides a unified interface for interacting with
+//! various LLM providers (Anthropic, OpenAI, etc.).
+
 pub mod anthropic;
 pub mod openai;
 pub mod provider;

@@ -1,3 +1,8 @@
+//! Host state management for the Brio kernel.
+//!
+//! This module provides the core `BrioHostState` struct which serves as the
+//! central coordination point for all kernel operations.
+
 use anyhow::{Context, Result, anyhow};
 use parking_lot::{Mutex, RwLock};
 use sqlx::{SqlitePool, sqlite::SqlitePoolOptions};
@@ -15,8 +20,8 @@ use crate::mesh::types::{NodeId, NodeInfo};
 use crate::mesh::{MeshMessage, Payload};
 use crate::registry::PluginRegistry;
 use crate::store::{PrefixPolicy, SqlStore};
-use crate::vfs::manager::SessionManager;
 use crate::vfs::SessionError;
+use crate::vfs::manager::SessionManager;
 use crate::ws::{BroadcastMessage, Broadcaster, WsPatch};
 
 /// Errors related to permission checks.
@@ -44,6 +49,11 @@ struct BrioHostStateInner {
     current_plugin_id: Option<String>,
 }
 
+/// The main host state for the Brio kernel.
+///
+/// This struct serves as the central coordination point for all kernel operations,
+/// managing sessions, inference providers, mesh networking, and plugin execution.
+/// It uses an internal `Arc` for cheap cloning and thread-safe sharing.
 #[derive(Clone)]
 pub struct BrioHostState {
     inner: Arc<BrioHostStateInner>,
@@ -233,7 +243,7 @@ impl BrioHostState {
         }
 
         // 3. Try on-demand plugin execution
-        // We expect this lint because collapsing the nested if would require duplicating the 
+        // We expect this lint because collapsing the nested if would require duplicating the
         // `registry` variable binding or restructuring the logic significantly, reducing readability.
         #[expect(clippy::collapsible_if)]
         if let Some(registry) = &self.inner.plugin_registry {
@@ -282,7 +292,7 @@ impl BrioHostState {
     /// Rolls back a session, discarding all changes.
     ///
     /// # Arguments
-    /// * `session_id` - The session identifier returned by begin_session
+    /// * `session_id` - The session identifier returned by `begin_session`
     ///
     /// # Errors
     /// Returns an error if the session doesn't exist or cleanup fails.
@@ -321,7 +331,7 @@ impl BrioHostState {
     }
 
     /// Creates a new view of the host state with restricted permissions and plugin context.
-    #[must_use] 
+    #[must_use]
     pub fn with_plugin_context(&self, plugin_id: String, permissions: Vec<String>) -> Self {
         let inner = BrioHostStateInner {
             mesh_router: Arc::clone(&self.inner.mesh_router),
@@ -350,7 +360,8 @@ impl BrioHostState {
         } else {
             Err(PermissionError::PermissionDenied {
                 permission: permission.to_string(),
-            }.to_string())
+            }
+            .to_string())
         }
     }
 

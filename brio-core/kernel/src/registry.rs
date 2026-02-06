@@ -11,8 +11,11 @@ use wasmtime::{Engine, Store};
 /// Metadata about a loaded plugin.
 #[derive(Debug, Clone)]
 pub struct PluginMetadata {
+    /// Unique identifier for the plugin.
     pub id: String,
+    /// Path to the plugin file.
     pub path: PathBuf,
+    /// Permissions granted to the plugin.
     pub permissions: Vec<String>,
 }
 
@@ -24,7 +27,7 @@ pub struct PluginRegistry {
 
 impl PluginRegistry {
     /// Creates a new, empty registry.
-    #[must_use] 
+    #[must_use]
     pub fn new(engine: Engine) -> Self {
         Self {
             plugins: HashMap::new(),
@@ -32,7 +35,8 @@ impl PluginRegistry {
         }
     }
 
-    #[must_use] 
+    /// Returns a reference to the underlying WASM engine.
+    #[must_use]
     pub fn engine(&self) -> &Engine {
         &self.engine
     }
@@ -110,12 +114,26 @@ impl PluginRegistry {
         Ok(store)
     }
 
-    #[must_use] 
+    /// Lists all registered plugins.
+    ///
+    /// # Returns
+    ///
+    /// A vector of plugin metadata.
+    #[must_use]
     pub fn list_plugins(&self) -> Vec<PluginMetadata> {
         self.plugins.values().cloned().collect()
     }
 
-    #[must_use] 
+    /// Gets metadata for a specific plugin.
+    ///
+    /// # Arguments
+    ///
+    /// * `id` - The ID of the plugin to look up.
+    ///
+    /// # Returns
+    ///
+    /// Plugin metadata if found.
+    #[must_use]
     pub fn get(&self, id: &str) -> Option<PluginMetadata> {
         self.plugins.get(id).cloned()
     }
