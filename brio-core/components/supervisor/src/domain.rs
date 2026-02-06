@@ -7,16 +7,15 @@
 use core::fmt;
 use std::collections::HashSet;
 
-// =============================================================================
-// Value Objects (Type-Safe Wrappers)
-// =============================================================================
-
 /// Unique identifier for a task in the system.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub struct TaskId(u64);
+pub struct TaskId(
+    /// The underlying numeric identifier (auto-incrementing).
+    u64,
+);
 
 impl TaskId {
-    /// Creates a new TaskId from a raw value.
+    /// Creates a new `TaskId` from a raw value.
     #[must_use]
     pub const fn new(id: u64) -> Self {
         Self(id)
@@ -40,7 +39,7 @@ impl fmt::Display for TaskId {
 pub struct AgentId(String);
 
 impl AgentId {
-    /// Creates a new AgentId from a string.
+    /// Creates a new `AgentId` from a string.
     ///
     /// # Panics
     /// Panics if the id is empty (Design by Contract).
@@ -95,10 +94,6 @@ impl Default for Priority {
     }
 }
 
-// =============================================================================
-// Capability System
-// =============================================================================
-
 /// Capabilities that an agent can possess or a task can require.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum Capability {
@@ -120,12 +115,7 @@ impl fmt::Display for Capability {
     }
 }
 
-// =============================================================================
-// Task Status (State Machine)
-// =============================================================================
-
-/// Task lifecycle status following strict state transitions:
-/// `Pending` → `Assigned` → `Completed` | `Failed`
+/// Task lifecycle status.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum TaskStatus {
     /// Task is waiting to be picked up.
@@ -181,6 +171,7 @@ impl TaskStatus {
     }
 
     /// Returns a list of all statuses considered "active" (managed by supervisor).
+    #[must_use]
     pub const fn active_states() -> &'static [Self] {
         &[
             Self::Pending,
@@ -203,10 +194,6 @@ impl fmt::Display for ParseStatusError {
 }
 
 impl std::error::Error for ParseStatusError {}
-
-// =============================================================================
-// Task Entity
-// =============================================================================
 
 /// Immutable task entity representing a unit of work.
 #[derive(Debug, Clone)]
@@ -297,10 +284,6 @@ impl Task {
         TaskStatus::active_states().contains(&self.status)
     }
 }
-
-// =============================================================================
-// Unit Tests
-// =============================================================================
 
 #[cfg(test)]
 mod tests {
