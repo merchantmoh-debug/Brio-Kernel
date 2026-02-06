@@ -2,7 +2,7 @@
 #![allow(missing_docs)]
 
 use agent_sdk::agent::{
-    handle_standard_event, run_standard_agent, StandardAgent, StandardAgentConfig,
+    StandardAgent, StandardAgentConfig, handle_standard_event, run_standard_agent,
 };
 use agent_sdk::error::AgentError;
 use agent_sdk::tools::ToolRegistry;
@@ -19,7 +19,7 @@ generate!({
     generate_all,
 });
 
-/// `CouncilAgent` implements strategic planning using the StandardAgent trait.
+/// `CouncilAgent` implements strategic planning using the `StandardAgent` trait.
 #[derive(Clone)]
 pub struct CouncilAgent;
 
@@ -114,8 +114,8 @@ fn create_done_parser() -> agent_sdk::tools::ToolParser {
     .expect("Invalid regex pattern")
 }
 
-use agent_sdk::error::ToolError;
 use agent_sdk::Tool;
+use agent_sdk::error::ToolError;
 
 struct DoneTool;
 

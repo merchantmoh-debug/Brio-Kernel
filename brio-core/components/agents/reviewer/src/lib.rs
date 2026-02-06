@@ -1,6 +1,6 @@
 //! Reviewer Agent - A specialized agent for code review and analysis.
 //!
-//! This agent uses the agent-sdk StandardAgent trait for a streamlined implementation.
+//! This agent uses the agent-sdk `StandardAgent` trait for a streamlined implementation.
 //!
 //! # Safety Feature: Read-Only Operation
 //!
@@ -11,15 +11,15 @@
 #![allow(missing_docs)]
 
 use agent_sdk::{
+    AgentConfig, AgentError, PromptBuilder,
     agent::{
+        StandardAgent, StandardAgentConfig,
         parsers::{create_done_parser, create_list_parser, create_read_parser},
         run_standard_agent,
         tools::{DoneTool, ListDirectoryTool, ReadFileTool},
-        StandardAgent, StandardAgentConfig,
     },
     tools::ToolRegistry,
     types::{InferenceResponse, Message, Role, TaskContext},
-    AgentConfig, AgentError, PromptBuilder,
 };
 
 // Generate WIT bindings at crate root level
@@ -30,7 +30,7 @@ wit_bindgen::generate!({
     generate_all,
 });
 
-/// ReviewerAgent implements the StandardAgent trait for code review.
+/// `ReviewerAgent` implements the `StandardAgent` trait for code review.
 ///
 /// # Safety
 /// This agent does NOT include write capabilities - it is read-only by design.

@@ -114,8 +114,10 @@ impl exports::brio::core::tool_grep::Guest for GrepTool {
         for (line_num, line) in reader.lines().enumerate() {
             let line = line.map_err(|e| GrepError::from(e).to_string())?;
             if line.contains(&pattern) {
+                let line_number = u32::try_from(line_num + 1)
+                    .map_err(|_| "Line number exceeds maximum supported value".to_string())?;
                 matches.push(exports::brio::core::tool_grep::GrepMatch {
-                    line_number: (line_num + 1) as u32,
+                    line_number,
                     content: line,
                 });
             }

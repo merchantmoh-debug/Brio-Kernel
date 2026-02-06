@@ -4,7 +4,7 @@
 //! validation to prevent command injection attacks.
 
 use crate::error::ToolError;
-use crate::tools::{validate_shell_command, Tool};
+use crate::tools::{Tool, validate_shell_command};
 use std::collections::HashMap;
 
 /// Tool for executing shell commands.

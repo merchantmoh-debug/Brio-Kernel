@@ -361,7 +361,6 @@ mod tests {
     }
 
     #[test]
-    #[allow(clippy::unwrap_used)] // Tests should fail fast on unrecoverable errors
     fn test_builder_pattern() {
         let config = AgentConfig::builder()
             .max_iterations(30)

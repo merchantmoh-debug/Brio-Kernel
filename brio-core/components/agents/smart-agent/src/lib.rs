@@ -7,11 +7,11 @@
 #![allow(missing_docs)]
 
 use agent_sdk::{
+    AgentConfig, AgentError, PromptBuilder,
     agent::tools::{DoneTool, ListDirectoryTool, ReadFileTool},
-    agent::{run_standard_agent, StandardAgent, StandardAgentConfig},
+    agent::{StandardAgent, StandardAgentConfig, run_standard_agent},
     tools::{Tool, ToolParser, ToolRegistry},
     types::{InferenceResponse, Message, Role, TaskContext},
-    AgentConfig, AgentError, PromptBuilder,
 };
 use std::collections::HashMap;
 use wit_bindgen::generate;
@@ -24,7 +24,7 @@ generate!({
     generate_all,
 });
 
-/// `SmartAgent` implements the StandardAgent trait for general-purpose tasks.
+/// `SmartAgent` implements the `StandardAgent` trait for general-purpose tasks.
 #[derive(Clone)]
 pub struct SmartAgent;
 

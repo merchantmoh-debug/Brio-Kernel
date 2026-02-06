@@ -396,9 +396,7 @@ async fn smart_agent_logic(
     while let Some(msg) = rx.recv().await {
         if msg.method == "fix" {
             // 1. Begin Session (Sandboxed)
-            let session_id = host
-                .begin_session(&path)
-                .expect("Failed to begin session");
+            let session_id = host.begin_session(&path).expect("Failed to begin session");
             let session_path = std::env::temp_dir().join("brio").join(&session_id);
             let file_path = session_path.join("dummy_bug.txt");
 
@@ -450,15 +448,15 @@ async fn smart_agent_logic(
 async fn agent_logic(host: Arc<BrioHostState>, mut rx: mpsc::Receiver<MeshMessage>, path: String) {
     while let Some(msg) = rx.recv().await {
         if msg.method == "fix" {
-            let session = host
-                .begin_session(&path)
-                .expect("Failed to begin session");
+            let session = host.begin_session(&path).expect("Failed to begin session");
             let session_path = std::env::temp_dir().join("brio").join(&session);
             std::fs::write(session_path.join("dummy_bug.txt"), "fixed")
                 .expect("Failed to write fix");
             host.commit_session(&session)
                 .expect("Failed to commit session");
-            let _ = msg.reply_tx.send(Ok(Payload::Json(Box::new("fixed".to_string()))));
+            let _ = msg
+                .reply_tx
+                .send(Ok(Payload::Json(Box::new("fixed".to_string()))));
         }
     }
 }
@@ -470,7 +468,9 @@ async fn agent_logic(host: Arc<BrioHostState>, mut rx: mpsc::Receiver<MeshMessag
 #[tokio::test(flavor = "multi_thread")]
 async fn manifesto_scenario_real_ai() -> Result<()> {
     // 1. Check for Key (Conditional Execution)
-    let api_key = if let Ok(k) = std::env::var("OPENROUTER_API_KEY") { k } else {
+    let api_key = if let Ok(k) = std::env::var("OPENROUTER_API_KEY") {
+        k
+    } else {
         println!("Skipping real AI test: OPENROUTER_API_KEY not set");
         return Ok(());
     };
@@ -505,7 +505,10 @@ async fn manifesto_scenario_real_ai() -> Result<()> {
 
     let content = std::fs::read_to_string(project_file)?;
 
-    assert!(content.contains("fixed"), "LLM failed to fix the bug. Content: '{content}'");
+    assert!(
+        content.contains("fixed"),
+        "LLM failed to fix the bug. Content: '{content}'"
+    );
 
     Ok(())
 }

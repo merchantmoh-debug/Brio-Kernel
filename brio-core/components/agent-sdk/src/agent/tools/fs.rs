@@ -5,7 +5,7 @@
 //! error handling and resource limits.
 
 use crate::error::{FileSystemError, ToolError};
-use crate::tools::{validate_file_size, validate_path, Tool};
+use crate::tools::{Tool, validate_file_size, validate_path};
 use std::collections::HashMap;
 
 /// Tool for reading file contents.

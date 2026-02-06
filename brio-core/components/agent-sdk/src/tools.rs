@@ -60,12 +60,14 @@ impl ToolParser {
     /// Panics if the regex pattern is invalid. This should only be used
     /// with compile-time validated patterns in static initializers.
     #[inline]
-    #[allow(clippy::expect_used)] // Only used with compile-time validated patterns
     pub fn new_unchecked<E>(pattern: &str, extractor: E) -> Self
     where
         E: Fn(&Captures) -> HashMap<String, String> + Send + Sync + 'static,
     {
-        Self::new(pattern, extractor).expect("regex pattern should be valid at compile time")
+        match Self::new(pattern, extractor) {
+            Ok(parser) => parser,
+            Err(e) => panic!("regex pattern should be valid at compile time: {e}"),
+        }
     }
 
     /// Parses tool invocations from the input text.
@@ -269,12 +271,12 @@ pub fn validate_path(path: &str, base_dir: &Path) -> Result<PathBuf, FileSystemE
     })?;
 
     // Ensure the resolved path is within the base directory
-    if let Ok(canonical_path) = resolved.canonicalize() {
-        if !canonical_path.starts_with(&canonical_base) {
-            return Err(FileSystemError::PathTraversal {
-                path: path.to_path_buf(),
-            });
-        }
+    if let Ok(canonical_path) = resolved.canonicalize()
+        && !canonical_path.starts_with(&canonical_base)
+    {
+        return Err(FileSystemError::PathTraversal {
+            path: path.to_path_buf(),
+        });
     }
 
     Ok(resolved)
@@ -415,7 +417,6 @@ impl SecureFilePath<Validated> {
 }
 
 #[cfg(test)]
-#[allow(clippy::unwrap_used)] // Tests should fail fast on unrecoverable errors
 mod tests {
     use super::*;
 

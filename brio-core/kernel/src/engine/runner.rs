@@ -44,7 +44,7 @@ pub struct AgentRunner {
 }
 
 impl AgentRunner {
-    #[must_use] 
+    #[must_use]
     pub fn new(engine: Engine) -> Self {
         Self { engine }
     }

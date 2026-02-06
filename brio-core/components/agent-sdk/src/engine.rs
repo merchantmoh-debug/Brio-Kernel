@@ -1,4 +1,4 @@
-//! Agent engine with [`ReAct`] loop and state management.
+//! Agent engine with `ReAct` loop and state management.
 
 use crate::config::AgentConfig;
 use crate::error::{AgentError, ResultExt};
@@ -259,8 +259,8 @@ mod tests {
     use crate::types::TaskContext;
     use regex::Captures;
     use std::collections::HashMap;
-    use std::sync::atomic::{AtomicUsize, Ordering};
     use std::sync::Arc;
+    use std::sync::atomic::{AtomicUsize, Ordering};
     use std::time::Duration;
 
     fn create_test_context() -> TaskContext {

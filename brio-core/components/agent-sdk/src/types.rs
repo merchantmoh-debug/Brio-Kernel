@@ -223,7 +223,6 @@ impl ExecutionResult {
 }
 
 #[cfg(test)]
-#[allow(clippy::expect_used)] // Tests should fail fast on unrecoverable errors
 mod tests {
     use super::*;
 

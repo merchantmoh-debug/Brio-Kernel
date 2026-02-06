@@ -1,7 +1,7 @@
 //! Prompt building utilities for agents.
 
 use crate::config::AgentConfig;
-use crate::tools::{validate_path, ToolRegistry};
+use crate::tools::{ToolRegistry, validate_path};
 use crate::types::TaskContext;
 use std::path::Path;
 
@@ -241,7 +241,6 @@ Your goal is to strategically plan and oversee the execution of tasks by:
         }
 
         let mut context_parts = Vec::with_capacity(files.len());
-        #[allow(clippy::unwrap_used)]
         let base_dir = std::env::current_dir().unwrap_or_else(|_| Path::new(".").to_path_buf());
 
         for file_path in files {

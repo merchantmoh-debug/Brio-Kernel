@@ -168,7 +168,7 @@ pub trait StandardAgent: Clone + Send + Sync {
 /// - Loads and validates configuration
 /// - Creates the tool registry
 /// - Builds the agent engine
-/// - Runs the [`ReAct`] loop
+/// - Runs the `ReAct` loop
 ///
 /// # Type Parameters
 ///

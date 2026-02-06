@@ -8,7 +8,7 @@
 //! - **Error Handling**: Structured error hierarchy using `thiserror`
 //! - **Configuration**: Environment-based configuration with validation
 //! - **Tool System**: Type-safe tool execution with security validation
-//! - **Agent Engine**: [`ReAct`] loop implementation with state management
+//! - **Agent Engine**: `ReAct` loop implementation with state management
 //! - **Prompt Building**: Dynamic prompt construction for different agent types
 //!
 //! # Example
@@ -59,8 +59,8 @@ pub use engine::{AgentEngine, AgentEngineBuilder, InferenceFn};
 pub use error::{AgentError, FileSystemError, InferenceError, ResultExt, TaskError, ToolError};
 pub use prompt::PromptBuilder;
 pub use tools::{
-    validate_file_size, validate_path, validate_shell_command, SecureFilePath, Tool, ToolParser,
-    ToolRegistry, Unvalidated, Validated,
+    SecureFilePath, Tool, ToolParser, ToolRegistry, Unvalidated, Validated, validate_file_size,
+    validate_path, validate_shell_command,
 };
 pub use types::{
     ExecutionResult, InferenceResponse, Message, Role, TaskContext, ToolInvocation, ToolResult,
@@ -95,7 +95,6 @@ mod tests {
     use super::*;
 
     #[test]
-    #[allow(clippy::const_is_empty)] // VERSION is a const string that's verified to be non-empty
     fn test_version() {
         assert!(!VERSION.is_empty());
         assert!(VERSION.contains('.'));

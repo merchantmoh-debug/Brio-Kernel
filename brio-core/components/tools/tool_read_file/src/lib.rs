@@ -8,7 +8,7 @@
 //! - Paths are validated to prevent directory traversal attacks
 //! - Absolute paths are rejected
 //! - Large files are handled with line limits
-//! - File size limits prevent DoS attacks
+//! - File size limits prevent `DoS` attacks
 
 // WIT bindings generate many undocumented items - this is expected for auto-generated code
 #![allow(missing_docs)]
@@ -137,7 +137,9 @@ impl ReadFileTool {
         let reader = BufReader::new(file);
         let mut result = String::new();
         for (line_num, line) in reader.lines().enumerate() {
-            let current_line = (line_num + 1) as u32;
+            let current_line = u32::try_from(line_num + 1).map_err(|_| {
+                ReadFileError::IoError("Line number exceeds maximum supported value".to_string())
+            })?;
             if current_line > end_line {
                 break;
             }
@@ -153,11 +155,12 @@ impl ReadFileTool {
 
 impl exports::brio::core::tool_read_file::Guest for ReadFileTool {
     fn read_file(path: String) -> Result<String, String> {
-        Self::read_file_internal(&path).map_err(|e| e.into())
+        Self::read_file_internal(&path).map_err(std::convert::Into::into)
     }
 
     fn read_file_range(path: String, start_line: u32, end_line: u32) -> Result<String, String> {
-        Self::read_file_range_internal(&path, start_line, end_line).map_err(|e| e.into())
+        Self::read_file_range_internal(&path, start_line, end_line)
+            .map_err(std::convert::Into::into)
     }
 }
 

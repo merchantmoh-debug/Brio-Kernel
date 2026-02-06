@@ -253,7 +253,7 @@ pub fn create_linker(engine: &Engine) -> Result<Linker<BrioHostState>> {
     Ok(linker)
 }
 
-#[must_use] 
+#[must_use]
 pub fn create_engine_config() -> Config {
     let mut config = Config::new();
     config.wasm_component_model(true);
