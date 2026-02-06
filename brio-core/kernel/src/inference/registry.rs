@@ -1,13 +1,14 @@
 use crate::inference::provider::LLMProvider;
 use crate::inference::types::{ChatRequest, ChatResponse, InferenceError};
+use parking_lot::RwLock;
 use std::collections::HashMap;
-use std::sync::{Arc, RwLock};
+use std::sync::Arc;
 use tracing::debug;
 
 /// A registry for managing multiple LLM providers.
 ///
 /// Allows routing requests to different providers by name, enabling
-/// concurrent use of multiple LLM backends (OpenAI, Anthropic, etc.).
+/// concurrent use of multiple LLM backends (`OpenAI`, Anthropic, etc.).
 pub struct ProviderRegistry {
     providers: RwLock<HashMap<String, Arc<dyn LLMProvider>>>,
     default_provider: RwLock<Option<String>>,
@@ -15,6 +16,7 @@ pub struct ProviderRegistry {
 
 impl ProviderRegistry {
     /// Creates a new empty registry
+    #[must_use] 
     pub fn new() -> Self {
         Self {
             providers: RwLock::new(HashMap::new()),
@@ -26,7 +28,7 @@ impl ProviderRegistry {
     pub fn register(&self, name: impl Into<String>, provider: impl LLMProvider + 'static) {
         let name = name.into();
         debug!(provider_name = %name, "Registering LLM provider");
-        let mut providers = self.providers.write().expect("RwLock poisoned");
+        let mut providers = self.providers.write();
         providers.insert(name, Arc::new(provider));
     }
 
@@ -34,7 +36,7 @@ impl ProviderRegistry {
     pub fn register_arc(&self, name: impl Into<String>, provider: Arc<dyn LLMProvider>) {
         let name = name.into();
         debug!(provider_name = %name, "Registering LLM provider (Arc)");
-        let mut providers = self.providers.write().expect("RwLock poisoned");
+        let mut providers = self.providers.write();
         providers.insert(name, provider);
     }
 
@@ -42,42 +44,39 @@ impl ProviderRegistry {
     pub fn set_default(&self, name: impl Into<String>) {
         let name = name.into();
         debug!(provider_name = %name, "Setting default LLM provider");
-        let mut default = self.default_provider.write().expect("RwLock poisoned");
+        let mut default = self.default_provider.write();
         *default = Some(name);
     }
 
     /// Gets a provider by name
     pub fn get(&self, name: &str) -> Option<Arc<dyn LLMProvider>> {
-        let providers = self.providers.read().expect("RwLock poisoned");
+        let providers = self.providers.read();
         providers.get(name).cloned()
     }
 
     /// Gets the default provider
-    pub fn get_default(&self) -> Option<Arc<dyn LLMProvider>> {
+    pub fn default_provider(&self) -> Option<Arc<dyn LLMProvider>> {
         let default_name = {
-            let default = self.default_provider.read().expect("RwLock poisoned");
+            let default = self.default_provider.read();
             default.clone()
         };
 
-        match default_name {
-            Some(name) => self.get(&name),
-            None => {
-                // If no default set, return first registered provider
-                let providers = self.providers.read().expect("RwLock poisoned");
-                providers.values().next().cloned()
-            }
+        if let Some(name) = default_name { self.get(&name) } else {
+            // If no default set, return first registered provider
+            let providers = self.providers.read();
+            providers.values().next().cloned()
         }
     }
 
     /// Lists all registered provider names
     pub fn list_providers(&self) -> Vec<String> {
-        let providers = self.providers.read().expect("RwLock poisoned");
+        let providers = self.providers.read();
         providers.keys().cloned().collect()
     }
 
     /// Returns the number of registered providers
     pub fn len(&self) -> usize {
-        let providers = self.providers.read().expect("RwLock poisoned");
+        let providers = self.providers.read();
         providers.len()
     }
 
@@ -89,11 +88,15 @@ impl ProviderRegistry {
     /// Removes a provider by name
     pub fn remove(&self, name: &str) -> Option<Arc<dyn LLMProvider>> {
         debug!(provider_name = %name, "Removing LLM provider");
-        let mut providers = self.providers.write().expect("RwLock poisoned");
+        let mut providers = self.providers.write();
         providers.remove(name)
     }
 
     /// Sends a chat request to the named provider
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the provider is not found or if the chat request fails.
     pub async fn chat(
         &self,
         provider_name: &str,
@@ -107,8 +110,12 @@ impl ProviderRegistry {
     }
 
     /// Sends a chat request to the default provider
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if no default provider is configured or if the chat request fails.
     pub async fn chat_default(&self, request: ChatRequest) -> Result<ChatResponse, InferenceError> {
-        let provider = self.get_default().ok_or_else(|| {
+        let provider = self.default_provider().ok_or_else(|| {
             InferenceError::ProviderNotFound("No default provider configured".to_string())
         })?;
 
@@ -147,14 +154,14 @@ mod tests {
     }
 
     #[test]
-    fn test_registry_new() {
+    fn registry_should_create_empty() {
         let registry = ProviderRegistry::new();
         assert!(registry.is_empty());
         assert_eq!(registry.len(), 0);
     }
 
     #[test]
-    fn test_registry_register_and_get() {
+    fn register_should_add_provider_and_make_it_retrievable() {
         let registry = ProviderRegistry::new();
         registry.register(
             "openai",
@@ -170,7 +177,7 @@ mod tests {
     }
 
     #[test]
-    fn test_registry_multiple_providers() {
+    fn registry_should_support_multiple_providers() {
         let registry = ProviderRegistry::new();
         registry.register(
             "openai",
@@ -191,7 +198,7 @@ mod tests {
     }
 
     #[test]
-    fn test_registry_list_providers() {
+    fn list_providers_should_return_all_registered_names() {
         let registry = ProviderRegistry::new();
         registry.register(
             "openai",
@@ -213,7 +220,7 @@ mod tests {
     }
 
     #[test]
-    fn test_registry_default_provider() {
+    fn set_default_should_make_provider_retrievable_as_default() {
         let registry = ProviderRegistry::new();
         registry.register(
             "openai",
@@ -229,11 +236,11 @@ mod tests {
         );
         registry.set_default("anthropic");
 
-        assert!(registry.get_default().is_some());
+        assert!(registry.default_provider().is_some());
     }
 
     #[test]
-    fn test_registry_remove() {
+    fn remove_should_delete_provider_from_registry() {
         let registry = ProviderRegistry::new();
         registry.register(
             "openai",
@@ -250,7 +257,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_registry_chat() {
+    async fn chat_should_return_response_from_named_provider() {
         let registry = ProviderRegistry::new();
         registry.register(
             "openai",
@@ -272,7 +279,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_registry_chat_provider_not_found() {
+    async fn chat_should_return_error_when_provider_not_found() {
         let registry = ProviderRegistry::new();
 
         let request = ChatRequest {
@@ -289,7 +296,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_registry_chat_default() {
+    async fn chat_default_should_use_default_provider() {
         let registry = ProviderRegistry::new();
         registry.register(
             "anthropic",

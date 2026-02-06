@@ -72,6 +72,7 @@ pub struct AnthropicConfig {
 
 impl AnthropicConfig {
     /// Creates a new config with default settings
+    #[must_use] 
     pub fn new(api_key: SecretString, base_url: Url) -> Self {
         Self {
             api_key,
@@ -84,33 +85,41 @@ impl AnthropicConfig {
     }
 
     /// Creates a config with default Anthropic base URL
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the hardcoded URL is invalid.
     pub fn with_api_key(api_key: SecretString) -> anyhow::Result<Self> {
         Ok(Self::new(
             api_key,
             Url::parse("https://api.anthropic.com/v1/")
-                .map_err(|e| anyhow::anyhow!("Invalid hardcoded URL: {}", e))?,
+                .map_err(|e| anyhow::anyhow!("Invalid hardcoded URL: {e}"))?,
         ))
     }
 
     /// Sets the maximum number of retries
+    #[must_use] 
     pub fn with_max_retries(mut self, max_retries: u32) -> Self {
         self.max_retries = Some(max_retries);
         self
     }
 
     /// Sets the base delay for exponential backoff
+    #[must_use] 
     pub fn with_base_delay_ms(mut self, delay_ms: u64) -> Self {
         self.base_delay_ms = Some(delay_ms);
         self
     }
 
     /// Sets the API version
+    #[must_use] 
     pub fn with_api_version(mut self, version: String) -> Self {
         self.api_version = Some(version);
         self
     }
 
     /// Sets the maximum tokens to generate
+    #[must_use] 
     pub fn with_max_tokens(mut self, max_tokens: u32) -> Self {
         self.max_tokens = Some(max_tokens);
         self
@@ -131,6 +140,7 @@ pub struct AnthropicProvider {
 }
 
 impl AnthropicProvider {
+    #[must_use] 
     pub fn new(config: AnthropicConfig) -> Self {
         let max_retries = config.max_retries.unwrap_or(DEFAULT_MAX_RETRIES);
         let base_delay_ms = config.base_delay_ms.unwrap_or(DEFAULT_BASE_DELAY_MS);
@@ -151,6 +161,7 @@ impl AnthropicProvider {
     }
 
     /// Calculates the delay for a given retry attempt with jitter
+    #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss, clippy::cast_precision_loss)]
     fn calculate_backoff_delay(&self, attempt: u32) -> Duration {
         let delay_ms = self.base_delay_ms.saturating_mul(1u64 << attempt);
         let capped_delay = delay_ms.min(MAX_DELAY_MS);
@@ -161,7 +172,7 @@ impl AnthropicProvider {
     /// Converts our Message type to Anthropic format, extracting system message
     fn prepare_messages(messages: &[Message]) -> (Option<String>, Vec<AnthropicMessage>) {
         let mut system_message = None;
-        let mut anthropic_messages = Vec::new();
+        let mut anthropic_messages = Vec::with_capacity(messages.len());
 
         for msg in messages {
             match msg.role {
@@ -214,7 +225,7 @@ impl AnthropicProvider {
             .config
             .base_url
             .join("messages")
-            .map_err(|e| InferenceError::ConfigError(format!("Invalid URL join: {}", e)))?;
+            .map_err(|e| InferenceError::ConfigError(format!("Invalid URL join: {e}")))?;
 
         Ok(self
             .client
@@ -233,7 +244,7 @@ impl AnthropicProvider {
             StatusCode::OK => {
                 let body: AnthropicChatResponse = res.json().await.map_err(|e| {
                     (
-                        InferenceError::ProviderError(format!("Parse error: {}", e)),
+                        InferenceError::ProviderError(format!("Parse error: {e}")),
                         false,
                     )
                 })?;
@@ -262,7 +273,7 @@ impl AnthropicProvider {
                     Err((InferenceError::ContextLengthExceeded, false))
                 } else {
                     Err((
-                        InferenceError::ProviderError(format!("Bad Request: {}", text)),
+                        InferenceError::ProviderError(format!("Bad Request: {text}")),
                         false,
                     ))
                 }
@@ -274,7 +285,7 @@ impl AnthropicProvider {
                 let status = res.status();
                 let text = res.text().await.unwrap_or_default();
                 Err((
-                    InferenceError::ProviderError(format!("HTTP {}: {}", status, text)),
+                    InferenceError::ProviderError(format!("HTTP {status}: {text}")),
                     true,
                 ))
             }
@@ -282,7 +293,7 @@ impl AnthropicProvider {
                 let status = res.status();
                 let text = res.text().await.unwrap_or_default();
                 Err((
-                    InferenceError::ProviderError(format!("HTTP {}: {}", status, text)),
+                    InferenceError::ProviderError(format!("HTTP {status}: {text}")),
                     false,
                 ))
             }
@@ -315,10 +326,11 @@ impl LLMProvider for AnthropicProvider {
                     }
 
                     let delay = self.calculate_backoff_delay(attempt);
+                    let delay_ms: u64 = delay.as_millis().try_into().unwrap_or(u64::MAX);
                     warn!(
                         attempt = attempt + 1,
                         max_retries = self.max_retries,
-                        delay_ms = delay.as_millis() as u64,
+                        delay_ms = delay_ms,
                         error = %last_error,
                         "Anthropic request failed, retrying after backoff"
                     );
@@ -342,7 +354,7 @@ fn rand_jitter() -> f64 {
         .duration_since(SystemTime::UNIX_EPOCH)
         .map(|d| d.subsec_nanos())
         .unwrap_or(0);
-    (nanos % 1000) as f64 / 1000.0
+    f64::from(nanos % 1000) / 1000.0
 }
 
 // =============================================================================
