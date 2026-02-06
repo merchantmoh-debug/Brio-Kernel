@@ -1,4 +1,10 @@
+//! Distributed end-to-end tests for the mesh networking layer.
+//!
+//! Tests multi-node communication and service discovery across different nodes
+//! in a distributed setup using gRPC transport.
+
 use brio_kernel::host::BrioHostState;
+use brio_kernel::infrastructure::config::SandboxSettings;
 use brio_kernel::inference::ProviderRegistry;
 use brio_kernel::mesh::Payload;
 use brio_kernel::mesh::service::MeshService;
@@ -7,10 +13,21 @@ use std::sync::Arc;
 use std::time::Duration;
 use tokio::sync::mpsc;
 
+/// Wait for server to be ready with exponential backoff retry loop
+async fn wait_for_server(addr: &std::net::SocketAddr, max_retries: u64) -> bool {
+    for i in 0..max_retries {
+        if tokio::net::TcpStream::connect(addr).await.is_ok() {
+            return true;
+        }
+        tokio::time::sleep(Duration::from_millis(10 * (i + 1))).await;
+    }
+    false
+}
+
 // Helper to spawn a node
 async fn spawn_node(id: &str, port: u16) -> (Arc<BrioHostState>, String) {
     let node_id = NodeId::from(id.to_string());
-    let addr_str = format!("127.0.0.1:{}", port);
+    let addr_str = format!("127.0.0.1:{port}");
 
     // Setup registry
     let registry = ProviderRegistry::new();
@@ -19,7 +36,7 @@ async fn spawn_node(id: &str, port: u16) -> (Arc<BrioHostState>, String) {
     let db_url = "sqlite::memory:";
 
     let host_state =
-        BrioHostState::new_distributed(db_url, registry, None, node_id.clone(), Default::default())
+        BrioHostState::new_distributed(db_url, registry, None, node_id.clone(), SandboxSettings::default())
             .await
             .expect("Failed to create host state");
     let state = Arc::new(host_state);
@@ -39,19 +56,21 @@ async fn spawn_node(id: &str, port: u16) -> (Arc<BrioHostState>, String) {
             .unwrap();
     });
 
-    // Give server a moment to start
-    tokio::time::sleep(Duration::from_millis(100)).await;
+    // Wait for server to be ready with retry loop
+    assert!(
+        wait_for_server(&addr, 10).await,
+        "Server failed to start within timeout"
+    );
 
     (state, addr_str)
 }
 
 #[tokio::test]
 async fn test_distributed_call() {
-    // 1. Spawn two nodes
     let (node_a, _addr_a) = spawn_node("node-a", 50055).await;
     let (node_b, addr_b) = spawn_node("node-b", 50056).await;
 
-    // 2. Register "echo" component on Node B
+    // Register "echo" component on Node B
     let (tx, mut rx) = mpsc::channel(1);
     node_b.register_component("echo".to_string(), tx);
 
@@ -59,8 +78,8 @@ async fn test_distributed_call() {
     tokio::spawn(async move {
         while let Some(msg) = rx.recv().await {
             let reply = match msg.payload {
-                Payload::Json(s) => Payload::Json(format!("echo: {}", s)),
-                _ => Payload::Json("error".to_string()),
+                Payload::Json(s) => Payload::Json(Box::new(format!("echo: {s}"))),
+                Payload::Binary(_) => Payload::Json(Box::new("error".to_string())),
             };
             msg.reply_tx.send(Ok(reply)).unwrap();
         }
@@ -75,16 +94,12 @@ async fn test_distributed_call() {
     };
     node_a.register_remote_node(info_b);
 
-    // 4. Perform mesh call from A -> B
-    // Target: "node-b/echo"
     let response = node_a
-        .mesh_call("node-b/echo", "ping", Payload::Json("hello".to_string()))
+        .mesh_call("node-b/echo", "ping", Payload::Json(Box::new("hello".to_string())))
         .await
         .expect("Mesh call failed");
-
-    // 5. Verify response
     match response {
-        Payload::Json(s) => assert_eq!(s, "echo: hello"),
-        _ => panic!("Unexpected payload type"),
+        Payload::Json(s) => assert_eq!(*s, "echo: hello"),
+        Payload::Binary(_) => panic!("Unexpected payload type"),
     }
 }

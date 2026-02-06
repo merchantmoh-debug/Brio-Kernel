@@ -43,5 +43,5 @@ fn create_wasm_engine(engine: &wasmtime::Engine) -> Result<WasmEngine> {
 }
 
 fn load_empty_component(engine: &wasmtime::Engine) -> Result<wasmtime::component::Component> {
-    wasmtime::component::Component::new(engine, r#"(component)"#)
+    wasmtime::component::Component::new(engine, r"(component)")
 }

@@ -70,18 +70,18 @@ async fn test_register_and_call_component() -> Result<()> {
     tokio::spawn(async move {
         while let Some(msg) = rx.recv().await {
             if msg.method == "ping" {
-                let _ = msg.reply_tx.send(Ok(Payload::Json("pong".to_string())));
+                let _ = msg.reply_tx.send(Ok(Payload::Json(Box::new("pong".to_string()))));
             }
         }
     });
 
     // Call the component
     let response = host_clone
-        .mesh_call("test-component", "ping", Payload::Json("".to_string()))
+        .mesh_call("test-component", "ping", Payload::Json(Box::new("".to_string())))
         .await?;
 
     if let Payload::Json(s) = response {
-        assert_eq!(s, "pong");
+        assert_eq!(*s, "pong");
     } else {
         panic!("Expected Json payload");
     }
@@ -94,7 +94,7 @@ async fn test_mesh_call_to_missing_target() -> Result<()> {
     let host = BrioHostState::with_provider("sqlite::memory:", Box::new(MockProvider)).await?;
 
     let result = host
-        .mesh_call("nonexistent", "method", Payload::Json("".to_string()))
+        .mesh_call("nonexistent", "method", Payload::Json(Box::new("".to_string())))
         .await;
 
     assert!(result.is_err());
@@ -117,30 +117,30 @@ async fn test_register_multiple_components() -> Result<()> {
     // Handle component 1
     tokio::spawn(async move {
         while let Some(msg) = rx1.recv().await {
-            let _ = msg.reply_tx.send(Ok(Payload::Json("from-1".to_string())));
+            let _ = msg.reply_tx.send(Ok(Payload::Json(Box::new("from-1".to_string()))));
         }
     });
 
     // Handle component 2
     tokio::spawn(async move {
         while let Some(msg) = rx2.recv().await {
-            let _ = msg.reply_tx.send(Ok(Payload::Json("from-2".to_string())));
+            let _ = msg.reply_tx.send(Ok(Payload::Json(Box::new("from-2".to_string()))));
         }
     });
 
     // Call both
     let resp1 = host
-        .mesh_call("component-1", "test", Payload::Json("".to_string()))
+        .mesh_call("component-1", "test", Payload::Json(Box::new("".to_string())))
         .await?;
     let resp2 = host
-        .mesh_call("component-2", "test", Payload::Json("".to_string()))
+        .mesh_call("component-2", "test", Payload::Json(Box::new("".to_string())))
         .await?;
 
     if let Payload::Json(s) = resp1 {
-        assert_eq!(s, "from-1");
+        assert_eq!(*s, "from-1");
     }
     if let Payload::Json(s) = resp2 {
-        assert_eq!(s, "from-2");
+        assert_eq!(*s, "from-2");
     }
 
     Ok(())
@@ -151,9 +151,9 @@ async fn test_register_multiple_components() -> Result<()> {
 // =============================================================================
 
 #[tokio::test]
-async fn test_get_store() -> Result<()> {
+async fn test_store() -> Result<()> {
     let host = BrioHostState::with_provider("sqlite::memory:", Box::new(MockProvider)).await?;
-    let _store = host.get_store("test_scope");
+    let _store = host.store("test_scope");
     // Store should be created without error
     Ok(())
 }
@@ -165,7 +165,7 @@ async fn test_get_store() -> Result<()> {
 #[tokio::test]
 async fn test_session_with_nonexistent_path() -> Result<()> {
     let host = BrioHostState::with_provider("sqlite::memory:", Box::new(MockProvider)).await?;
-    let result = host.begin_session("/nonexistent/path/12345".to_string());
+    let result = host.begin_session("/nonexistent/path/12345");
 
     assert!(result.is_err());
     Ok(())
@@ -184,12 +184,12 @@ async fn test_session_begin_and_commit() -> Result<()> {
     std::fs::write(temp.join("test.txt"), "hello")?;
 
     let session_id = host
-        .begin_session(temp.to_str().unwrap().to_string())
+        .begin_session(temp.to_str().unwrap())
         .unwrap();
     assert!(!session_id.is_empty());
 
     // Commit should succeed
-    let commit_result = host.commit_session(session_id);
+    let commit_result = host.commit_session(&session_id);
     assert!(commit_result.is_ok());
 
     // Cleanup
@@ -235,7 +235,7 @@ async fn test_binary_payload_routing() -> Result<()> {
             if let Payload::Binary(data) = msg.payload {
                 // Echo back reversed
                 let reversed: Vec<u8> = data.into_iter().rev().collect();
-                let _ = msg.reply_tx.send(Ok(Payload::Binary(reversed)));
+                let _ = msg.reply_tx.send(Ok(Payload::Binary(Box::new(reversed))));
             }
         }
     });
@@ -244,12 +244,12 @@ async fn test_binary_payload_routing() -> Result<()> {
         .mesh_call(
             "binary-handler",
             "reverse",
-            Payload::Binary(vec![1, 2, 3, 4]),
+            Payload::Binary(Box::new(vec![1, 2, 3, 4])),
         )
         .await?;
 
     if let Payload::Binary(data) = response {
-        assert_eq!(data, vec![4, 3, 2, 1]);
+        assert_eq!(*data, vec![4, 3, 2, 1]);
     } else {
         panic!("Expected Binary payload");
     }
