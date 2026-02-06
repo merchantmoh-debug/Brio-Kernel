@@ -70,14 +70,20 @@ async fn test_register_and_call_component() -> Result<()> {
     tokio::spawn(async move {
         while let Some(msg) = rx.recv().await {
             if msg.method == "ping" {
-                let _ = msg.reply_tx.send(Ok(Payload::Json(Box::new("pong".to_string()))));
+                let _ = msg
+                    .reply_tx
+                    .send(Ok(Payload::Json(Box::new("pong".to_string()))));
             }
         }
     });
 
     // Call the component
     let response = host_clone
-        .mesh_call("test-component", "ping", Payload::Json(Box::new("".to_string())))
+        .mesh_call(
+            "test-component",
+            "ping",
+            Payload::Json(Box::new("".to_string())),
+        )
         .await?;
 
     if let Payload::Json(s) = response {
@@ -94,7 +100,11 @@ async fn test_mesh_call_to_missing_target() -> Result<()> {
     let host = BrioHostState::with_provider("sqlite::memory:", Box::new(MockProvider)).await?;
 
     let result = host
-        .mesh_call("nonexistent", "method", Payload::Json(Box::new("".to_string())))
+        .mesh_call(
+            "nonexistent",
+            "method",
+            Payload::Json(Box::new("".to_string())),
+        )
         .await;
 
     assert!(result.is_err());
@@ -117,23 +127,35 @@ async fn test_register_multiple_components() -> Result<()> {
     // Handle component 1
     tokio::spawn(async move {
         while let Some(msg) = rx1.recv().await {
-            let _ = msg.reply_tx.send(Ok(Payload::Json(Box::new("from-1".to_string()))));
+            let _ = msg
+                .reply_tx
+                .send(Ok(Payload::Json(Box::new("from-1".to_string()))));
         }
     });
 
     // Handle component 2
     tokio::spawn(async move {
         while let Some(msg) = rx2.recv().await {
-            let _ = msg.reply_tx.send(Ok(Payload::Json(Box::new("from-2".to_string()))));
+            let _ = msg
+                .reply_tx
+                .send(Ok(Payload::Json(Box::new("from-2".to_string()))));
         }
     });
 
     // Call both
     let resp1 = host
-        .mesh_call("component-1", "test", Payload::Json(Box::new("".to_string())))
+        .mesh_call(
+            "component-1",
+            "test",
+            Payload::Json(Box::new("".to_string())),
+        )
         .await?;
     let resp2 = host
-        .mesh_call("component-2", "test", Payload::Json(Box::new("".to_string())))
+        .mesh_call(
+            "component-2",
+            "test",
+            Payload::Json(Box::new("".to_string())),
+        )
         .await?;
 
     if let Payload::Json(s) = resp1 {
@@ -183,9 +205,7 @@ async fn test_session_begin_and_commit() -> Result<()> {
     std::fs::create_dir_all(&temp)?;
     std::fs::write(temp.join("test.txt"), "hello")?;
 
-    let session_id = host
-        .begin_session(temp.to_str().unwrap())
-        .unwrap();
+    let session_id = host.begin_session(temp.to_str().unwrap()).unwrap();
     assert!(!session_id.is_empty());
 
     // Commit should succeed

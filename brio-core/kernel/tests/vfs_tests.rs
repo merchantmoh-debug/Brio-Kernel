@@ -14,10 +14,12 @@ fn begin_session_should_return_error_for_nonexistent_path() -> anyhow::Result<()
     let result = manager.begin_session("/nonexistent/path/that/does/not/exist");
 
     assert!(result.is_err());
-    assert!(result
-        .unwrap_err()
-        .to_string()
-        .contains("Invalid base path"));
+    assert!(
+        result
+            .unwrap_err()
+            .to_string()
+            .contains("Invalid base path")
+    );
     Ok(())
 }
 

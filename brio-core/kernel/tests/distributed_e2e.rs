@@ -4,8 +4,8 @@
 //! in a distributed setup using gRPC transport.
 
 use brio_kernel::host::BrioHostState;
-use brio_kernel::infrastructure::config::SandboxSettings;
 use brio_kernel::inference::ProviderRegistry;
+use brio_kernel::infrastructure::config::SandboxSettings;
 use brio_kernel::mesh::Payload;
 use brio_kernel::mesh::service::MeshService;
 use brio_kernel::mesh::types::{NodeAddress, NodeId, NodeInfo};
@@ -35,10 +35,15 @@ async fn spawn_node(id: &str, port: u16) -> (Arc<BrioHostState>, String) {
     // In-memory DB for tests
     let db_url = "sqlite::memory:";
 
-    let host_state =
-        BrioHostState::new_distributed(db_url, registry, None, node_id.clone(), SandboxSettings::default())
-            .await
-            .expect("Failed to create host state");
+    let host_state = BrioHostState::new_distributed(
+        db_url,
+        registry,
+        None,
+        node_id.clone(),
+        SandboxSettings::default(),
+    )
+    .await
+    .expect("Failed to create host state");
     let state = Arc::new(host_state);
 
     // Spawn server
@@ -95,7 +100,11 @@ async fn test_distributed_call() {
     node_a.register_remote_node(info_b);
 
     let response = node_a
-        .mesh_call("node-b/echo", "ping", Payload::Json(Box::new("hello".to_string())))
+        .mesh_call(
+            "node-b/echo",
+            "ping",
+            Payload::Json(Box::new("hello".to_string())),
+        )
         .await
         .expect("Mesh call failed");
     match response {
