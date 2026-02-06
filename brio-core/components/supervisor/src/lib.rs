@@ -7,6 +7,9 @@
 //!
 //! This component is built as a WASI Preview 2 module.
 
+#![deny(missing_docs)]
+#![warn(clippy::pedantic)]
+
 pub mod domain;
 pub mod handlers;
 pub mod mesh_client;
@@ -16,12 +19,21 @@ pub mod repository;
 pub mod selector;
 pub mod wit_bindings;
 
-// Generate WIT bindings when building for WASM target
+/// WIT bindings for the brio-host world.
+///
+/// This module contains auto-generated bindings from the WIT interface definitions.
+/// These bindings provide the low-level interface between the supervisor and the Brio runtime.
 #[cfg(target_arch = "wasm32")]
-wit_bindgen::generate!({
-    world: "brio-host",
-    path: "../../wit",
-});
+#[allow(missing_docs)]
+pub mod wit_bindings {
+    wit_bindgen::generate!({
+        world: "brio-host",
+        path: "../../wit",
+    });
+}
+
+#[cfg(target_arch = "wasm32")]
+pub use wit_bindings::*;
 
 use mesh_client::WitAgentDispatcher;
 use orchestrator::Supervisor;
@@ -35,10 +47,21 @@ use repository::WitTaskRepository;
 ///
 /// # Errors
 /// Returns error string if the supervision cycle fails critically.
+///
+/// # Safety
+/// The `no_mangle` attribute is required for FFI compatibility with the WASM runtime.
+/// This function uses C calling convention for host-guest interoperability.
+/// It is safe because:
+/// - The function signature is fixed and known to the host
+/// - No Rust-specific types cross the FFI boundary (returns i32)
+/// - The function is stateless and reentrant
 #[unsafe(no_mangle)]
 pub extern "C" fn run() -> i32 {
     match run_inner() {
-        Ok(count) => count as i32,
+        // Use i64 as intermediate to avoid overflow, then clamp to i32 range.
+        // unwrap_or is safe here: if count exceeds i32::MAX, we saturate at MAX
+        // rather than panicking, ensuring the host receives a valid return value.
+        Ok(count) => i64::from(count).try_into().unwrap_or(i32::MAX),
         Err(_) => -1,
     }
 }
