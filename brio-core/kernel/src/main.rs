@@ -2,12 +2,13 @@ use anyhow::Context;
 use brio_kernel::host::BrioHostState;
 use brio_kernel::infrastructure::{audit, config::Settings, server, telemetry::TelemetryBuilder};
 use secrecy::ExposeSecret;
+use std::sync::Arc;
 use tokio::signal;
 use tracing::{error, info};
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
-    let config = Settings::new().context("Failed to load configuration")?;
+    let config = Arc::new(Settings::new().context("Failed to load configuration")?);
 
     let mut telemetry_builder = TelemetryBuilder::new("brio-kernel", "0.1.0")
         .with_log_level("debug")
@@ -25,7 +26,7 @@ async fn main() -> anyhow::Result<()> {
         .context("Failed to initialize telemetry")?;
 
     info!("Brio Kernel Starting...");
-    audit::log_audit(audit::AuditEvent::SystemStartup {
+    audit::log_audit(&audit::AuditEvent::SystemStartup {
         component: "Kernel".into(),
     });
 
@@ -52,7 +53,6 @@ async fn main() -> anyhow::Result<()> {
 
     let db_url = config.database.url.expose_secret();
 
-    // Clean Code: Configure Provider (DIP)
     let openai_key = config
         .inference
         .as_ref()
@@ -85,8 +85,7 @@ async fn main() -> anyhow::Result<()> {
     let mesh_port = mesh_config
         .as_ref()
         .and_then(|m| m.port)
-        .map(|p| p.to_string())
-        .unwrap_or("50051".to_string());
+        .map_or_else(|| "50051".to_string(), |p| p.to_string());
 
     let state = if let Some(ref id) = node_id {
         info!("Initializing in Distributed Mode (Node ID: {})", id);
@@ -120,7 +119,7 @@ async fn main() -> anyhow::Result<()> {
         let state_clone = state.clone();
         let port = mesh_port.clone();
         tokio::spawn(async move {
-            let addr_str = format!("0.0.0.0:{}", port);
+            let addr_str = format!("0.0.0.0:{port}");
             let addr = match addr_str.parse() {
                 Ok(a) => a,
                 Err(e) => {
@@ -147,9 +146,8 @@ async fn main() -> anyhow::Result<()> {
     }
 
     let broadcaster = state.broadcaster().clone();
-    let server_config = config.clone();
     tokio::spawn(async move {
-        if let Err(e) = server::run_server(&server_config, broadcaster).await {
+        if let Err(e) = server::run_server(&config, broadcaster).await {
             error!("Control Plane failed: {:?}", e);
         }
     });
@@ -159,7 +157,7 @@ async fn main() -> anyhow::Result<()> {
     shutdown_signal().await;
 
     info!("Shutdown signal received, cleaning up...");
-    audit::log_audit(audit::AuditEvent::SystemShutdown {
+    audit::log_audit(&audit::AuditEvent::SystemShutdown {
         reason: "Signal received".into(),
     });
 
@@ -192,7 +190,7 @@ async fn shutdown_signal() {
     let terminate = std::future::pending::<()>();
 
     tokio::select! {
-        _ = ctrl_c => {},
-        _ = terminate => {},
+        () = ctrl_c => {},
+        () = terminate => {},
     }
 }
