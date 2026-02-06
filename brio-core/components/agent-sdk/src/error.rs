@@ -203,6 +203,10 @@ pub enum FileSystemError {
 /// Convenience extension trait for adding context to errors.
 pub trait ResultExt<T, E> {
     /// Add context to an error.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error wrapping the original error with additional context.
     fn with_context<C, F>(self, f: F) -> Result<T, AgentError>
     where
         F: FnOnce() -> C,

@@ -1,7 +1,7 @@
 //! Prompt building utilities for agents.
 
 use crate::config::AgentConfig;
-use crate::tools::{ToolRegistry, validate_path};
+use crate::tools::{validate_path, ToolRegistry};
 use crate::types::TaskContext;
 use std::path::Path;
 
@@ -10,16 +10,17 @@ pub struct PromptBuilder;
 
 impl PromptBuilder {
     /// Builds a system prompt for a general-purpose agent.
+    #[must_use]
     pub fn build_smart_agent(
         context: &TaskContext,
         tools: &ToolRegistry,
-        _config: &AgentConfig,
+        config: &AgentConfig,
     ) -> String {
-        let file_context = Self::build_file_context(&context.input_files, _config.max_file_size);
+        let file_context = Self::build_file_context(&context.input_files, config.max_file_size);
         let tool_descriptions = tools.help_text();
 
         format!(
-            r#"You are the Smart Agent, an expert software engineering assistant.
+            r"You are the Smart Agent, an expert software engineering assistant.
 
 ## Your Capabilities
 
@@ -78,7 +79,7 @@ Structure your responses as follows:
 2. Tool calls to execute your plan
 3. Continue until task is complete
 
-Remember: You are an autonomous agent. Take initiative and work efficiently."#,
+Remember: You are an autonomous agent. Take initiative and work efficiently.",
             tool_descriptions = tool_descriptions,
             description = context.description,
             file_context = file_context,
@@ -86,15 +87,16 @@ Remember: You are an autonomous agent. Take initiative and work efficiently."#,
     }
 
     /// Builds a system prompt for a coder agent.
+    #[must_use]
     pub fn build_coder_agent(
         context: &TaskContext,
         tools: &ToolRegistry,
-        _config: &AgentConfig,
+        config: &AgentConfig,
     ) -> String {
-        let file_context = Self::build_file_context(&context.input_files, _config.max_file_size);
+        let file_context = Self::build_file_context(&context.input_files, config.max_file_size);
 
         format!(
-            r#"You are an expert software engineer specializing in code writing and modification.
+            r"You are an expert software engineer specializing in code writing and modification.
 Your goal is to complete the user's task by reading and modifying files.
 
 ## Capabilities
@@ -125,7 +127,7 @@ Your goal is to complete the user's task by reading and modifying files.
 ## Loaded Context
 
 {}
-"#,
+",
             tools.help_text(),
             context.description,
             file_context
@@ -133,15 +135,16 @@ Your goal is to complete the user's task by reading and modifying files.
     }
 
     /// Builds a system prompt for a reviewer agent.
+    #[must_use]
     pub fn build_reviewer_agent(
         context: &TaskContext,
         tools: &ToolRegistry,
-        _config: &AgentConfig,
+        config: &AgentConfig,
     ) -> String {
-        let file_context = Self::build_file_context(&context.input_files, _config.max_file_size);
+        let file_context = Self::build_file_context(&context.input_files, config.max_file_size);
 
         format!(
-            r#"You are an expert Code Reviewer.
+            r"You are an expert Code Reviewer.
 Your goal is to review the provided code/files and user request, identifying bugs, security vulnerabilities, and adherence to SOLID principles.
 
 ## Capabilities
@@ -179,7 +182,7 @@ Your goal is to review the provided code/files and user request, identifying bug
 ## Loaded Context
 
 {}
-"#,
+",
             tools.help_text(),
             context.description,
             file_context
@@ -187,13 +190,14 @@ Your goal is to review the provided code/files and user request, identifying bug
     }
 
     /// Builds a system prompt for a council agent.
+    #[must_use]
     pub fn build_council_agent(
         context: &TaskContext,
         tools: &ToolRegistry,
         _config: &AgentConfig,
     ) -> String {
         format!(
-            r#"You are the Council Agent, a strategic planning and oversight expert.
+            r"You are the Council Agent, a strategic planning and oversight expert.
 
 ## Role
 
@@ -224,7 +228,7 @@ Your goal is to strategically plan and oversee the execution of tasks by:
 ## Task Description
 
 {}
-"#,
+",
             tools.help_text(),
             context.description
         )
@@ -237,6 +241,7 @@ Your goal is to strategically plan and oversee the execution of tasks by:
         }
 
         let mut context_parts = Vec::with_capacity(files.len());
+        #[allow(clippy::unwrap_used)]
         let base_dir = std::env::current_dir().unwrap_or_else(|_| Path::new(".").to_path_buf());
 
         for file_path in files {
@@ -246,13 +251,10 @@ Your goal is to strategically plan and oversee the execution of tasks by:
             match validate_path(path_str, &base_dir) {
                 Ok(validated_path) => {
                     let file_content = Self::read_file_safely(&validated_path, max_size);
-                    context_parts.push(format!(
-                        "### File: {}\n```\n{}\n```\n",
-                        path_str, file_content
-                    ));
+                    context_parts.push(format!("### File: {path_str}\n```\n{file_content}\n```\n"));
                 }
                 Err(e) => {
-                    context_parts.push(format!("### File: {}\n[Error: {}]\n", path_str, e));
+                    context_parts.push(format!("### File: {path_str}\n[Error: {e}]\n"));
                 }
             }
         }
@@ -274,13 +276,13 @@ Your goal is to strategically plan and oversee the execution of tasks by:
                 }
             }
             Err(e) => {
-                return format!("[Error checking file: {}]", e);
+                return format!("[Error checking file: {e}]");
             }
         }
 
         match std::fs::read_to_string(path) {
             Ok(content) => content,
-            Err(e) => format!("[Error reading file: {}]", e),
+            Err(e) => format!("[Error reading file: {e}]"),
         }
     }
 }

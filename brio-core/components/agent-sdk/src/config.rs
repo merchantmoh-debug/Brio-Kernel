@@ -61,6 +61,7 @@ pub struct ToolConfig {
 
 impl AgentConfig {
     /// Creates a new configuration with default values.
+    #[must_use]
     pub fn new() -> Self {
         Self::default()
     }
@@ -69,6 +70,11 @@ impl AgentConfig {
     ///
     /// Environment variables are prefixed with `BRIO_AGENT_`.
     /// For example: `BRIO_AGENT_MAX_ITERATIONS=30`
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if any environment variable contains an invalid value
+    /// that cannot be parsed into the expected type.
     pub fn from_env() -> Result<Self, TaskError> {
         let mut config = Self::default();
 
@@ -113,6 +119,13 @@ impl AgentConfig {
     }
 
     /// Validates the configuration.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if:
+    /// - `max_iterations` is zero
+    /// - `model` is empty or whitespace-only
+    /// - `max_file_size` is zero
     pub fn validate(&self) -> Result<&Self, TaskError> {
         if self.max_iterations == 0 {
             return Err(TaskError::InvalidConfiguration {
@@ -139,6 +152,7 @@ impl AgentConfig {
     }
 
     /// Returns a builder for creating configuration.
+    #[must_use]
     pub fn builder() -> AgentConfigBuilder {
         AgentConfigBuilder::default()
     }
@@ -159,7 +173,7 @@ impl Default for AgentConfig {
     }
 }
 
-/// Builder for constructing AgentConfig.
+/// Builder for constructing `AgentConfig`.
 #[derive(Debug, Default)]
 pub struct AgentConfigBuilder {
     max_iterations: Option<u32>,
@@ -174,54 +188,66 @@ pub struct AgentConfigBuilder {
 
 impl AgentConfigBuilder {
     /// Sets the maximum number of iterations.
+    #[must_use]
     pub fn max_iterations(mut self, iterations: u32) -> Self {
         self.max_iterations = Some(iterations);
         self
     }
 
     /// Sets the AI model to use.
+    #[must_use]
     pub fn model(mut self, model: impl Into<String>) -> Self {
         self.model = Some(model.into());
         self
     }
 
     /// Sets the execution timeout.
+    #[must_use]
     pub fn timeout(mut self, timeout: Duration) -> Self {
         self.timeout = Some(timeout);
         self
     }
 
     /// Sets whether to enable verbose logging.
+    #[must_use]
     pub fn verbose(mut self, verbose: bool) -> Self {
         self.verbose = Some(verbose);
         self
     }
 
     /// Sets the maximum file size for reading.
+    #[must_use]
     pub fn max_file_size(mut self, size: u64) -> Self {
         self.max_file_size = Some(size);
         self
     }
 
     /// Sets the maximum directory traversal depth.
+    #[must_use]
     pub fn max_depth(mut self, depth: usize) -> Self {
         self.max_depth = Some(depth);
         self
     }
 
     /// Sets the shell command allowlist.
+    #[must_use]
     pub fn shell_allowlist(mut self, allowlist: Vec<String>) -> Self {
         self.shell_allowlist = Some(allowlist);
         self
     }
 
     /// Sets the tool-specific configuration.
+    #[must_use]
     pub fn tool_config(mut self, config: ToolConfig) -> Self {
         self.tool_config = Some(config);
         self
     }
 
     /// Builds the configuration, validating all values.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if validation fails (see [`AgentConfig::validate`] for details).
     pub fn build(self) -> Result<AgentConfig, TaskError> {
         let mut config = AgentConfig::default();
 
@@ -335,6 +361,7 @@ mod tests {
     }
 
     #[test]
+    #[allow(clippy::unwrap_used)] // Tests should fail fast on unrecoverable errors
     fn test_builder_pattern() {
         let config = AgentConfig::builder()
             .max_iterations(30)
