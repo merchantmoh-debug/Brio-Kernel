@@ -3,6 +3,13 @@ name = "brio-kernel"
 version = "0.1.0"
 edition = "2024"
 license = "MPL-2.0"
+description = "Core kernel for the Brio agent runtime"
+repository = "https://github.com/brio-labs/brio"
+readme = "../../README.md"
+keywords = ["agent", "runtime", "wasm", "brio"]
+categories = ["wasm", "development-tools"]
+authors = ["BrioCo <team@brio.build>"]
+
 
 [dependencies]
 tokio = { workspace = true }
@@ -48,6 +55,7 @@ prost = "0.14.3"
 tonic = "0.14.2"
 tonic-prost = "0.14.2"
 dunce = "1.0.5"
+parking_lot = "0.12"
 
 # pprof uses Unix-specific APIs (pthread, signals) - only enable on Unix
 [target.'cfg(unix)'.dependencies]
@@ -64,3 +72,6 @@ tonic-build = "0.14.2"
 prost-build = "0.14.3"
 protoc-bin-vendored = "3.0"
 tonic-prost-build = "0.14.2"
+
+[lints]
+workspace = true
