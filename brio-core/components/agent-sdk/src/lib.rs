@@ -8,7 +8,7 @@
 //! - **Error Handling**: Structured error hierarchy using `thiserror`
 //! - **Configuration**: Environment-based configuration with validation
 //! - **Tool System**: Type-safe tool execution with security validation
-//! - **Agent Engine**: ReAct loop implementation with state management
+//! - **Agent Engine**: [`ReAct`] loop implementation with state management
 //! - **Prompt Building**: Dynamic prompt construction for different agent types
 //!
 //! # Example
@@ -45,6 +45,7 @@
 #![deny(clippy::expect_used)]
 #![warn(clippy::pedantic)]
 
+pub mod agent;
 pub mod config;
 pub mod engine;
 pub mod error;
@@ -58,8 +59,8 @@ pub use engine::{AgentEngine, AgentEngineBuilder, InferenceFn};
 pub use error::{AgentError, FileSystemError, InferenceError, ResultExt, TaskError, ToolError};
 pub use prompt::PromptBuilder;
 pub use tools::{
-    SecureFilePath, Tool, ToolParser, ToolRegistry, Unvalidated, Validated, validate_file_size,
-    validate_path, validate_shell_command,
+    validate_file_size, validate_path, validate_shell_command, SecureFilePath, Tool, ToolParser,
+    ToolRegistry, Unvalidated, Validated,
 };
 pub use types::{
     ExecutionResult, InferenceResponse, Message, Role, TaskContext, ToolInvocation, ToolResult,
@@ -80,8 +81,13 @@ pub fn init_logging() -> Result<(), tracing::subscriber::SetGlobalDefaultError> 
 }
 
 /// Utility function to get the current working directory.
-pub fn current_dir() -> std::path::PathBuf {
-    std::env::current_dir().unwrap_or_else(|_| std::path::PathBuf::from("."))
+///
+/// # Errors
+///
+/// Returns an error if the current working directory cannot be determined
+/// (e.g., if the directory has been deleted).
+pub fn current_dir() -> Result<std::path::PathBuf, std::io::Error> {
+    std::env::current_dir()
 }
 
 #[cfg(test)]
@@ -89,6 +95,7 @@ mod tests {
     use super::*;
 
     #[test]
+    #[allow(clippy::const_is_empty)] // VERSION is a const string that's verified to be non-empty
     fn test_version() {
         assert!(!VERSION.is_empty());
         assert!(VERSION.contains('.'));
@@ -96,7 +103,7 @@ mod tests {
 
     #[test]
     fn test_current_dir() {
-        let dir = current_dir();
+        let dir = current_dir().expect("current dir should be accessible");
         assert!(dir.exists());
     }
 }
