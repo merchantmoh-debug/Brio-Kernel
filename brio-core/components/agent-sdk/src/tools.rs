@@ -4,31 +4,44 @@ use crate::error::{FileSystemError, ToolError};
 use crate::types::{ExecutionResult, ToolInvocation, ToolResult};
 use regex::{Captures, Regex};
 use std::collections::HashMap;
+use std::fmt::Write;
 use std::path::{Component, Path, PathBuf};
+use std::sync::Arc;
 use std::time::Instant;
 
 /// Trait for tools that can be executed by agents.
 pub trait Tool: Send + Sync {
     /// Returns the unique name of the tool.
-    fn name(&self) -> &str;
+    fn name(&self) -> &'static str;
 
     /// Returns the description of the tool in XML format.
-    fn description(&self) -> &str;
+    fn description(&self) -> &'static str;
 
     /// Executes the tool with the provided arguments.
-    fn execute(&self, args: HashMap<String, String>) -> Result<String, ToolError>;
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the tool execution fails or the arguments are invalid.
+    fn execute(&self, args: &HashMap<String, String>) -> Result<String, ToolError>;
 }
+
+/// Type alias for tool argument extractor functions.
+pub type ArgExtractor = Box<dyn Fn(&Captures) -> HashMap<String, String> + Send + Sync>;
 
 /// Parser for extracting tool invocations from agent responses.
 pub struct ToolParser {
     /// Compiled regex pattern.
     regex: Regex,
     /// Function to extract arguments from captures.
-    extractor: Box<dyn Fn(&Captures) -> HashMap<String, String> + Send + Sync>,
+    extractor: ArgExtractor,
 }
 
 impl ToolParser {
     /// Creates a new tool parser.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the regex pattern is invalid.
     pub fn new<E>(pattern: &str, extractor: E) -> Result<Self, regex::Error>
     where
         E: Fn(&Captures) -> HashMap<String, String> + Send + Sync + 'static,
@@ -40,7 +53,23 @@ impl ToolParser {
         })
     }
 
+    /// Creates a new tool parser from a known-valid regex pattern.
+    ///
+    /// # Panics
+    ///
+    /// Panics if the regex pattern is invalid. This should only be used
+    /// with compile-time validated patterns in static initializers.
+    #[inline]
+    #[allow(clippy::expect_used)] // Only used with compile-time validated patterns
+    pub fn new_unchecked<E>(pattern: &str, extractor: E) -> Self
+    where
+        E: Fn(&Captures) -> HashMap<String, String> + Send + Sync + 'static,
+    {
+        Self::new(pattern, extractor).expect("regex pattern should be valid at compile time")
+    }
+
     /// Parses tool invocations from the input text.
+    #[must_use]
     pub fn parse(&self, input: &str) -> Vec<ToolInvocation> {
         let mut results = Vec::new();
 
@@ -49,7 +78,7 @@ impl ToolParser {
                 let args = (self.extractor)(&caps);
 
                 results.push(ToolInvocation {
-                    name: self.extract_tool_name(&caps),
+                    name: Self::extract_tool_name(&caps),
                     args,
                     position: mat.start(),
                 });
@@ -61,7 +90,7 @@ impl ToolParser {
         results
     }
 
-    fn extract_tool_name(&self, caps: &Captures) -> String {
+    fn extract_tool_name(caps: &Captures) -> String {
         // First capture group is typically the tool name
         caps.get(1)
             .map(|m| m.as_str().to_string())
@@ -72,7 +101,7 @@ impl ToolParser {
 /// Registry for managing and executing tools.
 pub struct ToolRegistry {
     tools: HashMap<String, Box<dyn Tool>>,
-    parsers: HashMap<String, ToolParser>,
+    parsers: HashMap<String, Arc<ToolParser>>,
 }
 
 impl std::fmt::Debug for ToolRegistry {
@@ -86,6 +115,7 @@ impl std::fmt::Debug for ToolRegistry {
 
 impl ToolRegistry {
     /// Creates a new empty tool registry.
+    #[must_use]
     pub fn new() -> Self {
         Self {
             tools: HashMap::new(),
@@ -94,18 +124,25 @@ impl ToolRegistry {
     }
 
     /// Registers a tool with its parser.
-    pub fn register(&mut self, name: impl Into<String>, tool: Box<dyn Tool>, parser: ToolParser) {
+    pub fn register(
+        &mut self,
+        name: impl Into<String>,
+        tool: Box<dyn Tool>,
+        parser: impl Into<Arc<ToolParser>>,
+    ) {
         let name = name.into();
         self.tools.insert(name.clone(), tool);
-        self.parsers.insert(name, parser);
+        self.parsers.insert(name, parser.into());
     }
 
     /// Returns a list of available tool names.
+    #[must_use]
     pub fn available_tools(&self) -> Vec<&str> {
-        self.tools.keys().map(|s| s.as_str()).collect()
+        self.tools.keys().map(std::string::String::as_str).collect()
     }
 
     /// Returns help text for all registered tools.
+    #[must_use]
     pub fn help_text(&self) -> String {
         self.tools
             .values()
@@ -115,6 +152,10 @@ impl ToolRegistry {
     }
 
     /// Executes all tool invocations found in the input.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if a tool is not found or if tool execution fails.
     pub fn execute_all(&self, input: &str) -> Result<ExecutionResult, ToolError> {
         let mut collected_output = String::new();
         let mut is_done = false;
@@ -126,7 +167,7 @@ impl ToolRegistry {
         for (tool_name, parser) in &self.parsers {
             let mut parsed = parser.parse(input);
             for inv in &mut parsed {
-                inv.name = tool_name.clone();
+                inv.name.clone_from(tool_name);
             }
             invocations.extend(parsed);
         }
@@ -146,15 +187,16 @@ impl ToolRegistry {
 
             match self.execute_single(&invocation) {
                 Ok(result) => {
-                    collected_output.push_str(&format!(
-                        "✓ {}: {}\n",
+                    let _ = writeln!(
+                        collected_output,
+                        "✓ {}: {}",
                         invocation.name,
                         result.output.lines().next().unwrap_or(&result.output)
-                    ));
+                    );
                     tool_results.push(result);
                 }
                 Err(e) => {
-                    collected_output.push_str(&format!("✗ {} failed: {}\n", invocation.name, e));
+                    let _ = writeln!(collected_output, "✗ {} failed: {}", invocation.name, e);
                     return Err(e);
                 }
             }
@@ -179,7 +221,7 @@ impl ToolRegistry {
 
         let start = Instant::now();
 
-        match tool.execute(invocation.args.clone()) {
+        match tool.execute(&invocation.args) {
             Ok(output) => Ok(ToolResult {
                 success: true,
                 output,
@@ -200,6 +242,11 @@ impl Default for ToolRegistry {
 }
 
 /// Validates a file path to prevent path traversal attacks.
+///
+/// # Errors
+///
+/// Returns an error if the path contains parent directory references (`..`) or
+/// if the resolved path is outside the base directory.
 pub fn validate_path(path: &str, base_dir: &Path) -> Result<PathBuf, FileSystemError> {
     let path = Path::new(path);
 
@@ -217,7 +264,7 @@ pub fn validate_path(path: &str, base_dir: &Path) -> Result<PathBuf, FileSystemE
     let canonical_base = base_dir.canonicalize().map_err(|e| {
         FileSystemError::Io(std::io::Error::new(
             std::io::ErrorKind::NotFound,
-            format!("Base directory not found: {}", e),
+            format!("Base directory not found: {e}"),
         ))
     })?;
 
@@ -234,6 +281,11 @@ pub fn validate_path(path: &str, base_dir: &Path) -> Result<PathBuf, FileSystemE
 }
 
 /// Checks if a file size is within limits.
+///
+/// # Errors
+///
+/// Returns an error if the file metadata cannot be read or if the file size
+/// exceeds the specified maximum.
 pub fn validate_file_size(path: &Path, max_size: u64) -> Result<(), FileSystemError> {
     let metadata = std::fs::metadata(path).map_err(FileSystemError::Io)?;
     let size = metadata.len();
@@ -250,6 +302,11 @@ pub fn validate_file_size(path: &Path, max_size: u64) -> Result<(), FileSystemEr
 }
 
 /// Validates a shell command against an allowlist.
+///
+/// # Errors
+///
+/// Returns an error if the command is not in the allowlist or if it contains
+/// potentially dangerous characters (e.g., `;`, `&`, `|`, `>`, `<`, `` ` ``, `$`, `(`).
 pub fn validate_shell_command(
     command: &str,
     allowlist: &[impl AsRef<str>],
@@ -262,13 +319,13 @@ pub fn validate_shell_command(
     if !is_allowed {
         return Err(ToolError::Blocked {
             tool: "shell".to_string(),
-            reason: format!("Command '{}' is not in the allowed list", first_word),
+            reason: format!("Command '{first_word}' is not in the allowed list"),
         });
     }
 
     // Additional security: check for dangerous characters
-    let dangerous_chars = [';', '&', '|', '>', '<', '`', '$', '('];
-    if command.chars().any(|c| dangerous_chars.contains(&c)) {
+    let dangerous_chars = [b';', b'&', b'|', b'>', b'<', b'`', b'$', b'('];
+    if command.bytes().any(|c| dangerous_chars.contains(&c)) {
         return Err(ToolError::Blocked {
             tool: "shell".to_string(),
             reason: "Command contains potentially dangerous characters".to_string(),
@@ -290,13 +347,11 @@ pub struct SecureFilePath<State> {
 pub struct Unvalidated;
 
 /// Validated state.
-pub struct Validated {
-    #[allow(dead_code)]
-    base_dir: PathBuf,
-}
+pub struct Validated;
 
 impl SecureFilePath<Unvalidated> {
     /// Creates a new unvalidated file path.
+    #[must_use]
     pub fn new(path: impl Into<PathBuf>) -> Self {
         Self {
             path: path.into(),
@@ -305,8 +360,19 @@ impl SecureFilePath<Unvalidated> {
     }
 
     /// Validates the path against a base directory.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the path contains parent directory references or
+    /// if the resolved path is outside the base directory.
     pub fn validate(self, base_dir: &Path) -> Result<SecureFilePath<Validated>, FileSystemError> {
-        let validated_path = validate_path(self.path.to_str().unwrap_or(""), base_dir)?;
+        let path_str = self.path.to_str().ok_or_else(|| {
+            FileSystemError::InvalidPath(format!(
+                "Path contains invalid UTF-8: {}",
+                self.path.display()
+            ))
+        })?;
+        let validated_path = validate_path(path_str, base_dir)?;
 
         Ok(SecureFilePath {
             path: validated_path,
@@ -317,17 +383,28 @@ impl SecureFilePath<Unvalidated> {
 
 impl SecureFilePath<Validated> {
     /// Returns the validated path.
+    #[must_use]
     pub fn path(&self) -> &Path {
         &self.path
     }
 
     /// Reads the file content with size validation.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the file size exceeds the limit or if the file
+    /// cannot be read.
     pub fn read_with_limit(&self, max_size: u64) -> Result<String, FileSystemError> {
         validate_file_size(&self.path, max_size)?;
         std::fs::read_to_string(&self.path).map_err(FileSystemError::Io)
     }
 
     /// Writes content to the file.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if parent directories cannot be created or if the file
+    /// cannot be written.
     pub fn write(&self, content: &str) -> Result<(), FileSystemError> {
         // Create parent directories if needed
         if let Some(parent) = self.path.parent() {
@@ -338,9 +415,9 @@ impl SecureFilePath<Validated> {
 }
 
 #[cfg(test)]
+#[allow(clippy::unwrap_used)] // Tests should fail fast on unrecoverable errors
 mod tests {
     use super::*;
-    use std::io::Write;
 
     #[test]
     fn test_validate_path_traversal() {
@@ -375,27 +452,29 @@ mod tests {
 
     #[test]
     fn test_tool_registry() {
-        let mut registry = ToolRegistry::new();
-
         struct TestTool;
         impl Tool for TestTool {
-            fn name(&self) -> &str {
+            fn name(&self) -> &'static str {
                 "test"
             }
-            fn description(&self) -> &str {
+            fn description(&self) -> &'static str {
                 "<test />"
             }
-            fn execute(&self, _args: HashMap<String, String>) -> Result<String, ToolError> {
+            fn execute(&self, _args: &HashMap<String, String>) -> Result<String, ToolError> {
                 Ok("test result".to_string())
             }
         }
 
-        let parser = ToolParser::new(r"\u003ctest\s*/?\u003e", |_caps: &Captures| {
-            let mut args = HashMap::new();
-            args.insert("arg".to_string(), "value".to_string());
-            args
-        })
-        .unwrap();
+        let mut registry = ToolRegistry::new();
+
+        let parser = Arc::new(
+            ToolParser::new(r"\u003ctest\s*/?\u003e", |_caps: &Captures| {
+                let mut args = HashMap::new();
+                args.insert("arg".to_string(), "value".to_string());
+                args
+            })
+            .unwrap(),
+        );
 
         registry.register("test", Box::new(TestTool), parser);
         assert_eq!(registry.available_tools(), vec!["test"]);

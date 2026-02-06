@@ -41,11 +41,13 @@ impl Message {
     }
 
     /// Creates a new tool message.
+    #[must_use]
     pub fn tool(content: impl Into<String>) -> Self {
         Self::new(Role::Tool, content)
     }
 
     /// Adds metadata to the message.
+    #[must_use]
     pub fn with_metadata(mut self, key: impl Into<String>, value: impl Into<String>) -> Self {
         self.metadata
             .get_or_insert_with(HashMap::new)
@@ -88,12 +90,12 @@ pub struct InferenceResponse {
     pub model: String,
     /// Number of tokens used (if available).
     pub tokens_used: Option<u32>,
-    /// Completion reason (e.g., "stop", "length", "tool_calls").
+    /// Completion reason (e.g., "stop", "length", "`tool_calls`").
     pub finish_reason: Option<String>,
 }
 
 /// Task context containing task metadata and parameters.
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Default)]
 pub struct TaskContext {
     /// Unique identifier for the task.
     pub task_id: String,
@@ -117,40 +119,36 @@ impl TaskContext {
     }
 
     /// Adds input files to the context.
+    #[must_use]
     pub fn with_files(mut self, files: Vec<impl Into<String>>) -> Self {
-        self.input_files = files.into_iter().map(|f| f.into()).collect();
+        self.input_files = files.into_iter().map(std::convert::Into::into).collect();
         self
     }
 
     /// Adds metadata to the context.
+    #[must_use]
     pub fn with_metadata(mut self, metadata: serde_json::Value) -> Self {
         self.metadata = Some(metadata);
         self
     }
 
     /// Checks if the context has input files.
+    #[must_use]
     pub fn has_input_files(&self) -> bool {
         !self.input_files.is_empty()
     }
 
     /// Returns the number of input files.
+    #[must_use]
     pub fn file_count(&self) -> usize {
         self.input_files.len()
     }
 }
 
-impl Default for TaskContext {
-    fn default() -> Self {
-        Self {
-            task_id: String::new(),
-            description: String::new(),
-            input_files: Vec::new(),
-            metadata: None,
-        }
-    }
-}
-
 /// Tool invocation parsed from agent response.
+///
+/// Represents a tool call extracted from an agent's response, including the tool name,
+/// arguments, and position in the response for ordering multiple tool calls.
 #[derive(Debug, Clone, PartialEq)]
 pub struct ToolInvocation {
     /// Name of the tool to invoke.
@@ -162,6 +160,9 @@ pub struct ToolInvocation {
 }
 
 /// Result of tool execution.
+///
+/// Contains the outcome of a tool invocation, including success status,
+/// output content, and execution duration.
 #[derive(Debug)]
 pub struct ToolResult {
     /// Whether the execution was successful.
@@ -187,6 +188,7 @@ pub struct ExecutionResult {
 
 impl ExecutionResult {
     /// Creates a new execution result.
+    #[must_use]
     pub fn new(output: String) -> Self {
         Self {
             output,
@@ -197,13 +199,23 @@ impl ExecutionResult {
     }
 
     /// Marks the result as complete with a summary.
+    #[must_use]
     pub fn complete(mut self, summary: impl Into<String>) -> Self {
         self.is_complete = true;
         self.summary = Some(summary.into());
         self
     }
 
-    /// Adds a tool result.
+    /// Adds a tool result to the execution.
+    ///
+    /// # Arguments
+    ///
+    /// * `result` - The tool execution result to add.
+    ///
+    /// # Returns
+    ///
+    /// The modified `ExecutionResult` with the tool result appended.
+    #[must_use]
     pub fn add_tool_result(mut self, result: ToolResult) -> Self {
         self.tool_results.push(result);
         self
@@ -211,6 +223,7 @@ impl ExecutionResult {
 }
 
 #[cfg(test)]
+#[allow(clippy::expect_used)] // Tests should fail fast on unrecoverable errors
 mod tests {
     use super::*;
 
@@ -227,7 +240,7 @@ mod tests {
             .with_metadata("tool_call_id", "123")
             .with_metadata("timestamp", "2024-01-01");
 
-        let meta = msg.metadata.unwrap();
+        let meta = msg.metadata.expect("metadata should be present");
         assert_eq!(meta.get("tool_call_id"), Some(&"123".to_string()));
         assert_eq!(meta.get("timestamp"), Some(&"2024-01-01".to_string()));
     }
