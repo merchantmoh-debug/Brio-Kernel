@@ -1,11 +1,14 @@
-use anyhow::{Result, anyhow};
+use anyhow::{Context, Result, anyhow};
+use parking_lot::{Mutex, RwLock};
 use sqlx::{SqlitePool, sqlite::SqlitePoolOptions};
 use std::collections::HashMap;
 use std::sync::Arc;
+use thiserror::Error;
 use tokio::sync::mpsc::Sender;
 use tokio::sync::oneshot;
 
 use crate::inference::{LLMProvider, ProviderRegistry};
+use crate::infrastructure::config::SandboxSettings;
 use crate::mesh::events::EventBus;
 use crate::mesh::remote::RemoteRouter;
 use crate::mesh::types::{NodeId, NodeInfo};
@@ -13,15 +16,27 @@ use crate::mesh::{MeshMessage, Payload};
 use crate::registry::PluginRegistry;
 use crate::store::{PrefixPolicy, SqlStore};
 use crate::vfs::manager::SessionManager;
+use crate::vfs::SessionError;
 use crate::ws::{BroadcastMessage, Broadcaster, WsPatch};
 
-#[derive(Clone)]
-pub struct BrioHostState {
-    mesh_router: Arc<std::sync::RwLock<HashMap<String, Sender<MeshMessage>>>>,
+/// Errors related to permission checks.
+#[derive(Debug, Error)]
+pub enum PermissionError {
+    /// The required permission was not granted.
+    #[error("Permission denied: required '{permission}'")]
+    PermissionDenied {
+        /// The permission that was denied.
+        permission: String,
+    },
+}
+
+/// Inner state that can be cheaply cloned via Arc.
+struct BrioHostStateInner {
+    mesh_router: Arc<RwLock<HashMap<String, Sender<MeshMessage>>>>,
     remote_router: Option<RemoteRouter>,
     db_pool: SqlitePool,
     broadcaster: Broadcaster,
-    session_manager: Arc<std::sync::Mutex<SessionManager>>,
+    session_manager: Arc<Mutex<SessionManager>>,
     provider_registry: Arc<ProviderRegistry>,
     permissions: Arc<std::collections::HashSet<String>>,
     plugin_registry: Option<Arc<PluginRegistry>>,
@@ -29,8 +44,18 @@ pub struct BrioHostState {
     current_plugin_id: Option<String>,
 }
 
+#[derive(Clone)]
+pub struct BrioHostState {
+    inner: Arc<BrioHostStateInner>,
+}
+
 impl BrioHostState {
-    /// Creates a new BrioHostState with a pre-configured provider registry.
+    /// Creates a new `BrioHostState` with a pre-configured provider registry.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the database connection fails or if the session manager
+    /// cannot be initialized.
     pub async fn new(
         db_url: &str,
         registry: ProviderRegistry,
@@ -40,22 +65,30 @@ impl BrioHostState {
         let pool = SqlitePoolOptions::new().connect(db_url).await?;
 
         Ok(Self {
-            mesh_router: Arc::new(std::sync::RwLock::new(HashMap::new())),
-            remote_router: None, // Default to standalone mode
-            db_pool: pool,
-            broadcaster: Broadcaster::new(),
-            session_manager: Arc::new(std::sync::Mutex::new(
-                SessionManager::new(sandbox).map_err(|e| anyhow!(e))?,
-            )),
-            provider_registry: Arc::new(registry),
-            permissions: Arc::new(std::collections::HashSet::new()),
-            plugin_registry,
-            event_bus: Arc::new(EventBus::new()),
-            current_plugin_id: None,
+            inner: Arc::new(BrioHostStateInner {
+                mesh_router: Arc::new(RwLock::new(HashMap::new())),
+                remote_router: None, // Default to standalone mode
+                db_pool: pool,
+                broadcaster: Broadcaster::new(),
+                session_manager: Arc::new(Mutex::new(
+                    SessionManager::new(&sandbox)
+                        .context("Failed to initialize session manager")?,
+                )),
+                provider_registry: Arc::new(registry),
+                permissions: Arc::new(std::collections::HashSet::new()),
+                plugin_registry,
+                event_bus: Arc::new(EventBus::new()),
+                current_plugin_id: None,
+            }),
         })
     }
 
-    /// Creates a new BrioHostState with distributed mesh support
+    /// Creates a new `BrioHostState` with distributed mesh support.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the database connection fails or if the session manager
+    /// cannot be initialized.
     pub async fn new_distributed(
         db_url: &str,
         registry: ProviderRegistry,
@@ -67,62 +100,98 @@ impl BrioHostState {
         let remote_router = RemoteRouter::new();
 
         Ok(Self {
-            mesh_router: Arc::new(std::sync::RwLock::new(HashMap::new())),
-            remote_router: Some(remote_router),
-            db_pool: pool,
-            broadcaster: Broadcaster::new(),
-            session_manager: Arc::new(std::sync::Mutex::new(
-                SessionManager::new(sandbox).map_err(|e| anyhow!(e))?,
-            )),
-            provider_registry: Arc::new(registry),
-            permissions: Arc::new(std::collections::HashSet::new()),
-            plugin_registry,
-            event_bus: Arc::new(EventBus::new()),
-            current_plugin_id: None,
+            inner: Arc::new(BrioHostStateInner {
+                mesh_router: Arc::new(RwLock::new(HashMap::new())),
+                remote_router: Some(remote_router),
+                db_pool: pool,
+                broadcaster: Broadcaster::new(),
+                session_manager: Arc::new(Mutex::new(
+                    SessionManager::new(&sandbox)
+                        .context("Failed to initialize session manager in distributed mode")?,
+                )),
+                provider_registry: Arc::new(registry),
+                permissions: Arc::new(std::collections::HashSet::new()),
+                plugin_registry,
+                event_bus: Arc::new(EventBus::new()),
+                current_plugin_id: None,
+            }),
         })
     }
 
-    /// Creates a new BrioHostState with a single provider (backward compatible).
+    /// Creates a new `BrioHostState` with a single provider (backward compatible).
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the database connection fails or if the session manager
+    /// cannot be initialized.
     pub async fn with_provider(db_url: &str, provider: Box<dyn LLMProvider>) -> Result<Self> {
         let registry = ProviderRegistry::new();
         registry.register_arc("default", Arc::from(provider));
         registry.set_default("default");
-        Self::new(db_url, registry, None, Default::default()).await
+        Self::new(db_url, registry, None, SandboxSettings::default()).await
     }
 
-    pub fn register_component(&self, id: String, sender: Sender<MeshMessage>) {
-        let mut router = self.mesh_router.write().expect("RwLock poisoned");
-        router.insert(id, sender);
+    /// Registers a component with the mesh router.
+    ///
+    pub fn register_component(&self, id: impl Into<String>, sender: Sender<MeshMessage>) {
+        let mut router = self.inner.mesh_router.write();
+        router.insert(id.into(), sender);
     }
 
+    /// Registers a remote node with the mesh router.
+    ///
+    /// This allows the host to route messages to components running on remote nodes.
     pub fn register_remote_node(&self, info: NodeInfo) {
-        if let Some(router) = &self.remote_router {
+        if let Some(router) = &self.inner.remote_router {
             router.register_node(info);
         }
     }
 
+    /// Returns a reference to the database connection pool.
+    #[must_use]
     pub fn db(&self) -> &SqlitePool {
-        &self.db_pool
+        &self.inner.db_pool
     }
 
-    pub fn get_store(&self, _scope: &str) -> SqlStore {
-        SqlStore::new(self.db_pool.clone(), Box::new(PrefixPolicy))
+    /// Creates a new SQL store instance for the given scope.
+    ///
+    /// The store provides key-value storage with prefix-based namespacing.
+    #[must_use]
+    pub fn store(&self, _scope: &str) -> SqlStore {
+        SqlStore::new(self.inner.db_pool.clone(), Box::new(PrefixPolicy))
     }
 
+    /// Returns a reference to the WebSocket broadcaster for real-time updates.
+    #[must_use]
     pub fn broadcaster(&self) -> &Broadcaster {
-        &self.broadcaster
+        &self.inner.broadcaster
     }
 
+    /// Broadcasts a WebSocket patch to all connected clients.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the broadcast channel is closed or full.
     pub fn broadcast_patch(&self, patch: WsPatch) -> Result<()> {
-        self.broadcaster
-            .broadcast(BroadcastMessage::Patch(patch))
-            .map_err(|e| anyhow!("Broadcast failed: {}", e))
+        self.broadcaster()
+            .broadcast(BroadcastMessage::Patch(Box::new(patch)))
+            .map_err(|e| anyhow!("Broadcast failed: {e}"))
     }
 
+    /// Calls a target component through the mesh network.
+    ///
+    /// Attempts local routing first, then remote routing, and finally on-demand plugin execution.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if:
+    /// - The target component is not found locally or remotely
+    /// - The message send operation fails
+    /// - Plugin execution fails (for agent targets)
     pub async fn mesh_call(&self, target: &str, method: &str, payload: Payload) -> Result<Payload> {
         // 1. Try local routing first
         let sender = {
-            let router = self.mesh_router.read().expect("RwLock poisoned");
+            let router = self.inner.mesh_router.read();
             router.get(target).cloned()
         };
 
@@ -138,17 +207,17 @@ impl BrioHostState {
             sender
                 .send(message)
                 .await
-                .map_err(|e| anyhow!("Failed to send message to target '{}': {}", target, e))?;
+                .map_err(|e| anyhow!("Failed to send message to target '{target}': {e}"))?;
             let response = reply_rx
                 .await
-                .map_err(|e| anyhow!("Failed to receive reply from target '{}': {}", target, e))?;
-            return response.map_err(|e| anyhow!("Target '{}' returned error: {}", target, e));
+                .map_err(|e| anyhow!("Failed to receive reply from target '{target}': {e}"))?;
+            return response.map_err(|e| anyhow!("Target '{target}' returned error: {e}"));
         }
 
         // 2. Try remote routing if enabled and target is formatted as "node_id/component"
         // Explicit remote addressing: "node_id/component_id"
         if let (Some(router), Some((node_id_str, component))) =
-            (&self.remote_router, target.split_once('/'))
+            (&self.inner.remote_router, target.split_once('/'))
         {
             let node_id = NodeId::from(node_id_str.to_string());
 
@@ -164,63 +233,111 @@ impl BrioHostState {
         }
 
         // 3. Try on-demand plugin execution
-        #[allow(clippy::collapsible_if)]
-        // Cannot collapse effectively due to dependency on `registry` for engine access
-        if let Some(registry) = &self.plugin_registry {
+        // We expect this lint because collapsing the nested if would require duplicating the 
+        // `registry` variable binding or restructuring the logic significantly, reducing readability.
+        #[expect(clippy::collapsible_if)]
+        if let Some(registry) = &self.inner.plugin_registry {
             if let Some(metadata) = registry.get(target) {
                 use crate::engine::runner::{AgentRunner, TaskContext};
 
                 let context: TaskContext = match payload {
                     Payload::Json(s) => serde_json::from_str(&s)
-                        .map_err(|e| anyhow!("Invalid task context: {}", e))?,
-                    _ => return Err(anyhow!("Agents only support JSON payload")),
+                        .map_err(|e| anyhow!("Invalid task context: {e}"))?,
+                    Payload::Binary(_) => return Err(anyhow!("Agents only support JSON payload")),
                 };
 
                 let runner = AgentRunner::new(registry.engine().clone());
                 let result = runner
                     .run_agent(&metadata.path, self.clone(), context)
                     .await?;
-                return Ok(Payload::Json(result));
+                return Ok(Payload::Json(Box::new(result)));
             }
         }
 
         Err(anyhow!(
-            "Target component '{}' not found. Ensure format is 'component' (local) or 'node_id/component' (remote).",
-            target
+            "Target component '{target}' not found. Ensure format is 'component' (local) or 'node_id/component' (remote)."
         ))
     }
 
-    pub fn begin_session(&self, base_path: String) -> Result<String, String> {
-        let mut manager = self.session_manager.lock().expect("Mutex poisoned");
+    /// Begins a new VFS session for the given base path.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the session cannot be created (see [`SessionManager::begin_session`]).
+    pub fn begin_session(&self, base_path: &str) -> Result<String, SessionError> {
+        let mut manager = self.inner.session_manager.lock();
         manager.begin_session(base_path)
     }
 
-    pub fn commit_session(&self, session_id: String) -> Result<(), String> {
-        let mut manager = self.session_manager.lock().expect("Mutex poisoned");
+    /// Commits changes from a VFS session back to the base directory.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the session cannot be committed (see [`SessionManager::commit_session`]).
+    pub fn commit_session(&self, session_id: &str) -> Result<(), SessionError> {
+        let mut manager = self.inner.session_manager.lock();
         manager.commit_session(session_id)
     }
 
+    /// Rolls back a session, discarding all changes.
+    ///
+    /// # Arguments
+    /// * `session_id` - The session identifier returned by begin_session
+    ///
+    /// # Errors
+    /// Returns an error if the session doesn't exist or cleanup fails.
+    pub fn rollback_session(&self, session_id: &str) -> Result<(), SessionError> {
+        let mut manager = self.inner.session_manager.lock();
+        manager.rollback_session(session_id)
+    }
+
     /// Returns the provider registry for multi-model access.
+    #[must_use]
     pub fn registry(&self) -> Arc<ProviderRegistry> {
-        self.provider_registry.clone()
+        self.inner.provider_registry.clone()
     }
 
     /// Returns a specific LLM provider by name.
+    ///
+    /// # Arguments
+    ///
+    /// * `name` - The registered name of the provider to retrieve.
+    ///
+    /// # Returns
+    ///
+    /// An `Arc` to the provider if found, or `None` if no provider with that name exists.
+    #[must_use]
     pub fn inference_by_name(&self, name: &str) -> Option<Arc<dyn LLMProvider>> {
-        self.provider_registry.get(name)
+        self.inner.provider_registry.get(name)
     }
 
-    /// Returns the default LLM provider (backward compatible).
+    /// Returns the default LLM provider.
+    ///
+    /// This is a backward-compatible convenience method that returns the default
+    /// configured provider, or `None` if no default is set.
+    #[must_use]
     pub fn inference(&self) -> Option<Arc<dyn LLMProvider>> {
-        self.provider_registry.get_default()
+        self.inner.provider_registry.default_provider()
     }
 
     /// Creates a new view of the host state with restricted permissions and plugin context.
+    #[must_use] 
     pub fn with_plugin_context(&self, plugin_id: String, permissions: Vec<String>) -> Self {
-        let mut new_state = self.clone();
-        new_state.permissions = Arc::new(permissions.into_iter().collect());
-        new_state.current_plugin_id = Some(plugin_id);
-        new_state
+        let inner = BrioHostStateInner {
+            mesh_router: Arc::clone(&self.inner.mesh_router),
+            remote_router: self.inner.remote_router.clone(),
+            db_pool: self.inner.db_pool.clone(),
+            broadcaster: self.inner.broadcaster.clone(),
+            session_manager: Arc::clone(&self.inner.session_manager),
+            provider_registry: Arc::clone(&self.inner.provider_registry),
+            permissions: Arc::new(permissions.into_iter().collect()),
+            plugin_registry: self.inner.plugin_registry.clone(),
+            event_bus: Arc::clone(&self.inner.event_bus),
+            current_plugin_id: Some(plugin_id),
+        };
+        Self {
+            inner: Arc::new(inner),
+        }
     }
 
     /// Checks if a permission is granted.
@@ -228,22 +345,30 @@ impl BrioHostState {
     /// # Errors
     /// Returns error if permission is denied.
     pub fn check_permission(&self, permission: &str) -> Result<(), String> {
-        if self.permissions.contains(permission) {
+        if self.inner.permissions.contains(permission) {
             Ok(())
         } else {
-            Err(format!("Permission denied: required '{}'", permission))
+            Err(PermissionError::PermissionDenied {
+                permission: permission.to_string(),
+            }.to_string())
         }
     }
 
+    /// Returns a reference to the event bus for mesh communication.
+    #[must_use]
     pub fn event_bus(&self) -> &EventBus {
-        &self.event_bus
+        &self.inner.event_bus
     }
 
+    /// Returns the ID of the currently executing plugin, if any.
+    #[must_use]
     pub fn current_plugin_id(&self) -> Option<&str> {
-        self.current_plugin_id.as_deref()
+        self.inner.current_plugin_id.as_deref()
     }
 
+    /// Returns the plugin registry if available.
+    #[must_use]
     pub fn plugin_registry(&self) -> Option<Arc<PluginRegistry>> {
-        self.plugin_registry.clone()
+        self.inner.plugin_registry.clone()
     }
 }
