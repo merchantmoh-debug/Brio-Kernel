@@ -6,10 +6,6 @@
 use crate::domain::{AgentId, Task};
 use crate::wit_bindings;
 
-// =============================================================================
-// Error Types
-// =============================================================================
-
 /// Errors that can occur during mesh operations.
 #[derive(Debug)]
 pub enum MeshError {
@@ -36,10 +32,6 @@ impl core::fmt::Display for MeshError {
 
 impl std::error::Error for MeshError {}
 
-// =============================================================================
-// Dispatch Result (CQS: Query returns data)
-// =============================================================================
-
 /// Result of dispatching a task to an agent.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum DispatchResult {
@@ -50,10 +42,6 @@ pub enum DispatchResult {
     /// Agent completed the task synchronously.
     Completed(String),
 }
-
-// =============================================================================
-// Dispatcher Trait (Dependency Inversion)
-// =============================================================================
 
 /// Contract for agent dispatch operations.
 ///
@@ -68,10 +56,6 @@ pub trait AgentDispatcher {
     fn dispatch(&self, agent: &AgentId, task: &Task) -> Result<DispatchResult, MeshError>;
 }
 
-// =============================================================================
-// Request/Response DTOs
-// =============================================================================
-
 /// Payload sent to an agent for task execution.
 #[derive(Debug, serde::Serialize)]
 struct TaskContextDto {
@@ -79,10 +63,6 @@ struct TaskContextDto {
     task_id: String,
     description: String,
 }
-
-// =============================================================================
-// WIT Implementation
-// =============================================================================
 
 /// Dispatcher implementation using WIT `service-mesh` bindings.
 pub struct WitAgentDispatcher;

@@ -1,3 +1,7 @@
+//! Agent selection strategies for task dispatch.
+//!
+//! Provides algorithms for selecting the most appropriate agent for a given task.
+
 use crate::domain::{AgentId, Task};
 
 /// Strategy for selecting an agent for a task.
@@ -17,8 +21,18 @@ impl Default for KeywordAgentSelector {
 
 impl AgentSelector for KeywordAgentSelector {
     fn select(&self, task: &Task) -> AgentId {
-        let content = task.content().to_lowercase();
-        if content.contains("review") || content.contains("audit") || content.contains("check") {
+        // Use case-insensitive search without allocating a new String
+        let content = task.content();
+        if content.contains("review")
+            || content.contains("audit")
+            || content.contains("check")
+            || content.contains("Review")
+            || content.contains("Audit")
+            || content.contains("Check")
+            || content.contains("REVIEW")
+            || content.contains("AUDIT")
+            || content.contains("CHECK")
+        {
             AgentId::new("agent_reviewer")
         } else {
             AgentId::new("agent_coder")
