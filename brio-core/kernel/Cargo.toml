@@ -9,7 +9,7 @@ readme = "../../README.md"
 keywords = ["agent", "runtime", "wasm", "brio"]
 categories = ["wasm", "development-tools"]
 authors = ["BrioCo <team@brio.build>"]
-
+rust-version = "1.93"
 
 [dependencies]
 tokio = { workspace = true }

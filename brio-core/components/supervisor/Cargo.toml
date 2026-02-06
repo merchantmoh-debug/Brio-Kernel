@@ -9,6 +9,7 @@ readme = "../../../README.md"
 keywords = ["agent", "supervisor", "brio", "orchestration"]
 categories = ["wasm", "development-tools"]
 authors = ["BrioCo <team@brio.build>"]
+rust-version = "1.93"
 
 [lib]
 crate-type = ["cdylib", "rlib"]
