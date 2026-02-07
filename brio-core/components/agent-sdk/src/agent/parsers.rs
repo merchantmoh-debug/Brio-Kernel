@@ -92,6 +92,42 @@ static SHELL_PARSER: LazyLock<Arc<ToolParser>> = LazyLock::new(|| {
     ))
 });
 
+/// Parser for the `create_branch` tool.
+///
+/// Matches: `<create_branch name="branch-name" [parent="parent-id"] [inherit_config="true"] />`
+static CREATE_BRANCH_PARSER: LazyLock<Arc<ToolParser>> = LazyLock::new(|| {
+    Arc::new(ToolParser::new_unchecked(
+        r#"<create_branch\s+name="([^"]+)"(?:\s+parent="([^"]*)")?(?:\s+inherit_config="([^"]*)")?\s*/?>"#,
+        |caps: &Captures| {
+            let mut args = HashMap::new();
+            if let Some(m) = caps.get(1) {
+                args.insert("name".to_string(), m.as_str().to_string());
+            }
+            if let Some(m) = caps.get(2) {
+                if !m.as_str().is_empty() {
+                    args.insert("parent".to_string(), m.as_str().to_string());
+                }
+            }
+            if let Some(m) = caps.get(3) {
+                if !m.as_str().is_empty() {
+                    args.insert("inherit_config".to_string(), m.as_str().to_string());
+                }
+            }
+            args
+        },
+    ))
+});
+
+/// Parser for the `list_branches` tool.
+///
+/// Matches: `<list_branches />` or `<list_branches/>`
+static LIST_BRANCHES_PARSER: LazyLock<Arc<ToolParser>> = LazyLock::new(|| {
+    Arc::new(ToolParser::new_unchecked(
+        r"<list_branches\s*/?>",
+        |_caps: &Captures| HashMap::new(),
+    ))
+});
+
 /// Returns a clone of the done tool parser.
 ///
 /// This parser extracts the summary text from `<done>` tags.
@@ -131,6 +167,22 @@ pub fn create_write_parser() -> Arc<ToolParser> {
 #[must_use]
 pub fn create_shell_parser() -> Arc<ToolParser> {
     Arc::clone(&SHELL_PARSER)
+}
+
+/// Returns a clone of the `create_branch` tool parser.
+///
+/// This parser extracts branch creation arguments from `<create_branch>` tags.
+#[must_use]
+pub fn create_create_branch_parser() -> Arc<ToolParser> {
+    Arc::clone(&CREATE_BRANCH_PARSER)
+}
+
+/// Returns a clone of the `list_branches` tool parser.
+///
+/// This parser matches `<list_branches />` tags.
+#[must_use]
+pub fn create_list_branches_parser() -> Arc<ToolParser> {
+    Arc::clone(&LIST_BRANCHES_PARSER)
 }
 
 #[cfg(test)]

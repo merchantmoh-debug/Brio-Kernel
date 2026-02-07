@@ -4,8 +4,11 @@ use std::fmt;
 /// Error type for validation failures
 #[derive(Debug, Clone, PartialEq)]
 pub enum ValidationError {
+    /// The node ID is empty or contains only whitespace.
     EmptyId,
+    /// The node address is empty or contains only whitespace.
     EmptyAddress,
+    /// The address format is invalid with a descriptive message.
     InvalidAddressFormat(String),
 }
 

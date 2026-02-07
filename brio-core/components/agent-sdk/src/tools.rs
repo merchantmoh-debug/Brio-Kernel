@@ -1,5 +1,7 @@
 //! Tool system with Type-State pattern and security validation.
 
+pub mod constants;
+
 use crate::error::{FileSystemError, ToolError};
 use crate::types::{ExecutionResult, ToolInvocation, ToolResult};
 use regex::{Captures, Regex};
@@ -195,7 +197,7 @@ impl ToolRegistry {
 
         // Execute each invocation
         for invocation in invocations {
-            if invocation.name == "done" {
+            if invocation.name == constants::control::DONE {
                 is_done = true;
                 if let Some(summary) = invocation.args.get("summary") {
                     final_summary = Some(summary.clone());
@@ -336,7 +338,7 @@ pub fn validate_shell_command(
 
     if !is_allowed {
         return Err(ToolError::Blocked {
-            tool: "shell".to_string(),
+            tool: constants::shell::SHELL.to_string(),
             reason: format!("Command '{first_word}' is not in the allowed list"),
         });
     }
@@ -345,7 +347,7 @@ pub fn validate_shell_command(
     let dangerous_chars = [b';', b'&', b'|', b'>', b'<', b'`', b'$', b'('];
     if command.bytes().any(|c| dangerous_chars.contains(&c)) {
         return Err(ToolError::Blocked {
-            tool: "shell".to_string(),
+            tool: constants::shell::SHELL.to_string(),
             reason: "Command contains potentially dangerous characters".to_string(),
         });
     }

@@ -48,7 +48,7 @@ pub enum DispatchResult {
 /// This trait abstracts the mesh layer, enabling:
 /// - Unit testing with mock implementations
 /// - Swapping transport mechanisms without changing business logic
-pub trait AgentDispatcher {
+pub trait AgentDispatcher: Send + Sync {
     /// Dispatches a task to the specified agent.
     ///
     /// # Errors

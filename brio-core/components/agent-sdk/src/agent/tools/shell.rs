@@ -4,6 +4,7 @@
 //! validation to prevent command injection attacks.
 
 use crate::error::ToolError;
+use crate::tools::constants::shell;
 use crate::tools::{validate_shell_command, Tool};
 use std::borrow::Cow;
 use std::collections::HashMap;
@@ -66,7 +67,7 @@ impl ShellTool {
 
 impl Tool for ShellTool {
     fn name(&self) -> Cow<'static, str> {
-        Cow::Borrowed("shell")
+        Cow::Borrowed(shell::SHELL)
     }
 
     fn description(&self) -> Cow<'static, str> {
@@ -77,13 +78,13 @@ impl Tool for ShellTool {
         let command = args
             .get("command")
             .ok_or_else(|| ToolError::InvalidArguments {
-                tool: "shell".to_string(),
+                tool: shell::SHELL.to_string(),
                 reason: "Missing 'command' argument".to_string(),
             })?;
 
         // Validate command against allowlist
         validate_shell_command(command, &self.allowlist).map_err(|e| ToolError::Blocked {
-            tool: "shell".to_string(),
+            tool: shell::SHELL.to_string(),
             reason: e.to_string(),
         })?;
 
@@ -93,7 +94,7 @@ impl Tool for ShellTool {
             .arg(command)
             .output()
             .map_err(|e| ToolError::ExecutionFailed {
-                tool: "shell".to_string(),
+                tool: shell::SHELL.to_string(),
                 source: Box::new(e),
             })?;
 
@@ -105,7 +106,7 @@ impl Tool for ShellTool {
             Ok(stdout.to_string())
         } else {
             Err(ToolError::ExecutionFailed {
-                tool: "shell".to_string(),
+                tool: shell::SHELL.to_string(),
                 source: Box::new(std::io::Error::other(format!(
                     "Exit code {:?}: {}",
                     output.status.code(),
@@ -123,13 +124,13 @@ mod tests {
     #[test]
     fn test_shell_tool_name() {
         let tool = ShellTool::new(vec!["ls".to_string()]);
-        assert_eq!(tool.name(), "shell");
+        assert_eq!(tool.name(), shell::SHELL);
     }
 
     #[test]
     fn test_shell_tool_description() {
         let tool = ShellTool::new(vec![]);
-        assert!(tool.description().contains("shell"));
+        assert!(tool.description().contains(shell::SHELL));
         assert!(tool.description().contains("command"));
     }
 
@@ -149,7 +150,7 @@ mod tests {
         assert!(matches!(
             result,
             Err(ToolError::InvalidArguments { tool, reason })
-            if tool == "shell" && reason.contains("command")
+            if tool == shell::SHELL && reason.contains("command")
         ));
     }
 
@@ -164,7 +165,7 @@ mod tests {
         assert!(matches!(
             result,
             Err(ToolError::Blocked { tool, reason })
-            if tool == "shell" && reason.contains("allowed")
+            if tool == shell::SHELL && reason.contains("allowed")
         ));
     }
 
@@ -180,7 +181,7 @@ mod tests {
         assert!(matches!(
             result,
             Err(ToolError::Blocked { tool, reason })
-            if tool == "shell" && reason.contains("allowed")
+            if tool == shell::SHELL && reason.contains("allowed")
         ));
     }
 
@@ -198,7 +199,7 @@ mod tests {
         assert!(matches!(
             result,
             Err(ToolError::Blocked { tool, reason })
-            if tool == "shell" && reason.contains("dangerous")
+            if tool == shell::SHELL && reason.contains("dangerous")
         ));
     }
 
@@ -213,7 +214,7 @@ mod tests {
         assert!(matches!(
             result,
             Err(ToolError::Blocked { tool, reason })
-            if tool == "shell" && reason.contains("dangerous")
+            if tool == shell::SHELL && reason.contains("dangerous")
         ));
     }
 
@@ -228,7 +229,7 @@ mod tests {
         assert!(matches!(
             result,
             Err(ToolError::Blocked { tool, reason })
-            if tool == "shell" && reason.contains("dangerous")
+            if tool == shell::SHELL && reason.contains("dangerous")
         ));
     }
 
@@ -243,7 +244,7 @@ mod tests {
         assert!(matches!(
             result,
             Err(ToolError::Blocked { tool, reason })
-            if tool == "shell" && reason.contains("dangerous")
+            if tool == shell::SHELL && reason.contains("dangerous")
         ));
     }
 

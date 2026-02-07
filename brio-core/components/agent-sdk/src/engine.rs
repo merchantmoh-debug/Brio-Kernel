@@ -255,6 +255,7 @@ impl Default for AgentEngineBuilder {
 mod tests {
     use super::*;
     use crate::error::ToolError;
+    use crate::tools::constants::control;
     use crate::tools::{Tool, ToolParser};
     use crate::types::TaskContext;
     use regex::Captures;
@@ -379,8 +380,8 @@ mod tests {
 
     fn create_registry_with_done_tool() -> ToolRegistry {
         let mut registry = ToolRegistry::new();
-        let done_tool = Box::new(MockTool::new("done"));
-        registry.register("done", done_tool, create_done_parser());
+        let done_tool = Box::new(MockTool::new(control::DONE));
+        registry.register(control::DONE, done_tool, create_done_parser());
         registry
     }
 
@@ -456,8 +457,8 @@ mod tests {
         let mock_tool = Box::new(MockTool::new("mock_tool"));
         registry.register("mock_tool", mock_tool, create_mock_parser("mock_tool"));
 
-        let done_tool = Box::new(MockTool::new("done"));
-        registry.register("done", done_tool, create_done_parser());
+        let done_tool = Box::new(MockTool::new(control::DONE));
+        registry.register(control::DONE, done_tool, create_done_parser());
 
         let config = AgentConfig::default();
         let mut engine = AgentEngine::new(&ctx, registry, config).unwrap();
@@ -581,8 +582,8 @@ mod tests {
         let mock_tool = Box::new(MockTool::new("mock_tool"));
         registry.register("mock_tool", mock_tool, create_mock_parser("mock_tool"));
 
-        let done_tool = Box::new(MockTool::new("done"));
-        registry.register("done", done_tool, create_done_parser());
+        let done_tool = Box::new(MockTool::new(control::DONE));
+        registry.register(control::DONE, done_tool, create_done_parser());
 
         let config = AgentConfig::default();
         let mut engine = AgentEngine::new(&ctx, registry, config).unwrap();

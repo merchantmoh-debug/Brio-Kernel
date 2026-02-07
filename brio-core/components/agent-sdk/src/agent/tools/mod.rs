@@ -9,6 +9,7 @@
 //! - **Control Tools**: [`DoneTool`] - Mark task completion
 //! - **File System Tools**: [`ReadFileTool`], [`WriteFileTool`], [`ListDirectoryTool`]
 //! - **Shell Tools**: [`ShellTool`] - Execute shell commands with security
+//! - **Branch Tools**: [`CreateBranchTool`], [`ListBranchesTool`] - Manage branches
 //!
 //! # Example
 //!
@@ -31,10 +32,15 @@
 //! registry.register("shell", Box::new(ShellTool::new(allowlist)), create_shell_parser());
 //! ```
 
+pub mod branch;
 pub mod control;
 pub mod fs;
 pub mod shell;
 
+pub use branch::{
+    BranchCreationCallback, BranchCreationConfig, BranchCreationResult, BranchId, BranchInfo,
+    BranchToolError, CreateBranchTool, ListBranchesTool,
+};
 pub use control::DoneTool;
 pub use fs::{ListDirectoryTool, ReadFileTool, WriteFileTool};
 pub use shell::ShellTool;

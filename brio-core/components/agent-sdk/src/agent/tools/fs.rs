@@ -5,6 +5,7 @@
 //! error handling and resource limits.
 
 use crate::error::{FileSystemError, ToolError};
+use crate::tools::constants::fs;
 use crate::tools::{validate_file_size, validate_path, Tool};
 use std::borrow::Cow;
 use std::collections::HashMap;
@@ -49,7 +50,7 @@ impl ReadFileTool {
 
 impl Tool for ReadFileTool {
     fn name(&self) -> Cow<'static, str> {
-        Cow::Borrowed("read_file")
+        Cow::Borrowed(fs::READ_FILE)
     }
 
     fn description(&self) -> Cow<'static, str> {
@@ -60,19 +61,19 @@ impl Tool for ReadFileTool {
         let path_str = args
             .get("path")
             .ok_or_else(|| ToolError::InvalidArguments {
-                tool: "read_file".to_string(),
+                tool: fs::READ_FILE.to_string(),
                 reason: "Missing 'path' argument".to_string(),
             })?;
 
         // Get current working directory as base
         let base_dir = std::env::current_dir().map_err(|e| ToolError::ExecutionFailed {
-            tool: "read_file".to_string(),
+            tool: fs::READ_FILE.to_string(),
             source: Box::new(e),
         })?;
 
         // Validate path to prevent traversal attacks
         let path = validate_path(path_str, &base_dir).map_err(|e| ToolError::ExecutionFailed {
-            tool: "read_file".to_string(),
+            tool: fs::READ_FILE.to_string(),
             source: Box::new(e),
         })?;
 
@@ -80,19 +81,19 @@ impl Tool for ReadFileTool {
         validate_file_size(&path, self.max_size).map_err(|e| match e {
             FileSystemError::FileTooLarge { size, max_size, .. } => {
                 ToolError::ResourceLimitExceeded {
-                    tool: "read_file".to_string(),
+                    tool: fs::READ_FILE.to_string(),
                     resource: format!("file size ({size} bytes, max: {max_size})"),
                 }
             }
             _ => ToolError::ExecutionFailed {
-                tool: "read_file".to_string(),
+                tool: fs::READ_FILE.to_string(),
                 source: Box::new(e),
             },
         })?;
 
         // Read file content
         std::fs::read_to_string(&path).map_err(|e| ToolError::ExecutionFailed {
-            tool: "read_file".to_string(),
+            tool: fs::READ_FILE.to_string(),
             source: Box::new(e),
         })
     }
@@ -124,7 +125,7 @@ pub struct WriteFileTool;
 
 impl Tool for WriteFileTool {
     fn name(&self) -> Cow<'static, str> {
-        Cow::Borrowed("write_file")
+        Cow::Borrowed(fs::WRITE_FILE)
     }
 
     fn description(&self) -> Cow<'static, str> {
@@ -137,40 +138,40 @@ impl Tool for WriteFileTool {
         let path_str = args
             .get("path")
             .ok_or_else(|| ToolError::InvalidArguments {
-                tool: "write_file".to_string(),
+                tool: fs::WRITE_FILE.to_string(),
                 reason: "Missing 'path' argument".to_string(),
             })?;
 
         let content = args
             .get("content")
             .ok_or_else(|| ToolError::InvalidArguments {
-                tool: "write_file".to_string(),
+                tool: fs::WRITE_FILE.to_string(),
                 reason: "Missing 'content' argument".to_string(),
             })?;
 
         // Get current working directory as base
         let base_dir = std::env::current_dir().map_err(|e| ToolError::ExecutionFailed {
-            tool: "write_file".to_string(),
+            tool: fs::WRITE_FILE.to_string(),
             source: Box::new(e),
         })?;
 
         // Validate path to prevent traversal attacks
         let path = validate_path(path_str, &base_dir).map_err(|e| ToolError::ExecutionFailed {
-            tool: "write_file".to_string(),
+            tool: fs::WRITE_FILE.to_string(),
             source: Box::new(e),
         })?;
 
         // Create parent directories if needed
         if let Some(parent) = path.parent() {
             std::fs::create_dir_all(parent).map_err(|e| ToolError::ExecutionFailed {
-                tool: "write_file".to_string(),
+                tool: fs::WRITE_FILE.to_string(),
                 source: Box::new(e),
             })?;
         }
 
         // Write file content
         std::fs::write(&path, content).map_err(|e| ToolError::ExecutionFailed {
-            tool: "write_file".to_string(),
+            tool: fs::WRITE_FILE.to_string(),
             source: Box::new(e),
         })?;
 
@@ -223,7 +224,7 @@ impl ListDirectoryTool {
 
 impl Tool for ListDirectoryTool {
     fn name(&self) -> Cow<'static, str> {
-        Cow::Borrowed("ls")
+        Cow::Borrowed(fs::LS)
     }
 
     fn description(&self) -> Cow<'static, str> {
@@ -234,26 +235,26 @@ impl Tool for ListDirectoryTool {
         let path_str = args
             .get("path")
             .ok_or_else(|| ToolError::InvalidArguments {
-                tool: "ls".to_string(),
+                tool: fs::LS.to_string(),
                 reason: "Missing 'path' argument".to_string(),
             })?;
 
         // Get current working directory as base
         let base_dir = std::env::current_dir().map_err(|e| ToolError::ExecutionFailed {
-            tool: "ls".to_string(),
+            tool: fs::LS.to_string(),
             source: Box::new(e),
         })?;
 
         // Validate path to prevent traversal attacks
         let path = validate_path(path_str, &base_dir).map_err(|e| ToolError::ExecutionFailed {
-            tool: "ls".to_string(),
+            tool: fs::LS.to_string(),
             source: Box::new(e),
         })?;
 
         // Read directory entries
         let entries: Vec<String> = std::fs::read_dir(&path)
             .map_err(|e| ToolError::ExecutionFailed {
-                tool: "ls".to_string(),
+                tool: fs::LS.to_string(),
                 source: Box::new(e),
             })?
             .filter_map(std::result::Result::ok)
@@ -287,19 +288,19 @@ mod tests {
     #[test]
     fn test_read_file_tool_name() {
         let tool = ReadFileTool::new(1024);
-        assert_eq!(tool.name(), "read_file");
+        assert_eq!(tool.name(), fs::READ_FILE);
     }
 
     #[test]
     fn test_write_file_tool_name() {
         let tool = WriteFileTool;
-        assert_eq!(tool.name(), "write_file");
+        assert_eq!(tool.name(), fs::WRITE_FILE);
     }
 
     #[test]
     fn test_list_directory_tool_name() {
         let tool = ListDirectoryTool::new(10);
-        assert_eq!(tool.name(), "ls");
+        assert_eq!(tool.name(), fs::LS);
     }
 
     #[test]
@@ -311,7 +312,7 @@ mod tests {
         assert!(matches!(
             result,
             Err(ToolError::InvalidArguments { tool, reason })
-            if tool == "read_file" && reason.contains("path")
+            if tool == fs::READ_FILE && reason.contains("path")
         ));
     }
 
@@ -324,7 +325,7 @@ mod tests {
         assert!(matches!(
             result,
             Err(ToolError::InvalidArguments { tool, reason })
-            if tool == "write_file" && reason.contains("path")
+            if tool == fs::WRITE_FILE && reason.contains("path")
         ));
     }
 
@@ -338,7 +339,7 @@ mod tests {
         assert!(matches!(
             result,
             Err(ToolError::InvalidArguments { tool, reason })
-            if tool == "write_file" && reason.contains("content")
+            if tool == fs::WRITE_FILE && reason.contains("content")
         ));
     }
 
@@ -351,7 +352,7 @@ mod tests {
         assert!(matches!(
             result,
             Err(ToolError::InvalidArguments { tool, reason })
-            if tool == "ls" && reason.contains("path")
+            if tool == fs::LS && reason.contains("path")
         ));
     }
 

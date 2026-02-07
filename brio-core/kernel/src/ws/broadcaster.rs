@@ -5,7 +5,7 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 use tokio::sync::broadcast;
 use tracing::{debug, warn};
 
-use crate::ws::types::{BroadcastMessage, WsError};
+use crate::ws::types::{BroadcastMessage, WsError, WsMessage};
 
 const BROADCAST_CAPACITY: usize = 256;
 
@@ -66,6 +66,15 @@ impl Broadcaster {
     #[must_use]
     pub fn sender(&self) -> &broadcast::Sender<BroadcastMessage> {
         &self.sender
+    }
+
+    /// Broadcast a structured message.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the broadcast channel is closed.
+    pub fn broadcast_message(&self, message: WsMessage) -> Result<(), WsError> {
+        self.broadcast(BroadcastMessage::Message(message))
     }
 }
 

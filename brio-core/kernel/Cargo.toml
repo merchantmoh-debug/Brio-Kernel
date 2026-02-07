@@ -15,7 +15,7 @@ rust-version = "1.93"
 tokio = { workspace = true }
 wasmtime = { workspace = true, features = ["component-model"] }
 wasmtime-wasi = { workspace = true }
-wit-bindgen = "0.51.0"
+wit-bindgen = { workspace = true }
 sqlx = { workspace = true, features = ["sqlite", "runtime-tokio"] }
 uuid = { workspace = true }
 fs_extra = { workspace = true }
@@ -36,7 +36,7 @@ sysinfo = "0.38.0"
 secrecy = { version = "0.10.3", features = ["serde"] }
 serde = { workspace = true, features = ["derive"] }
 serde_json.workspace = true
-thiserror = "2.0.17"
+thiserror = { workspace = true }
 opentelemetry-semantic-conventions = "0.31.0"
 tokio-tungstenite = "0.28"
 json-patch = "4.1"
@@ -56,6 +56,7 @@ tonic = "0.14.2"
 tonic-prost = "0.14.2"
 dunce = "1.0.5"
 parking_lot = "0.12"
+chrono = { workspace = true }
 
 # pprof uses Unix-specific APIs (pthread, signals) - only enable on Unix
 [target.'cfg(unix)'.dependencies]
@@ -64,7 +65,7 @@ pprof = { version = "0.15", features = ["flamegraph", "prost-codec"] }
 [dev-dependencies]
 wiremock = "0.6"
 proptest = "1"
-tempfile = "3.24.0"
+tempfile = { workspace = true }
 
 
 [build-dependencies]

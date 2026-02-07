@@ -123,6 +123,7 @@ where
             dispatcher: &self.dispatcher,
             planner: &self.planner,
             selector: &self.selector,
+            branch_manager: None,
         };
 
         for task in active_tasks {
@@ -151,7 +152,17 @@ where
                 handlers::coordinating::CoordinatingHandler.handle(ctx, task)
             }
             TaskStatus::Verifying => handlers::verifying::VerifyingHandler.handle(ctx, task),
-            _ => Ok(false),
+            // Branching states
+            TaskStatus::AnalyzingForBranch => {
+                handlers::branching::AnalyzingForBranchHandler.handle(ctx, task)
+            }
+            TaskStatus::Branching { .. } => handlers::branching::BranchingHandler.handle(ctx, task),
+            TaskStatus::Merging { .. } => handlers::branching::MergingHandler.handle(ctx, task),
+            TaskStatus::MergePendingApproval { .. } => {
+                handlers::branching::MergePendingApprovalHandler.handle(ctx, task)
+            }
+            // Terminal states
+            TaskStatus::Assigned | TaskStatus::Completed | TaskStatus::Failed => Ok(false),
         }
     }
 

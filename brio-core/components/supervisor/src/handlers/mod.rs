@@ -3,10 +3,12 @@
 //! Each handler implements `TaskStateHandler` for a specific `TaskStatus`.
 
 use crate::domain::Task;
+use crate::handlers::branching::BranchManager;
 use crate::mesh_client::AgentDispatcher;
 use crate::orchestrator::{Planner, SupervisorError};
 use crate::repository::TaskRepository;
 use crate::selector::AgentSelector;
+use std::sync::Arc;
 
 /// Context passed to state handlers containing all necessary dependencies.
 pub struct SupervisorContext<'a, R, D, P, S> {
@@ -18,6 +20,8 @@ pub struct SupervisorContext<'a, R, D, P, S> {
     pub planner: &'a P,
     /// Selector for agent assignment.
     pub selector: &'a S,
+    /// Optional branch manager for branching task support.
+    pub branch_manager: Option<Arc<dyn BranchManager>>,
 }
 
 /// Trait representing a handler for a specific task state.
@@ -41,6 +45,7 @@ where
     ) -> Result<bool, SupervisorError>;
 }
 
+pub mod branching;
 pub mod coordinating;
 pub mod executing;
 pub mod pending;

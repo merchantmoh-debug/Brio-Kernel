@@ -15,9 +15,9 @@ pub mod parsers;
 pub mod registry;
 pub mod tools;
 
-pub use base::{StandardAgent, StandardAgentConfig, handle_standard_event, run_standard_agent};
+pub use base::{handle_standard_event, run_standard_agent, StandardAgent, StandardAgentConfig};
 pub use parsers::{
-    create_done_parser, create_list_parser, create_read_parser, create_shell_parser,
-    create_write_parser,
+    create_create_branch_parser, create_done_parser, create_list_branches_parser,
+    create_list_parser, create_read_parser, create_shell_parser, create_write_parser,
 };
 pub use registry::{ToolRegistryBuilder, ToolRegistryConfig, ToolRegistryFlags};

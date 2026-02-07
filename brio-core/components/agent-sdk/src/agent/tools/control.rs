@@ -4,6 +4,7 @@
 //! such as marking tasks as complete.
 
 use crate::error::ToolError;
+use crate::tools::constants::control;
 use crate::tools::Tool;
 use std::borrow::Cow;
 use std::collections::HashMap;
@@ -33,7 +34,7 @@ pub struct DoneTool;
 
 impl Tool for DoneTool {
     fn name(&self) -> Cow<'static, str> {
-        Cow::Borrowed("done")
+        Cow::Borrowed(control::DONE)
     }
 
     fn description(&self) -> Cow<'static, str> {

@@ -12,6 +12,7 @@ use thiserror::Error;
 use tokio::sync::mpsc::Sender;
 use tokio::sync::oneshot;
 
+use crate::branch_manager::BranchManager;
 use crate::inference::{LLMProvider, ProviderRegistry};
 use crate::infrastructure::config::SandboxSettings;
 use crate::mesh::events::EventBus;
@@ -47,6 +48,7 @@ struct BrioHostStateInner {
     plugin_registry: Option<Arc<PluginRegistry>>,
     event_bus: Arc<EventBus>,
     current_plugin_id: Option<String>,
+    branch_manager: Arc<BranchManager>,
 }
 
 /// The main host state for the Brio kernel.
@@ -89,6 +91,7 @@ impl BrioHostState {
                 plugin_registry,
                 event_bus: Arc::new(EventBus::new()),
                 current_plugin_id: None,
+                branch_manager: Arc::new(BranchManager::new()),
             }),
         })
     }
@@ -124,6 +127,7 @@ impl BrioHostState {
                 plugin_registry,
                 event_bus: Arc::new(EventBus::new()),
                 current_plugin_id: None,
+                branch_manager: Arc::new(BranchManager::new()),
             }),
         })
     }
@@ -344,6 +348,7 @@ impl BrioHostState {
             plugin_registry: self.inner.plugin_registry.clone(),
             event_bus: Arc::clone(&self.inner.event_bus),
             current_plugin_id: Some(plugin_id),
+            branch_manager: Arc::clone(&self.inner.branch_manager),
         };
         Self {
             inner: Arc::new(inner),
@@ -381,5 +386,11 @@ impl BrioHostState {
     #[must_use]
     pub fn plugin_registry(&self) -> Option<Arc<PluginRegistry>> {
         self.inner.plugin_registry.clone()
+    }
+
+    /// Returns the branch manager for branch operations.
+    #[must_use]
+    pub fn branch_manager(&self) -> Arc<BranchManager> {
+        self.inner.branch_manager.clone()
     }
 }

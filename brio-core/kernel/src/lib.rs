@@ -8,6 +8,10 @@
 #![warn(missing_docs)]
 #![warn(clippy::pedantic)]
 
+/// REST API endpoints for branch management and orchestration.
+pub mod api;
+/// Branch manager and domain types.
+pub mod branch_manager;
 /// WebAssembly component engine and runtime.
 pub mod engine;
 /// Host state and WIT interface implementations.

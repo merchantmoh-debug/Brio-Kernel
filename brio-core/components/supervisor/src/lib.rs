@@ -10,8 +10,11 @@
 #![deny(missing_docs)]
 #![warn(clippy::pedantic)]
 
+pub mod branch;
+pub mod diff;
 pub mod domain;
 pub mod handlers;
+pub mod merge;
 pub mod mesh_client;
 pub mod orchestrator;
 pub mod planner;
