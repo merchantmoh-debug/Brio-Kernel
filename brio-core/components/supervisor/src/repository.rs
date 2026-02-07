@@ -136,15 +136,14 @@ impl WitTaskRepository {
             }
         });
 
-        let assigned_agent = get_column_value("assigned_agent").ok().and_then(|v| {
-            if v == "NULL" || v.is_empty() {
-                None
-            } else {
-                Some(AgentId::new(v.clone()))
-            }
-        });
+        let assigned_agent = match get_column_value("assigned_agent") {
+            Ok(v) if v != "NULL" && !v.is_empty() => Some(
+                AgentId::new(v.clone()).map_err(|e| RepositoryError::ParseError(e.to_string()))?,
+            ),
+            _ => None,
+        };
 
-        Ok(Task::new(
+        Task::new(
             TaskId::new(id),
             content,
             Priority::new(priority),
@@ -152,7 +151,8 @@ impl WitTaskRepository {
             parent_id,
             assigned_agent,
             std::collections::HashSet::new(),
-        ))
+        )
+        .map_err(|e| RepositoryError::ParseError(e.to_string()))
     }
 }
 

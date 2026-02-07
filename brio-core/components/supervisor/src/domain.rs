@@ -7,6 +7,26 @@
 use core::fmt;
 use std::collections::HashSet;
 
+/// Error type for domain validation failures.
+#[derive(Debug, Clone)]
+pub enum ValidationError {
+    /// AgentId cannot be empty.
+    EmptyAgentId,
+    /// Task content cannot be empty.
+    EmptyTaskContent,
+}
+
+impl fmt::Display for ValidationError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::EmptyAgentId => write!(f, "AgentId cannot be empty"),
+            Self::EmptyTaskContent => write!(f, "Task content cannot be empty"),
+        }
+    }
+}
+
+impl std::error::Error for ValidationError {}
+
 /// Unique identifier for a task in the system.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct TaskId(
@@ -41,13 +61,14 @@ pub struct AgentId(String);
 impl AgentId {
     /// Creates a new `AgentId` from a string.
     ///
-    /// # Panics
-    /// Panics if the id is empty (Design by Contract).
-    #[must_use]
-    pub fn new(id: impl Into<String>) -> Self {
+    /// # Errors
+    /// Returns `ValidationError::EmptyAgentId` if the id is empty.
+    pub fn new(id: impl Into<String>) -> Result<Self, ValidationError> {
         let id = id.into();
-        assert!(!id.is_empty(), "AgentId cannot be empty");
-        Self(id)
+        if id.is_empty() {
+            return Err(ValidationError::EmptyAgentId);
+        }
+        Ok(Self(id))
     }
 
     /// Returns the inner string reference.
@@ -209,7 +230,9 @@ pub struct Task {
 
 impl Task {
     /// Constructs a new Task (factory method).
-    #[must_use]
+    ///
+    /// # Errors
+    /// Returns `ValidationError::EmptyTaskContent` if content is empty.
     pub fn new(
         id: TaskId,
         content: String,
@@ -218,8 +241,11 @@ impl Task {
         parent_id: Option<TaskId>,
         assigned_agent: Option<AgentId>,
         required_capabilities: HashSet<Capability>,
-    ) -> Self {
-        Self {
+    ) -> Result<Self, ValidationError> {
+        if content.is_empty() {
+            return Err(ValidationError::EmptyTaskContent);
+        }
+        Ok(Self {
             id,
             content,
             priority,
@@ -227,7 +253,7 @@ impl Task {
             parent_id,
             assigned_agent,
             required_capabilities,
-        }
+        })
     }
 
     /// Returns the task ID.
@@ -297,14 +323,14 @@ mod tests {
 
     #[test]
     fn agent_id_as_str() {
-        let agent = AgentId::new("coder");
+        let agent = AgentId::new("coder").unwrap();
         assert_eq!(agent.as_str(), "coder");
     }
 
     #[test]
-    #[should_panic(expected = "AgentId cannot be empty")]
     fn agent_id_rejects_empty() {
-        let _ = AgentId::new("");
+        let err = AgentId::new("").unwrap_err();
+        assert!(matches!(err, ValidationError::EmptyAgentId));
     }
 
     #[test]
@@ -339,11 +365,28 @@ mod tests {
             None,
             None,
             HashSet::new(),
-        );
+        )
+        .unwrap();
 
         assert_eq!(task.id().inner(), 1);
         assert_eq!(task.content(), "Fix bug");
         assert!(task.is_pending());
         assert!(task.assigned_agent().is_none());
+    }
+
+    #[test]
+    fn task_rejects_empty_content() {
+        let err = Task::new(
+            TaskId::new(1),
+            "".to_string(),
+            Priority::DEFAULT,
+            TaskStatus::Pending,
+            None,
+            None,
+            HashSet::new(),
+        )
+        .unwrap_err();
+
+        assert!(matches!(err, ValidationError::EmptyTaskContent));
     }
 }

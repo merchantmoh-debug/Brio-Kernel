@@ -33,9 +33,9 @@ impl AgentSelector for KeywordAgentSelector {
             || content.contains("AUDIT")
             || content.contains("CHECK")
         {
-            AgentId::new("agent_reviewer")
+            AgentId::new("agent_reviewer").expect("static agent ID should be valid")
         } else {
-            AgentId::new("agent_coder")
+            AgentId::new("agent_coder").expect("static agent ID should be valid")
         }
     }
 }

@@ -249,7 +249,8 @@ mod tests {
                     t.parent_id(),
                     t.assigned_agent().cloned(),
                     t.required_capabilities().clone(),
-                );
+                )
+                .map_err(|e| RepositoryError::ParseError(e.to_string()))?;
             }
             Ok(())
         }
@@ -267,7 +268,8 @@ mod tests {
                     t.parent_id(),
                     Some(agent.clone()),
                     t.required_capabilities().clone(),
-                );
+                )
+                .map_err(|e| RepositoryError::ParseError(e.to_string()))?;
             }
             Ok(())
         }
@@ -285,7 +287,8 @@ mod tests {
                     t.parent_id(),
                     Some(agent.clone()),
                     t.required_capabilities().clone(),
-                );
+                )
+                .map_err(|e| RepositoryError::ParseError(e.to_string()))?;
             }
             Ok(())
         }
@@ -303,7 +306,8 @@ mod tests {
                     t.parent_id(),
                     t.assigned_agent().cloned(),
                     t.required_capabilities().clone(),
-                );
+                )
+                .map_err(|e| RepositoryError::ParseError(e.to_string()))?;
             }
             Ok(())
         }
@@ -325,7 +329,8 @@ mod tests {
                     t.parent_id(),
                     t.assigned_agent().cloned(),
                     t.required_capabilities().clone(),
-                );
+                )
+                .map_err(|e| RepositoryError::ParseError(e.to_string()))?;
             }
             Ok(())
         }
@@ -340,7 +345,7 @@ mod tests {
             // Simple auto-increment
             let max_id = tasks.iter().map(|t| t.id().inner()).max().unwrap_or(0);
             let new_id = TaskId::new(max_id + 1);
-            tasks.push(Task::new(
+            let task = Task::new(
                 new_id,
                 content,
                 priority,
@@ -348,7 +353,9 @@ mod tests {
                 parent_id,
                 None,
                 HashSet::new(),
-            ));
+            )
+            .map_err(|e| RepositoryError::ParseError(e.to_string()))?;
+            tasks.push(task);
             Ok(new_id)
         }
 
@@ -393,6 +400,7 @@ mod tests {
             None,
             HashSet::new(),
         )
+        .expect("test task should be valid")
     }
 
     #[test]
@@ -423,7 +431,8 @@ mod tests {
             None,
             None,
             HashSet::new(),
-        );
+        )
+        .expect("test task should be valid");
         let repo = MockRepository::new(vec![task]);
         let planner = MockPlanner;
         let dispatcher = MockDispatcher {
@@ -450,7 +459,8 @@ mod tests {
             None,
             None,
             HashSet::new(),
-        );
+        )
+        .expect("test task should be valid");
         // Manually assign
         task = Task::new(
             task.id(),
@@ -458,9 +468,10 @@ mod tests {
             task.priority(),
             task.status(),
             task.parent_id(),
-            Some(AgentId::new("agent_coder")),
+            Some(AgentId::new("agent_coder").expect("agent ID should be valid")),
             HashSet::new(),
-        );
+        )
+        .expect("test task should be valid");
 
         let repo = MockRepository::new(vec![task]);
         let planner = MockPlanner;
@@ -488,7 +499,8 @@ mod tests {
             None,
             None,
             HashSet::new(),
-        );
+        )
+        .expect("test task should be valid");
         let repo = MockRepository::new(vec![task]);
         let repo_clone = repo.clone();
         let planner = MockPlanner;
@@ -528,7 +540,8 @@ mod tests {
             None,
             None,
             HashSet::new(),
-        );
+        )
+        .expect("test task should be valid");
         let repo = MockRepository::new(vec![root_task]);
         let planner = DecomposingPlanner {
             subtasks: vec!["Get Plans".to_string(), "Find Weakness".to_string()],
@@ -586,7 +599,8 @@ mod tests {
             None,
             None,
             HashSet::new(),
-        );
+        )
+        .expect("test task should be valid");
 
         let repo = MockRepository::new(vec![task.clone()]);
         let planner = MockPlanner;
