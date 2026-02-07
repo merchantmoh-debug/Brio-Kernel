@@ -9,6 +9,7 @@
 use agent_sdk::Tool;
 use anyhow::Result;
 use serde::Deserialize;
+use std::borrow::Cow;
 use std::collections::HashMap;
 use wit_bindgen::generate;
 
@@ -159,12 +160,12 @@ impl Default for ForemanEngine {
 pub struct CreateTaskTool;
 
 impl Tool for CreateTaskTool {
-    fn name(&self) -> &'static str {
-        "create_task"
+    fn name(&self) -> Cow<'static, str> {
+        Cow::Borrowed("create_task")
     }
 
-    fn description(&self) -> &'static str {
-        "Creates a task from a milestone description in the task database"
+    fn description(&self) -> Cow<'static, str> {
+        Cow::Borrowed("Creates a task from a milestone description in the task database")
     }
 
     fn execute(
@@ -197,12 +198,13 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_milestones_event_deserialization() {
+    fn test_milestones_event_deserialization() -> Result<(), serde_json::Error> {
         let json = r#"{"milestones": ["Milestone 1", "Milestone 2"]}"#;
-        let event: MilestonesEvent = serde_json::from_str(json).unwrap();
+        let event: MilestonesEvent = serde_json::from_str(json)?;
         assert_eq!(event.milestones.len(), 2);
         assert_eq!(event.milestones[0], "Milestone 1");
         assert_eq!(event.milestones[1], "Milestone 2");
+        Ok(())
     }
 
     #[test]

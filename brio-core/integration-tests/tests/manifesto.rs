@@ -131,9 +131,9 @@ impl TaskRepository for TestTaskRepository {
                         let status = TaskStatus::parse(&status_str).map_err(|e| RepositoryError::ParseError(e.to_string()))?;
 
                         let assigned_agent_str: Option<String> = r.try_get("assigned_agent").unwrap_or(None);
-                        let assigned_agent = assigned_agent_str.map(AgentId::new);
+                        let assigned_agent = assigned_agent_str.map(AgentId::new).transpose().map_err(|e| RepositoryError::ParseError(e.to_string()))?;
 
-                            Ok(Task::new(
+                            Task::new(
                                 TaskId::new(id as u64),
                                 content,
                                 Priority::new(priority as u8),
@@ -141,7 +141,7 @@ impl TaskRepository for TestTaskRepository {
                                 None, // parent_id
                                 assigned_agent,
                                 HashSet::new(),
-                            ))
+                            ).map_err(|e| RepositoryError::ParseError(e.to_string()))
                     })
                     .collect()
             })
@@ -273,12 +273,12 @@ impl TaskRepository for TestTaskRepository {
 
                         let assigned_agent_str: Option<String> =
                             r.try_get("assigned_agent").unwrap_or(None);
-                        let assigned_agent = assigned_agent_str.map(AgentId::new);
+                        let assigned_agent = assigned_agent_str.map(AgentId::new).transpose().map_err(|e| RepositoryError::ParseError(e.to_string()))?;
 
                         let parent_id_val: Option<i64> = r.try_get("parent_id").unwrap_or(None);
                         let parent_id = parent_id_val.map(|v| TaskId::new(v as u64));
 
-                        Ok(Task::new(
+                        Task::new(
                             TaskId::new(id as u64),
                             content,
                             Priority::new(priority as u8),
@@ -286,7 +286,7 @@ impl TaskRepository for TestTaskRepository {
                             parent_id,
                             assigned_agent,
                             HashSet::new(),
-                        ))
+                        ).map_err(|e| RepositoryError::ParseError(e.to_string()))
                     })
                     .collect()
             })

@@ -6,13 +6,14 @@ use agent_sdk::agent::parsers::{
 };
 use agent_sdk::agent::tools::{DoneTool, ListDirectoryTool, ReadFileTool};
 use agent_sdk::agent::{
-    StandardAgent, StandardAgentConfig, handle_standard_event, run_standard_agent,
+    handle_standard_event, run_standard_agent, StandardAgent, StandardAgentConfig,
 };
 use agent_sdk::types::{InferenceResponse, TaskContext};
 use agent_sdk::{
     AgentConfig, AgentError, InferenceError, Message, PromptBuilder, Role, Tool, ToolError,
     ToolRegistry,
 };
+use std::borrow::Cow;
 use std::collections::HashMap;
 use wit_bindgen::generate;
 
@@ -126,12 +127,14 @@ fn convert_role(role: Role) -> brio::ai::inference::Role {
 struct WriteFileTool;
 
 impl Tool for WriteFileTool {
-    fn name(&self) -> &'static str {
-        "write_file"
+    fn name(&self) -> Cow<'static, str> {
+        Cow::Borrowed("write_file")
     }
 
-    fn description(&self) -> &'static str {
-        r#"<write_file path="path/to/file">content</write_file> - Write content to a file"#
+    fn description(&self) -> Cow<'static, str> {
+        Cow::Borrowed(
+            r#"<write_file path="path/to/file">content</write_file> - Write content to a file"#,
+        )
     }
 
     fn execute(&self, args: &HashMap<String, String>) -> Result<String, ToolError> {
@@ -184,17 +187,18 @@ mod tests {
     }
 
     #[test]
-    fn test_write_file_tool() {
+    fn test_write_file_tool() -> Result<(), ToolError> {
         let tool = WriteFileTool;
         let mut args = HashMap::new();
         args.insert("path".to_string(), "/tmp/test_coder_file.txt".to_string());
         args.insert("content".to_string(), "Hello from coder agent".to_string());
 
-        let result = tool.execute(&args).unwrap();
+        let result = tool.execute(&args)?;
         assert!(result.contains("bytes"));
 
         // Cleanup
         let _ = std::fs::remove_file("/tmp/test_coder_file.txt");
+        Ok(())
     }
 
     #[test]
