@@ -3,13 +3,15 @@
 //! This module provides integration with `OpenAI`'s API for chat completions.
 
 use crate::inference::provider::LLMProvider;
-use crate::inference::types::{ChatRequest, ChatResponse, InferenceError, Message, Usage};
+use crate::inference::types::{ChatRequest, ChatResponse, CircuitBreaker, CircuitBreakerConfig, InferenceError, Message, Usage};
 use anyhow::Result;
 use async_trait::async_trait;
 use reqwest::{Client, StatusCode, Url};
 use secrecy::{ExposeSecret, SecretString};
 use serde::{Deserialize, Serialize};
+use std::sync::Arc;
 use std::time::Duration;
+use tokio::sync::RwLock;
 use tracing::{debug, warn};
 
 /// Default maximum number of retries for transient errors
@@ -56,6 +58,8 @@ pub struct OpenAIConfig {
     pub max_retries: Option<u32>,
     /// Base delay in milliseconds for exponential backoff
     pub base_delay_ms: Option<u64>,
+    /// Circuit breaker configuration for resilience
+    pub circuit_breaker: Option<CircuitBreakerConfig>,
 }
 
 impl OpenAIConfig {
@@ -67,6 +71,7 @@ impl OpenAIConfig {
             base_url,
             max_retries: None,
             base_delay_ms: None,
+            circuit_breaker: None,
         }
     }
 
@@ -83,6 +88,13 @@ impl OpenAIConfig {
         self.base_delay_ms = Some(delay_ms);
         self
     }
+
+    /// Sets the circuit breaker configuration
+    #[must_use]
+    pub fn with_circuit_breaker(mut self, config: CircuitBreakerConfig) -> Self {
+        self.circuit_breaker = Some(config);
+        self
+    }
 }
 
 /// Provider implementation for `OpenAI`'s API.
@@ -91,6 +103,7 @@ pub struct OpenAIProvider {
     config: OpenAIConfig,
     max_retries: u32,
     base_delay_ms: u64,
+    circuit_breaker: Arc<RwLock<CircuitBreaker>>,
 }
 
 impl OpenAIProvider {
@@ -99,11 +112,13 @@ impl OpenAIProvider {
     pub fn new(config: OpenAIConfig) -> Self {
         let max_retries = config.max_retries.unwrap_or(DEFAULT_MAX_RETRIES);
         let base_delay_ms = config.base_delay_ms.unwrap_or(DEFAULT_BASE_DELAY_MS);
+        let cb_config = config.circuit_breaker.unwrap_or_default();
         Self {
             client: Client::new(),
             max_retries,
             base_delay_ms,
             config,
+            circuit_breaker: Arc::new(RwLock::new(CircuitBreaker::new(cb_config))),
         }
     }
 
@@ -229,6 +244,18 @@ impl OpenAIProvider {
 #[async_trait]
 impl LLMProvider for OpenAIProvider {
     async fn chat(&self, request: ChatRequest) -> Result<ChatResponse, InferenceError> {
+        // Check circuit breaker first
+        let can_execute = {
+            let mut cb = self.circuit_breaker.write().await;
+            cb.try_acquire()
+        };
+
+        if !can_execute {
+            return Err(InferenceError::CircuitBreakerOpen(
+                "OpenAI circuit is open".to_string()
+            ));
+        }
+
         let provider_req = OpenAIChatRequest {
             model: request.model,
             messages: request.messages,
@@ -238,7 +265,12 @@ impl LLMProvider for OpenAIProvider {
 
         for attempt in 0..=self.max_retries {
             match self.make_request(&provider_req).await {
-                Ok(response) => return Ok(response),
+                Ok(response) => {
+                    // Record success on circuit breaker
+                    let mut cb = self.circuit_breaker.write().await;
+                    cb.record_success();
+                    return Ok(response);
+                }
                 Err((error, should_retry)) => {
                     last_error = error;
 
@@ -259,6 +291,10 @@ impl LLMProvider for OpenAIProvider {
                 }
             }
         }
+
+        // Record failure on circuit breaker
+        let mut cb = self.circuit_breaker.write().await;
+        cb.record_failure();
 
         debug!(
             attempts = self.max_retries + 1,

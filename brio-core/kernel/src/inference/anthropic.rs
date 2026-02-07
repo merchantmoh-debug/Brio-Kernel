@@ -3,12 +3,14 @@
 //! This module provides integration with Anthropic's Claude API for chat completions.
 
 use crate::inference::provider::LLMProvider;
-use crate::inference::types::{ChatRequest, ChatResponse, InferenceError, Message, Role, Usage};
+use crate::inference::types::{ChatRequest, ChatResponse, CircuitBreaker, CircuitBreakerConfig, InferenceError, Message, Role, Usage};
 use async_trait::async_trait;
 use reqwest::{Client, StatusCode, Url};
 use secrecy::{ExposeSecret, SecretString};
 use serde::{Deserialize, Serialize};
+use std::sync::Arc;
 use std::time::Duration;
+use tokio::sync::RwLock;
 use tracing::{debug, warn};
 
 /// Default maximum number of retries for transient errors
@@ -74,6 +76,8 @@ pub struct AnthropicConfig {
     pub api_version: Option<String>,
     /// Maximum tokens to generate (required by Anthropic API)
     pub max_tokens: Option<u32>,
+    /// Circuit breaker configuration for resilience
+    pub circuit_breaker: Option<CircuitBreakerConfig>,
 }
 
 impl AnthropicConfig {
@@ -87,6 +91,7 @@ impl AnthropicConfig {
             base_delay_ms: None,
             api_version: None,
             max_tokens: None,
+            circuit_breaker: None,
         }
     }
 
@@ -101,6 +106,13 @@ impl AnthropicConfig {
             Url::parse("https://api.anthropic.com/v1/")
                 .map_err(|e| anyhow::anyhow!("Invalid hardcoded URL: {e}"))?,
         ))
+    }
+
+    /// Sets the circuit breaker configuration
+    #[must_use]
+    pub fn with_circuit_breaker(mut self, config: CircuitBreakerConfig) -> Self {
+        self.circuit_breaker = Some(config);
+        self
     }
 
     /// Sets the maximum number of retries
@@ -144,6 +156,7 @@ pub struct AnthropicProvider {
     base_delay_ms: u64,
     api_version: String,
     max_tokens: u32,
+    circuit_breaker: Arc<RwLock<CircuitBreaker>>,
 }
 
 impl AnthropicProvider {
@@ -157,6 +170,7 @@ impl AnthropicProvider {
             .clone()
             .unwrap_or_else(|| DEFAULT_API_VERSION.to_string());
         let max_tokens = config.max_tokens.unwrap_or(4096);
+        let cb_config = config.circuit_breaker.unwrap_or_default();
 
         Self {
             client: Client::new(),
@@ -165,6 +179,7 @@ impl AnthropicProvider {
             api_version,
             max_tokens,
             config,
+            circuit_breaker: Arc::new(RwLock::new(CircuitBreaker::new(cb_config))),
         }
     }
 
@@ -316,6 +331,18 @@ impl AnthropicProvider {
 #[async_trait]
 impl LLMProvider for AnthropicProvider {
     async fn chat(&self, request: ChatRequest) -> Result<ChatResponse, InferenceError> {
+        // Check circuit breaker first
+        let can_execute = {
+            let mut cb = self.circuit_breaker.write().await;
+            cb.try_acquire()
+        };
+
+        if !can_execute {
+            return Err(InferenceError::CircuitBreakerOpen(
+                "Anthropic circuit is open".to_string()
+            ));
+        }
+
         let (system, messages) = Self::prepare_messages(&request.messages);
 
         let provider_req = AnthropicChatRequest {
@@ -329,7 +356,12 @@ impl LLMProvider for AnthropicProvider {
 
         for attempt in 0..=self.max_retries {
             match self.make_request(&provider_req).await {
-                Ok(response) => return Ok(response),
+                Ok(response) => {
+                    // Record success on circuit breaker
+                    let mut cb = self.circuit_breaker.write().await;
+                    cb.record_success();
+                    return Ok(response);
+                }
                 Err((error, should_retry)) => {
                     last_error = error;
 
@@ -350,6 +382,10 @@ impl LLMProvider for AnthropicProvider {
                 }
             }
         }
+
+        // Record failure on circuit breaker
+        let mut cb = self.circuit_breaker.write().await;
+        cb.record_failure();
 
         debug!(
             attempts = self.max_retries + 1,
