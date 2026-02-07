@@ -1,3 +1,8 @@
+//! WASM runtime engine for executing WebAssembly components.
+//!
+//! This module provides a high-level wrapper around wasmtime for loading
+//! and executing WASM components with the Brio host state.
+
 use crate::host::BrioHostState;
 use anyhow::{Context, Result};
 use wasmtime::component::{Component, Linker};
@@ -29,11 +34,25 @@ impl WasmEngine {
             .with_context(|| format!("Failed to load component from {}", path.display()))
     }
 
+    /// Prepares a new WASM store with the given host state.
+    ///
+    /// # Arguments
+    ///
+    /// * `state` - The host state to use in the store.
+    ///
+    /// # Returns
+    ///
+    /// A new `Store` initialized with the engine and host state.
     #[must_use]
     pub fn prepare_store(&self, state: BrioHostState) -> Store<BrioHostState> {
         Store::new(&self.engine, state)
     }
 
+    /// Returns a reference to the linker.
+    ///
+    /// # Returns
+    ///
+    /// A reference to the `Linker` used by this engine.
     #[must_use]
     pub fn linker(&self) -> &Linker<BrioHostState> {
         &self.linker

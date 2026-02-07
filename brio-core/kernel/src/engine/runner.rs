@@ -1,3 +1,8 @@
+//! Agent runner for executing WASM components.
+//!
+//! This module provides the runtime execution environment for smart agents,
+//! handling task execution and event processing through WASM component instantiation.
+
 use crate::host::BrioHostState;
 use anyhow::{Context, Result};
 use wasmtime::component::Component;

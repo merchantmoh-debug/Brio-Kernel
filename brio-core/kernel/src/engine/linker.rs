@@ -1,3 +1,9 @@
+//! Host interface implementations for WASM component linking.
+//!
+//! This module defines all host interfaces exposed to WASM guests including
+//! service mesh calls, SQL operations, file system sessions, pub/sub messaging,
+//! inference, and logging capabilities.
+
 use crate::engine::brio;
 use crate::host::BrioHostState;
 use crate::mesh::Payload;
@@ -19,9 +25,10 @@ impl brio::core::service_mesh::Host for BrioHostState {
             brio::core::service_mesh::Payload::Binary(b) => Payload::Binary(Box::new(b)),
         };
 
+        let host_state = self.clone();
         let result = tokio::task::block_in_place(|| {
             tokio::runtime::Handle::current()
-                .block_on(async { self.mesh_call(&target, &method, internal_payload).await })
+                .block_on(async move { host_state.mesh_call(&target, &method, internal_payload).await })
         });
 
         result
@@ -47,7 +54,7 @@ impl brio::core::sql_state::Host for BrioHostState {
 
         let result = tokio::task::block_in_place(|| {
             tokio::runtime::Handle::current()
-                .block_on(async { store.query(scope, &sql, params).await })
+                .block_on(async move { store.query(scope, &sql, params).await })
         });
 
         result
@@ -69,7 +76,7 @@ impl brio::core::sql_state::Host for BrioHostState {
 
         let result = tokio::task::block_in_place(|| {
             tokio::runtime::Handle::current()
-                .block_on(async { store.execute(scope, &sql, params).await })
+                .block_on(async move { store.execute(scope, &sql, params).await })
         });
 
         result.map_err(|e| e.to_string())
@@ -192,7 +199,7 @@ impl brio::core::inference::Host for BrioHostState {
         };
         let result = tokio::task::block_in_place(|| {
             tokio::runtime::Handle::current()
-                .block_on(async { inference_provider.chat(request).await })
+                .block_on(async move { inference_provider.chat(request).await })
         });
 
         result
@@ -253,6 +260,14 @@ pub fn create_linker(engine: &Engine) -> Result<Linker<BrioHostState>> {
     Ok(linker)
 }
 
+/// Creates a new wasmtime [`Config`] with component model and async support.
+///
+/// # Security Hardening
+///
+/// The returned config includes resource limits:
+/// - Maximum Wasm stack: 8 MiB
+/// - Async stack size: 8 MiB
+/// - Memory reservation: 4 GiB
 #[must_use]
 pub fn create_engine_config() -> Config {
     let mut config = Config::new();
