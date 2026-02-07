@@ -7,13 +7,16 @@
 #![allow(missing_docs)]
 
 use agent_sdk::{
-    AgentConfig, AgentError, PromptBuilder,
     agent::tools::{DoneTool, ListDirectoryTool, ReadFileTool},
-    agent::{StandardAgent, StandardAgentConfig, run_standard_agent},
+    agent::{run_standard_agent, StandardAgent, StandardAgentConfig},
     tools::{Tool, ToolParser, ToolRegistry},
     types::{InferenceResponse, Message, Role, TaskContext},
+    AgentConfig, AgentError, PromptBuilder,
 };
+use regex::Regex;
+use std::borrow::Cow;
 use std::collections::HashMap;
+use std::sync::OnceLock;
 use wit_bindgen::generate;
 
 // Generate WIT bindings at crate root level
@@ -142,57 +145,72 @@ fn convert_role(role: Role) -> brio::ai::inference::Role {
     }
 }
 
-// Tool parsers
+// Tool parsers - using OnceLock for lazy regex compilation
+static DONE_REGEX: OnceLock<Regex> = OnceLock::new();
+
 fn create_done_parser() -> ToolParser {
-    ToolParser::new(r"<done>\s*(.*?)\s*</done>", |caps: &regex::Captures| {
+    let regex = DONE_REGEX.get_or_init(|| {
+        Regex::new(r"<done>\s*(.*?)\s*</done>").expect("DONE_REGEX should be valid")
+    });
+    ToolParser::from_regex(regex, |caps: &regex::Captures| {
         let mut args = HashMap::new();
         args.insert("summary".to_string(), caps[1].to_string());
         args
     })
-    .expect("Invalid regex pattern")
 }
+
+static READ_REGEX: OnceLock<Regex> = OnceLock::new();
 
 fn create_read_parser() -> ToolParser {
-    ToolParser::new(
-        r#"<read_file\s+path="([^"]+)"\s*/?>"#,
-        |caps: &regex::Captures| {
-            let mut args = HashMap::new();
-            args.insert("path".to_string(), caps[1].to_string());
-            args
-        },
-    )
-    .expect("Invalid regex pattern")
-}
-
-fn create_list_parser() -> ToolParser {
-    ToolParser::new(r#"<ls\s+path="([^"]+)"\s*/?>"#, |caps: &regex::Captures| {
+    let regex = READ_REGEX.get_or_init(|| {
+        Regex::new(r#"<read_file\s+path="([^"]+)"\s*/?>"#).expect("READ_REGEX should be valid")
+    });
+    ToolParser::from_regex(regex, |caps: &regex::Captures| {
         let mut args = HashMap::new();
         args.insert("path".to_string(), caps[1].to_string());
         args
     })
-    .expect("Invalid regex pattern")
 }
+
+static LIST_REGEX: OnceLock<Regex> = OnceLock::new();
+
+fn create_list_parser() -> ToolParser {
+    let regex = LIST_REGEX.get_or_init(|| {
+        Regex::new(r#"<ls\s+path="([^"]+)"\s*/?>"#).expect("LIST_REGEX should be valid")
+    });
+    ToolParser::from_regex(regex, |caps: &regex::Captures| {
+        let mut args = HashMap::new();
+        args.insert("path".to_string(), caps[1].to_string());
+        args
+    })
+}
+
+static WRITE_REGEX: OnceLock<Regex> = OnceLock::new();
 
 fn create_write_parser() -> ToolParser {
-    ToolParser::new(
-        r#"<write_file\s+path="([^"]+)">\s*(.*?)\s*</write_file>"#,
-        |caps: &regex::Captures| {
-            let mut args = HashMap::new();
-            args.insert("path".to_string(), caps[1].to_string());
-            args.insert("content".to_string(), caps[2].to_string());
-            args
-        },
-    )
-    .expect("Invalid regex pattern")
+    let regex = WRITE_REGEX.get_or_init(|| {
+        Regex::new(r#"<write_file\s+path="([^"]+)">\s*(.*?)\s*</write_file>"#)
+            .expect("WRITE_REGEX should be valid")
+    });
+    ToolParser::from_regex(regex, |caps: &regex::Captures| {
+        let mut args = HashMap::new();
+        args.insert("path".to_string(), caps[1].to_string());
+        args.insert("content".to_string(), caps[2].to_string());
+        args
+    })
 }
 
+static SHELL_REGEX: OnceLock<Regex> = OnceLock::new();
+
 fn create_shell_parser() -> ToolParser {
-    ToolParser::new(r"<shell>\s*(.*?)\s*</shell>", |caps: &regex::Captures| {
+    let regex = SHELL_REGEX.get_or_init(|| {
+        Regex::new(r"<shell>\s*(.*?)\s*</shell>").expect("SHELL_REGEX should be valid")
+    });
+    ToolParser::from_regex(regex, |caps: &regex::Captures| {
         let mut args = HashMap::new();
         args.insert("command".to_string(), caps[1].to_string());
         args
     })
-    .expect("Invalid regex pattern")
 }
 
 // Smart-agent-specific tool implementations
@@ -201,12 +219,14 @@ use agent_sdk::error::ToolError;
 struct WriteFileTool;
 
 impl Tool for WriteFileTool {
-    fn name(&self) -> &'static str {
-        "write_file"
+    fn name(&self) -> Cow<'static, str> {
+        Cow::Borrowed("write_file")
     }
 
-    fn description(&self) -> &'static str {
-        r#"<write_file path="path/to/file">content</write_file> - Write content to a file"#
+    fn description(&self) -> Cow<'static, str> {
+        Cow::Borrowed(
+            r#"<write_file path="path/to/file">content</write_file> - Write content to a file"#,
+        )
     }
 
     fn execute(&self, args: &HashMap<String, String>) -> Result<String, ToolError> {
@@ -243,12 +263,12 @@ impl ShellTool {
 }
 
 impl Tool for ShellTool {
-    fn name(&self) -> &'static str {
-        "shell"
+    fn name(&self) -> Cow<'static, str> {
+        Cow::Borrowed("shell")
     }
 
-    fn description(&self) -> &'static str {
-        r"<shell>command</shell> - Execute a shell command"
+    fn description(&self) -> Cow<'static, str> {
+        Cow::Borrowed(r"<shell>command</shell> - Execute a shell command")
     }
 
     fn execute(&self, args: &HashMap<String, String>) -> Result<String, ToolError> {

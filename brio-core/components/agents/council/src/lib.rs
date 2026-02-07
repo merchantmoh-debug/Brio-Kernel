@@ -2,13 +2,16 @@
 #![allow(missing_docs)]
 
 use agent_sdk::agent::{
-    StandardAgent, StandardAgentConfig, handle_standard_event, run_standard_agent,
+    handle_standard_event, run_standard_agent, StandardAgent, StandardAgentConfig,
 };
 use agent_sdk::error::AgentError;
 use agent_sdk::tools::ToolRegistry;
 use agent_sdk::types::{InferenceResponse, Message, Role, TaskContext};
 use agent_sdk::{AgentConfig, PromptBuilder};
+use regex::Regex;
+use std::borrow::Cow;
 use std::collections::HashMap;
+use std::sync::OnceLock;
 use wit_bindgen::generate;
 
 // Generate WIT bindings at crate root level
@@ -105,27 +108,33 @@ fn convert_role(role: Role) -> brio::ai::inference::Role {
     }
 }
 
+static DONE_REGEX: OnceLock<Regex> = OnceLock::new();
+
 fn create_done_parser() -> agent_sdk::tools::ToolParser {
-    agent_sdk::tools::ToolParser::new(r"<done>\s*(.*?)\s*</done>", |caps: &regex::Captures| {
+    let regex = DONE_REGEX.get_or_init(|| {
+        Regex::new(r"<done>\s*(.*?)\s*</done>").expect("DONE_REGEX should be valid")
+    });
+    agent_sdk::tools::ToolParser::from_regex(regex, |caps: &regex::Captures| {
         let mut args = HashMap::new();
         args.insert("summary".to_string(), caps[1].to_string());
         args
     })
-    .expect("Invalid regex pattern")
 }
 
-use agent_sdk::Tool;
 use agent_sdk::error::ToolError;
+use agent_sdk::Tool;
 
 struct DoneTool;
 
 impl Tool for DoneTool {
-    fn name(&self) -> &'static str {
-        "done"
+    fn name(&self) -> Cow<'static, str> {
+        Cow::Borrowed("done")
     }
 
-    fn description(&self) -> &'static str {
-        r"<done>summary of completion</done> - Mark task as complete with strategic plan"
+    fn description(&self) -> Cow<'static, str> {
+        Cow::Borrowed(
+            r"<done>summary of completion</done> - Mark task as complete with strategic plan",
+        )
     }
 
     fn execute(&self, _args: &HashMap<String, String>) -> Result<String, ToolError> {
