@@ -5,6 +5,7 @@
 
 use crate::error::ToolError;
 use crate::tools::Tool;
+use std::borrow::Cow;
 use std::collections::HashMap;
 
 /// Tool for marking a task as complete.
@@ -31,12 +32,12 @@ use std::collections::HashMap;
 pub struct DoneTool;
 
 impl Tool for DoneTool {
-    fn name(&self) -> &'static str {
-        "done"
+    fn name(&self) -> Cow<'static, str> {
+        Cow::Borrowed("done")
     }
 
-    fn description(&self) -> &'static str {
-        "<done>summary of completion</done> - Mark task as complete"
+    fn description(&self) -> Cow<'static, str> {
+        Cow::Borrowed("<done>summary of completion</done> - Mark task as complete")
     }
 
     fn execute(&self, _args: &HashMap<String, String>) -> Result<String, ToolError> {

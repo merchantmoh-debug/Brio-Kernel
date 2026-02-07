@@ -3,6 +3,7 @@
 use crate::error::{FileSystemError, ToolError};
 use crate::types::{ExecutionResult, ToolInvocation, ToolResult};
 use regex::{Captures, Regex};
+use std::borrow::Cow;
 use std::collections::HashMap;
 use std::fmt::Write;
 use std::path::{Component, Path, PathBuf};
@@ -12,10 +13,10 @@ use std::time::Instant;
 /// Trait for tools that can be executed by agents.
 pub trait Tool: Send + Sync {
     /// Returns the unique name of the tool.
-    fn name(&self) -> &'static str;
+    fn name(&self) -> Cow<'static, str>;
 
     /// Returns the description of the tool in XML format.
-    fn description(&self) -> &'static str;
+    fn description(&self) -> Cow<'static, str>;
 
     /// Executes the tool with the provided arguments.
     ///
@@ -67,6 +68,21 @@ impl ToolParser {
         match Self::new(pattern, extractor) {
             Ok(parser) => parser,
             Err(e) => panic!("regex pattern should be valid at compile time: {e}"),
+        }
+    }
+
+    /// Creates a new tool parser from a pre-compiled regex.
+    ///
+    /// This is useful when you want to reuse a compiled regex pattern
+    /// that was created elsewhere (e.g., in a static OnceLock).
+    #[must_use]
+    pub fn from_regex<E>(regex: &Regex, extractor: E) -> Self
+    where
+        E: Fn(&Captures) -> HashMap<String, String> + Send + Sync + 'static,
+    {
+        Self {
+            regex: regex.clone(),
+            extractor: Box::new(extractor),
         }
     }
 
@@ -455,11 +471,11 @@ mod tests {
     fn test_tool_registry() {
         struct TestTool;
         impl Tool for TestTool {
-            fn name(&self) -> &'static str {
-                "test"
+            fn name(&self) -> Cow<'static, str> {
+                Cow::Borrowed("test")
             }
-            fn description(&self) -> &'static str {
-                "<test />"
+            fn description(&self) -> Cow<'static, str> {
+                Cow::Borrowed("<test />")
             }
             fn execute(&self, _args: &HashMap<String, String>) -> Result<String, ToolError> {
                 Ok("test result".to_string())

@@ -258,9 +258,10 @@ mod tests {
     use crate::tools::{Tool, ToolParser};
     use crate::types::TaskContext;
     use regex::Captures;
+    use std::borrow::Cow;
     use std::collections::HashMap;
-    use std::sync::Arc;
     use std::sync::atomic::{AtomicUsize, Ordering};
+    use std::sync::Arc;
     use std::time::Duration;
 
     fn create_test_context() -> TaskContext {
@@ -296,42 +297,40 @@ mod tests {
     }
 
     struct MockTool {
-        name: &'static str,
-        description: &'static str,
+        name: Cow<'static, str>,
+        description: Cow<'static, str>,
         should_fail: bool,
     }
 
     impl MockTool {
         fn new(name: impl Into<String>) -> Self {
-            let name = name.into();
-            let name: &'static str = Box::leak(name.into_boxed_str());
-            let desc: &'static str = Box::leak(format!("<{} />", name).into_boxed_str());
+            let name_str: String = name.into();
+            let desc = format!("<{} />", name_str);
             Self {
-                name,
-                description: desc,
+                name: Cow::Owned(name_str),
+                description: Cow::Owned(desc),
                 should_fail: false,
             }
         }
 
         fn failing(name: impl Into<String>) -> Self {
-            let name = name.into();
-            let name: &'static str = Box::leak(name.into_boxed_str());
-            let desc: &'static str = Box::leak(format!("<{} />", name).into_boxed_str());
+            let name_str: String = name.into();
+            let desc = format!("<{} />", name_str);
             Self {
-                name,
-                description: desc,
+                name: Cow::Owned(name_str),
+                description: Cow::Owned(desc),
                 should_fail: true,
             }
         }
     }
 
     impl Tool for MockTool {
-        fn name(&self) -> &'static str {
-            self.name
+        fn name(&self) -> Cow<'static, str> {
+            self.name.clone()
         }
 
-        fn description(&self) -> &'static str {
-            self.description
+        fn description(&self) -> Cow<'static, str> {
+            self.description.clone()
         }
 
         fn execute(&self, _args: &HashMap<String, String>) -> Result<String, ToolError> {

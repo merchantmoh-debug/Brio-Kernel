@@ -4,7 +4,8 @@
 //! validation to prevent command injection attacks.
 
 use crate::error::ToolError;
-use crate::tools::{Tool, validate_shell_command};
+use crate::tools::{validate_shell_command, Tool};
+use std::borrow::Cow;
 use std::collections::HashMap;
 
 /// Tool for executing shell commands.
@@ -64,12 +65,12 @@ impl ShellTool {
 }
 
 impl Tool for ShellTool {
-    fn name(&self) -> &'static str {
-        "shell"
+    fn name(&self) -> Cow<'static, str> {
+        Cow::Borrowed("shell")
     }
 
-    fn description(&self) -> &'static str {
-        "<shell>command</shell> - Execute a shell command"
+    fn description(&self) -> Cow<'static, str> {
+        Cow::Borrowed("<shell>command</shell> - Execute a shell command")
     }
 
     fn execute(&self, args: &HashMap<String, String>) -> Result<String, ToolError> {

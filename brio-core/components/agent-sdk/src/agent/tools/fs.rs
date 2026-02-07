@@ -5,7 +5,8 @@
 //! error handling and resource limits.
 
 use crate::error::{FileSystemError, ToolError};
-use crate::tools::{Tool, validate_file_size, validate_path};
+use crate::tools::{validate_file_size, validate_path, Tool};
+use std::borrow::Cow;
 use std::collections::HashMap;
 
 /// Tool for reading file contents.
@@ -47,12 +48,12 @@ impl ReadFileTool {
 }
 
 impl Tool for ReadFileTool {
-    fn name(&self) -> &'static str {
-        "read_file"
+    fn name(&self) -> Cow<'static, str> {
+        Cow::Borrowed("read_file")
     }
 
-    fn description(&self) -> &'static str {
-        r#"<read_file path="path/to/file" /> - Read content from a file"#
+    fn description(&self) -> Cow<'static, str> {
+        Cow::Borrowed(r#"<read_file path="path/to/file" /> - Read content from a file"#)
     }
 
     fn execute(&self, args: &HashMap<String, String>) -> Result<String, ToolError> {
@@ -122,12 +123,14 @@ impl Tool for ReadFileTool {
 pub struct WriteFileTool;
 
 impl Tool for WriteFileTool {
-    fn name(&self) -> &'static str {
-        "write_file"
+    fn name(&self) -> Cow<'static, str> {
+        Cow::Borrowed("write_file")
     }
 
-    fn description(&self) -> &'static str {
-        r#"<write_file path="path/to/file">content</write_file> - Write content to a file"#
+    fn description(&self) -> Cow<'static, str> {
+        Cow::Borrowed(
+            r#"<write_file path="path/to/file">content</write_file> - Write content to a file"#,
+        )
     }
 
     fn execute(&self, args: &HashMap<String, String>) -> Result<String, ToolError> {
@@ -219,12 +222,12 @@ impl ListDirectoryTool {
 }
 
 impl Tool for ListDirectoryTool {
-    fn name(&self) -> &'static str {
-        "ls"
+    fn name(&self) -> Cow<'static, str> {
+        Cow::Borrowed("ls")
     }
 
-    fn description(&self) -> &'static str {
-        r#"<ls path="path/to/directory" /> - List directory contents"#
+    fn description(&self) -> Cow<'static, str> {
+        Cow::Borrowed(r#"<ls path="path/to/directory" /> - List directory contents"#)
     }
 
     fn execute(&self, args: &HashMap<String, String>) -> Result<String, ToolError> {
