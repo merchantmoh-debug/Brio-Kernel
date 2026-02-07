@@ -1,0 +1,39 @@
+[package]
+name = "brio-benchmarks"
+version = "0.1.0"
+edition = "2024"
+publish = false
+
+[dependencies]
+brio-kernel = { path = "../kernel" }
+agent-sdk = { path = "../components/agent-sdk" }
+
+[dev-dependencies]
+criterion = { version = "0.5", features = ["async_tokio", "html_reports"] }
+tokio = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+tempfile = { workspace = true }
+regex = { workspace = true }
+sha2 = { workspace = true }
+hex = { workspace = true }
+walkdir = { workspace = true }
+
+[[bench]]
+name = "vfs_diff"
+harness = false
+
+[[bench]]
+name = "sql_store"
+harness = false
+
+[[bench]]
+name = "tool_parsing"
+harness = false
+
+[[bench]]
+name = "message_preparation"
+harness = false
+
+[lints]
+workspace = true
