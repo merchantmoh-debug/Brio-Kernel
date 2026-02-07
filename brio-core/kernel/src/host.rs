@@ -229,7 +229,7 @@ impl BrioHostState {
         if let (Some(router), Some((node_id_str, component))) =
             (&self.inner.remote_router, target.split_once('/'))
         {
-            let node_id = NodeId::from(node_id_str.to_string());
+            let node_id = NodeId::from_str(node_id_str).expect("valid node id");
 
             // If the target is a different node, route via gRPC
             let message = MeshMessage {
