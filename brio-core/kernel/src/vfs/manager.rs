@@ -1,3 +1,8 @@
+//! Session manager for isolated file system operations.
+//!
+//! This module manages temporary working directories for agents, providing
+//! copy-on-write isolation through reflinks and atomic commit/rollback semantics.
+
 use super::{diff, hashing, policy::SandboxPolicy, reflink};
 use std::collections::HashMap;
 use std::fs;

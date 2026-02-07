@@ -1,3 +1,8 @@
+//! gRPC service implementation for mesh transport.
+//!
+//! This module implements the MeshTransport gRPC service, handling incoming
+//! RPC calls from remote nodes and routing them to local components.
+
 use std::sync::Arc;
 use tonic::{Request, Response, Status};
 

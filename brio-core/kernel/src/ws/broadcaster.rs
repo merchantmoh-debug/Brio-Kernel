@@ -127,14 +127,15 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn broadcast_reaches_subscribers() {
+    async fn broadcast_reaches_subscribers() -> Result<(), WsError> {
         let broadcaster = Broadcaster::new();
         let mut rx = broadcaster.subscribe();
 
-        broadcaster.broadcast(BroadcastMessage::Shutdown).unwrap();
+        broadcaster.broadcast(BroadcastMessage::Shutdown)?;
 
-        let msg = rx.recv().await.unwrap();
+        let msg = rx.recv().await?;
         assert!(matches!(msg, BroadcastMessage::Shutdown));
+        Ok(())
     }
 
     #[tokio::test]

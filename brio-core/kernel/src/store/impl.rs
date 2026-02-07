@@ -1,3 +1,8 @@
+//! SQL store implementation with policy enforcement.
+//!
+//! This module provides a SQLite-backed store with configurable query policies
+//! for secure data access and isolation between different scopes.
+
 use anyhow::Result;
 use sqlx::{
     Column, Row, TypeInfo, ValueRef,

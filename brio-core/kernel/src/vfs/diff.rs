@@ -1,3 +1,8 @@
+//! File diff computation and application for session management.
+//!
+//! This module provides utilities for detecting changes between directories
+//! and applying them atomically using a staging approach.
+
 use sha2::{Digest, Sha256};
 use std::collections::HashMap;
 use std::fs;

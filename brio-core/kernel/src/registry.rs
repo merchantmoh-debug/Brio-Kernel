@@ -1,3 +1,8 @@
+//! Plugin registry for managing WebAssembly components.
+//!
+//! This module provides a registry for loading, managing, and instantiating
+//! WASM plugins with proper permission scoping and host state injection.
+
 use crate::engine::linker::create_linker;
 use crate::host::BrioHostState;
 use anyhow::{Context, Result};

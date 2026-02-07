@@ -1,3 +1,8 @@
+//! Configuration management for the Brio kernel.
+//!
+//! This module defines all configuration settings including server binding,
+//! database connections, mesh networking, inference providers, and sandbox policies.
+
 use config::{Config, ConfigError, Environment};
 use secrecy::SecretString;
 use serde::Deserialize;

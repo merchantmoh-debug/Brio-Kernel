@@ -1,3 +1,8 @@
+//! Remote router for dispatching mesh calls to other nodes.
+//!
+//! This module provides connection pooling and routing for inter-node
+//! communication via gRPC in a distributed Brio cluster.
+
 use anyhow::{Result, anyhow};
 use parking_lot::RwLock;
 use std::collections::HashMap;
@@ -50,7 +55,7 @@ impl RemoteRouter {
     #[must_use]
     pub fn node_address(&self, node_id: &NodeId) -> Option<NodeAddress> {
         let registry = self.registry.read();
-        registry.get(node_id).map(|info| info.address.clone())
+        registry.get(node_id).map(|info| info.address().clone())
     }
 
     /// Sends a message to a target node.
@@ -144,7 +149,7 @@ impl NodeRegistry {
     ///
     /// * `info` - Information about the node.
     pub fn register(&mut self, info: NodeInfo) {
-        self.nodes.insert(info.id.clone(), info);
+        self.nodes.insert(info.id().clone(), info);
     }
 
     /// Gets information about a node.
@@ -180,18 +185,19 @@ mod tests {
     fn test_registry_operations() {
         let mut registry = NodeRegistry::new();
         let id = NodeId::new();
-        let info = NodeInfo {
-            id: id.clone(),
-            address: NodeAddress("127.0.0.1:8080".to_string()),
-            capabilities: vec![],
-            last_seen: 0,
-        };
+        let info = NodeInfo::new(
+            id.clone(),
+            NodeAddress::new("127.0.0.1:8080").unwrap(),
+            vec![],
+            0,
+        )
+        .unwrap();
 
         registry.register(info.clone());
         assert!(registry.get(&id).is_some());
 
         let list = registry.list();
         assert_eq!(list.len(), 1);
-        assert_eq!(list[0].id, id);
+        assert_eq!(list[0].id(), &id);
     }
 }

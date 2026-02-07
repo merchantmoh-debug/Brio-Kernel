@@ -1,3 +1,8 @@
+//! Query policy enforcement for SQL operations.
+//!
+//! This module defines policies that validate and authorize SQL queries
+//! before execution, ensuring scoped access control to database tables.
+
 use sqlparser::{
     ast::{TableFactor, Visit, Visitor},
     dialect::GenericDialect,

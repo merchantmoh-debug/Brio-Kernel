@@ -123,9 +123,10 @@ mod tests {
     }
 
     #[test]
-    fn broadcast_message_shutdown_serializes() {
+    fn broadcast_message_shutdown_serializes() -> Result<(), WsError> {
         let msg = BroadcastMessage::Shutdown;
-        let payload = msg.to_frame_payload().unwrap();
+        let payload = msg.to_frame_payload()?;
         assert_eq!(payload, r#"{"type":"shutdown"}"#);
+        Ok(())
     }
 }

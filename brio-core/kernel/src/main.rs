@@ -1,3 +1,9 @@
+//! Brio Kernel - Main application entry point.
+//!
+//! This is the main entry point for the Brio kernel, responsible for
+//! initializing all subsystems: telemetry, plugin registry, inference providers,
+//! host state, mesh server, and control plane.
+
 use anyhow::Context;
 use brio_kernel::host::BrioHostState;
 use brio_kernel::infrastructure::{audit, config::Settings, server, telemetry::TelemetryBuilder};
@@ -102,7 +108,7 @@ async fn init_host_state(
     let db_url = config.database.url.expose_secret();
 
     let state = if let Some(ref node_id) = config.mesh.as_ref().and_then(|m| m.node_id.clone()) {
-        let id = brio_kernel::mesh::types::NodeId::from(node_id.clone());
+        let id = brio_kernel::mesh::types::NodeId::from_str(node_id).expect("valid node id");
         info!("Initializing in Distributed Mode (Node ID: {})", id);
         BrioHostState::new_distributed(
             db_url,
@@ -143,7 +149,7 @@ fn start_mesh_server(config: &Settings, state: &std::sync::Arc<BrioHostState>) {
             return;
         };
 
-        let id = brio_kernel::mesh::types::NodeId::from(node_id);
+        let id = brio_kernel::mesh::types::NodeId::from_str(&node_id).expect("Node ID should be valid");
         let service = brio_kernel::mesh::service::MeshService::new(state_clone, id);
 
         info!("Mesh gRPC server listening on {}", addr);

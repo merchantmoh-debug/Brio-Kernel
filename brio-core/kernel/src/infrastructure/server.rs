@@ -1,3 +1,8 @@
+//! HTTP server with WebSocket support for the control plane.
+//!
+//! This module provides the control plane HTTP server with health checks,
+//! metrics, profiling endpoints, and WebSocket support for real-time communication.
+
 use crate::infrastructure::config::Settings;
 use crate::ws::{Broadcaster, handler::ws_router};
 use axum::{Router, routing::get};

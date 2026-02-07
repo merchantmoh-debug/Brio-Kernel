@@ -1,7 +1,8 @@
 //! Event bus for pub/sub messaging between plugins.
 
+use parking_lot::RwLock;
 use std::collections::{HashMap, HashSet};
-use std::sync::{Arc, RwLock};
+use std::sync::Arc;
 
 /// Event bus for managing topic subscriptions.
 #[derive(Clone, Default)]
@@ -24,10 +25,7 @@ impl EventBus {
     /// * `topic` - The topic to subscribe to.
     /// * `plugin_id` - The ID of the plugin subscribing.
     pub fn subscribe(&self, topic: String, plugin_id: String) {
-        let mut subs = self
-            .subscriptions
-            .write()
-            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        let mut subs = self.subscriptions.write();
         subs.entry(topic).or_default().insert(plugin_id);
     }
 
@@ -42,10 +40,7 @@ impl EventBus {
     /// A vector of plugin IDs subscribed to the topic.
     #[must_use]
     pub fn subscribers(&self, topic: &str) -> Vec<String> {
-        let subs = self
-            .subscriptions
-            .read()
-            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        let subs = self.subscriptions.read();
         subs.get(topic)
             .map(|s| s.iter().cloned().collect())
             .unwrap_or_default()

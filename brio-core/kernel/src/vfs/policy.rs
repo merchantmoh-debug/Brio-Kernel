@@ -1,3 +1,8 @@
+//! Sandbox policy for file system access control.
+//!
+//! This module enforces security policies on file system paths, ensuring
+//! agents can only access authorized directories within configured boundaries.
+
 use crate::infrastructure::config::SandboxSettings;
 use std::path::{Path, PathBuf};
 use thiserror::Error;
@@ -98,12 +103,10 @@ mod tests {
         fs_extra::dir::create_all(&allowed, false).map_err(|e| anyhow::anyhow!(e))?;
 
         let settings = SandboxSettings {
-            allowed_paths: vec![
-                allowed
-                    .to_str()
-                    .ok_or_else(|| anyhow::anyhow!("Invalid path"))?
-                    .to_string(),
-            ],
+            allowed_paths: vec![allowed
+                .to_str()
+                .ok_or_else(|| anyhow::anyhow!("Invalid path"))?
+                .to_string()],
         };
 
         let policy = SandboxPolicy::new(&settings).map_err(|e| anyhow::anyhow!(e))?;
