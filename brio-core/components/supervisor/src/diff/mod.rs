@@ -7,7 +7,7 @@ pub mod myers;
 pub mod three_way;
 
 pub use myers::MyersDiff;
-pub use three_way::{three_way_merge, MergeOutcome, ThreeWayMergeError};
+pub use three_way::{MergeOutcome, ThreeWayMergeError, three_way_merge};
 
 /// A single diff operation representing the difference between two texts.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -298,8 +298,8 @@ pub fn format_unified_diff(
     let mut output = String::new();
 
     // Headers
-    output.push_str(&format!("--- {}\n", old_path));
-    output.push_str(&format!("+++ {}\n", new_path));
+    output.push_str(&format!("--- {old_path}\n"));
+    output.push_str(&format!("+++ {new_path}\n"));
 
     for op in diff_ops {
         match op {
@@ -367,33 +367,41 @@ mod tests {
 
     #[test]
     fn test_diff_op_is_change() {
-        assert!(!DiffOp::Equal {
-            old_start: 0,
-            old_end: 1,
-            new_start: 0,
-            new_end: 1,
-        }
-        .is_change());
+        assert!(
+            !DiffOp::Equal {
+                old_start: 0,
+                old_end: 1,
+                new_start: 0,
+                new_end: 1,
+            }
+            .is_change()
+        );
 
-        assert!(DiffOp::Insert {
-            new_start: 0,
-            new_end: 1,
-        }
-        .is_change());
+        assert!(
+            DiffOp::Insert {
+                new_start: 0,
+                new_end: 1,
+            }
+            .is_change()
+        );
 
-        assert!(DiffOp::Delete {
-            old_start: 0,
-            old_end: 1,
-        }
-        .is_change());
+        assert!(
+            DiffOp::Delete {
+                old_start: 0,
+                old_end: 1,
+            }
+            .is_change()
+        );
 
-        assert!(DiffOp::Replace {
-            old_start: 0,
-            old_end: 1,
-            new_start: 0,
-            new_end: 1,
-        }
-        .is_change());
+        assert!(
+            DiffOp::Replace {
+                old_start: 0,
+                old_end: 1,
+                new_start: 0,
+                new_end: 1,
+            }
+            .is_change()
+        );
     }
 
     #[test]
