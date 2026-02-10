@@ -3,11 +3,14 @@
 //! This module provides the control plane HTTP server with health checks,
 //! metrics, profiling endpoints, and WebSocket support for real-time communication.
 
+use crate::api::session_routes;
+use crate::host::BrioHostState;
 use crate::infrastructure::config::Settings;
-use crate::ws::{Broadcaster, handler::ws_router};
+use crate::ws::handler::ws_router;
 use axum::{Router, routing::get};
 use metrics_exporter_prometheus::PrometheusBuilder;
 use std::net::SocketAddr;
+use std::sync::Arc;
 
 #[cfg(unix)]
 use pprof::protos::Message;
@@ -89,7 +92,7 @@ async fn pprof_profile() -> impl axum::response::IntoResponse {
 /// # Errors
 ///
 /// Returns an error if the server fails to start or encounters an error while running.
-pub async fn run_server(config: &Settings, broadcaster: Broadcaster) -> anyhow::Result<()> {
+pub async fn run_server(config: &Settings, host_state: Arc<BrioHostState>) -> anyhow::Result<()> {
     let builder = PrometheusBuilder::new();
     let handle = builder
         .install_recorder()
@@ -99,9 +102,11 @@ pub async fn run_server(config: &Settings, broadcaster: Broadcaster) -> anyhow::
         .route("/health/live", get(health_check))
         .route("/health/ready", get(health_check))
         .route("/metrics", get(move || std::future::ready(handle.render())))
-        .route("/debug/pprof/profile", get(pprof_profile));
+        .route("/debug/pprof/profile", get(pprof_profile))
+        .merge(session_routes())
+        .with_state(host_state.clone());
 
-    let app = control_plane.merge(ws_router(broadcaster));
+    let app = control_plane.merge(ws_router(host_state));
 
     let addr_str = format!("{}:{}", config.server.host, config.server.port);
     let addr: SocketAddr = addr_str.parse()?;

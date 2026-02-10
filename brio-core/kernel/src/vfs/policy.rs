@@ -103,10 +103,12 @@ mod tests {
         fs_extra::dir::create_all(&allowed, false).map_err(|e| anyhow::anyhow!(e))?;
 
         let settings = SandboxSettings {
-            allowed_paths: vec![allowed
-                .to_str()
-                .ok_or_else(|| anyhow::anyhow!("Invalid path"))?
-                .to_string()],
+            allowed_paths: vec![
+                allowed
+                    .to_str()
+                    .ok_or_else(|| anyhow::anyhow!("Invalid path"))?
+                    .to_string(),
+            ],
         };
 
         let policy = SandboxPolicy::new(&settings).map_err(|e| anyhow::anyhow!(e))?;

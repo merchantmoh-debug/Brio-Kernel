@@ -6,7 +6,7 @@
 //!
 //! # Example
 //!
-//! ```
+//! ```no_run
 //! use brio_kernel::infrastructure::config::Settings;
 //!
 //! let settings = Settings::new().expect("Failed to load configuration");

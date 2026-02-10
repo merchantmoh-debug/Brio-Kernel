@@ -7,6 +7,7 @@ pub mod types;
 
 pub use broadcaster::Broadcaster;
 pub use types::{
-    BranchEvent, BranchResultSummary, BroadcastMessage, ClientId, ConflictSummary,
-    FileChangeSummary, MergeRequestEvent, ProgressUpdate, WsError, WsMessage, WsPatch,
+    BranchEvent, BranchResultSummary, BroadcastMessage, ClientId, ClientMessage, ClientResponse,
+    ConflictSummary, FileChangeSummary, MergeRequestEvent, ProgressUpdate, ResponseStatus,
+    SessionAction, SessionParams, WsError, WsMessage, WsPatch,
 };

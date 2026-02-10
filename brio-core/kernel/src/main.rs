@@ -149,7 +149,8 @@ fn start_mesh_server(config: &Settings, state: &std::sync::Arc<BrioHostState>) {
             return;
         };
 
-        let id = brio_kernel::mesh::types::NodeId::from_str(&node_id).expect("Node ID should be valid");
+        let id =
+            brio_kernel::mesh::types::NodeId::from_str(&node_id).expect("Node ID should be valid");
         let service = brio_kernel::mesh::service::MeshService::new(state_clone, id);
 
         info!("Mesh gRPC server listening on {}", addr);
@@ -167,11 +168,11 @@ fn start_mesh_server(config: &Settings, state: &std::sync::Arc<BrioHostState>) {
 }
 
 fn start_control_plane(config: &Settings, state: &std::sync::Arc<BrioHostState>) {
-    let broadcaster = state.broadcaster().clone();
+    let state_clone = state.clone();
     let config_clone = config.clone();
 
     tokio::spawn(async move {
-        if let Err(e) = server::run_server(&config_clone, broadcaster).await {
+        if let Err(e) = server::run_server(&config_clone, state_clone).await {
             error!("Control Plane failed: {:?}", e);
         }
     });

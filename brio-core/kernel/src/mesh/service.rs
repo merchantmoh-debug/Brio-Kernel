@@ -7,6 +7,7 @@ use std::sync::Arc;
 use tonic::{Request, Response, Status};
 
 use crate::host::BrioHostState;
+use crate::host::mesh::MeshHandler;
 use crate::mesh::Payload;
 use crate::mesh::grpc::{
     HeartbeatRequest, HeartbeatResponse, MeshRequest, MeshResponse,

@@ -6,6 +6,8 @@
 
 use crate::engine::brio;
 use crate::host::BrioHostState;
+use crate::host::mesh::MeshHandler;
+use crate::host::permissions::PermissionChecker;
 use crate::mesh::Payload;
 use anyhow::Result;
 use wasmtime::component::{HasSelf, Linker};
@@ -27,8 +29,11 @@ impl brio::core::service_mesh::Host for BrioHostState {
 
         let host_state = self.clone();
         let result = tokio::task::block_in_place(|| {
-            tokio::runtime::Handle::current()
-                .block_on(async move { host_state.mesh_call(&target, &method, internal_payload).await })
+            tokio::runtime::Handle::current().block_on(async move {
+                host_state
+                    .mesh_call(&target, &method, internal_payload)
+                    .await
+            })
         });
 
         result

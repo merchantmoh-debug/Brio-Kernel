@@ -6,13 +6,13 @@
 use anyhow::{Context, Result};
 use opentelemetry::trace::TracerProvider;
 use opentelemetry_otlp::WithExportConfig;
-use opentelemetry_sdk::{propagation::TraceContextPropagator, trace::Sampler, Resource};
+use opentelemetry_sdk::{Resource, propagation::TraceContextPropagator, trace::Sampler};
 use opentelemetry_semantic_conventions::resource;
 use tracing_subscriber::{
+    EnvFilter, Layer, Registry,
     fmt::{self, format::FmtSpan},
     layer::SubscriberExt,
     util::SubscriberInitExt,
-    EnvFilter, Layer, Registry,
 };
 
 /// Builder for setting up telemetry (Logging, Tracing, Metrics).
