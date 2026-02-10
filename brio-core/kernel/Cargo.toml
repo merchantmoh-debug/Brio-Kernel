@@ -1,7 +1,7 @@
 [package]
 name = "brio-kernel"
 version = "0.1.0"
-edition = "2024"
+edition = "2021"
 license = "MPL-2.0"
 description = "Core kernel for the Brio agent runtime"
 repository = "https://github.com/brio-labs/brio"
@@ -9,7 +9,7 @@ readme = "../../README.md"
 keywords = ["agent", "runtime", "wasm", "brio"]
 categories = ["wasm", "development-tools"]
 authors = ["BrioCo <team@brio.build>"]
-rust-version = "1.93"
+rust-version = "1.75"
 
 [dependencies]
 tokio = { workspace = true }
@@ -64,7 +64,7 @@ pprof = { version = "0.15", features = ["flamegraph", "prost-codec"] }
 
 [dev-dependencies]
 wiremock = "0.6"
-proptest = "1"
+# proptest = "1"
 tempfile = { workspace = true }
 
 

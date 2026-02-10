@@ -13,7 +13,7 @@ members = [
     "components/agents/foreman",
     "components/agents/smart-agent",
     "integration-tests",
-    "benches",
+    "benches", "brio-tui",
 ]
 
 [workspace.dependencies]
