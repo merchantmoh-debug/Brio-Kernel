@@ -3,7 +3,6 @@ title = "Brio-Kernel Documentation"
 authors = ["Brio Team"]
 description = "Complete documentation for the Brio-Kernel AI agent orchestration system"
 language = "en"
-multilingual = false
 src = "src"
 
 [build]
