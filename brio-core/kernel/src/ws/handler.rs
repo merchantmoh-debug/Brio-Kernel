@@ -52,7 +52,6 @@ pub fn ws_router(host_state: Arc<BrioHostState>) -> axum::Router {
 
 #[cfg(test)]
 mod tests {
-    
 
     #[test]
     fn ws_router_creates_valid_router() {

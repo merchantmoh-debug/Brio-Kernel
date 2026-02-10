@@ -144,7 +144,7 @@ pub trait BranchRepository: Send + Sync {
     /// # Errors
     /// Returns `BranchRepositoryError` if the approval fails.
     fn approve_merge(&self, merge_id: MergeId, approver: &str)
-        -> Result<(), BranchRepositoryError>;
+    -> Result<(), BranchRepositoryError>;
 }
 
 #[cfg(test)]

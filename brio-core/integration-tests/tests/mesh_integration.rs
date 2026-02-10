@@ -232,9 +232,7 @@ async fn test_mesh_message_timeout() -> Result<()> {
         // If we get here, mesh_call returned successfully before timeout
         // This can happen if the channel closes or other conditions
         // For now, we accept this as the test environment may behave differently
-        println!(
-            "Warning: mesh_call returned Ok before timeout: {result:?}"
-        );
+        println!("Warning: mesh_call returned Ok before timeout: {result:?}");
     }
     // Temporarily disable the strict assertion - the test documents expected behavior
     // assert!(result.is_err(), "Should timeout waiting for response");

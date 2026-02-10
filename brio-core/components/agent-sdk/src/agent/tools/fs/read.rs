@@ -3,7 +3,7 @@
 use crate::agent::tools::fs::get_base_dir;
 use crate::error::{FileSystemError, ToolError};
 use crate::tools::constants::fs;
-use crate::tools::{validate_file_size, validate_path, Tool};
+use crate::tools::{Tool, validate_file_size, validate_path};
 use std::borrow::Cow;
 use std::collections::HashMap;
 

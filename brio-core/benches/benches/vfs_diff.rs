@@ -138,9 +138,10 @@ fn bench_scan_directory(c: &mut Criterion) {
                     let mut files = Vec::new();
                     for entry in walkdir::WalkDir::new(black_box(root)) {
                         if let Ok(e) = entry
-                            && e.file_type().is_file() {
-                                files.push(e.path().to_path_buf());
-                            }
+                            && e.file_type().is_file()
+                        {
+                            files.push(e.path().to_path_buf());
+                        }
                     }
                     black_box(files)
                 });

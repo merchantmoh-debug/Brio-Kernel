@@ -229,8 +229,8 @@ impl BranchManager {
         // 10. Apply non-conflicting changes to staging area
         if !merge_result.has_conflicts() {
             // Apply all changes to staging session
-            if let Err(e) = self
-                .apply_changes_to_staging(&staging_session_id, &merge_result.merged_changes)
+            if let Err(e) =
+                self.apply_changes_to_staging(&staging_session_id, &merge_result.merged_changes)
             {
                 // Clean up staging session on error
                 if let Ok(mut session_manager) = self.lock_session_manager() {
@@ -386,5 +386,3 @@ impl BranchManager {
         Ok(())
     }
 }
-
-

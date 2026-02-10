@@ -4,8 +4,8 @@ use crate::agent::tools::branch::callbacks::{
     BranchCreationCallback, BranchCreationConfig, BranchListCallback, BranchToolError,
 };
 use crate::error::ToolError;
-use crate::tools::constants::branch;
 use crate::tools::Tool;
+use crate::tools::constants::branch;
 use std::borrow::Cow;
 use std::collections::HashMap;
 use std::fmt::Write as _;

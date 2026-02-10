@@ -266,9 +266,7 @@ mod tests {
             if self.should_fail {
                 Err(ToolError::ExecutionFailed {
                     tool: self.name.to_string(),
-                    source: Box::new(std::io::Error::other(
-                        "Mock tool failure",
-                    )),
+                    source: Box::new(std::io::Error::other("Mock tool failure")),
                 })
             } else {
                 Ok(format!("{} executed successfully", self.name))

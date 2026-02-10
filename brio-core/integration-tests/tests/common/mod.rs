@@ -40,10 +40,7 @@ impl IntegrationTestContext {
             BrioHostState::with_provider("sqlite::memory:", Box::new(MockProvider)).await?,
         );
 
-        Ok(Self {
-            temp_dir,
-            host,
-        })
+        Ok(Self { temp_dir, host })
     }
 
     /// Creates a test context with custom sandbox settings.
@@ -55,10 +52,7 @@ impl IntegrationTestContext {
 
         let host = Arc::new(BrioHostState::new("sqlite::memory:", registry, None, sandbox).await?);
 
-        Ok(Self {
-            temp_dir,
-            host,
-        })
+        Ok(Self { temp_dir, host })
     }
 
     /// Gets the path to the temporary directory.

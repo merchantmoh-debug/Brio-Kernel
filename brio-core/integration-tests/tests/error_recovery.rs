@@ -13,7 +13,6 @@ use tokio::time::{sleep, timeout};
 
 mod common;
 
-
 /// Test task failure recovery.
 #[tokio::test]
 async fn test_task_failure_recovery() -> Result<()> {

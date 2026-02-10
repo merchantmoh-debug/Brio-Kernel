@@ -313,8 +313,8 @@ impl TestContext {
     }
 
     pub fn create_test_branch(&self, name: impl Into<String>) -> BranchId {
-        use supervisor::branch::BranchSource;
         use std::path::PathBuf;
+        use supervisor::branch::BranchSource;
         let config = Self::default_test_config(name);
         let mut manager = self.branch_manager.lock().unwrap();
         tokio::task::block_in_place(|| {

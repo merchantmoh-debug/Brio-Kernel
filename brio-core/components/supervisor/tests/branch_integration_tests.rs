@@ -8,8 +8,7 @@ use std::path::PathBuf;
 use supervisor::branch::BranchError;
 use supervisor::branch::BranchSource;
 use supervisor::domain::{
-    AgentAssignment, BranchConfig, BranchId, BranchStatus, ExecutionStrategy,
-    Priority,
+    AgentAssignment, BranchConfig, BranchId, BranchStatus, ExecutionStrategy, Priority,
 };
 
 mod common;
@@ -22,13 +21,12 @@ fn create_branch_sync(
     config: BranchConfig,
 ) -> Result<BranchId, supervisor::branch::BranchError> {
     tokio::task::block_in_place(|| {
-        tokio::runtime::Handle::current().block_on(async {
-            manager.create_branch(source, config).await
-        })
+        tokio::runtime::Handle::current()
+            .block_on(async { manager.create_branch(source, config).await })
     })
 }
 
-// Helper function to run async request_merge synchronously  
+// Helper function to run async request_merge synchronously
 fn request_merge_sync(
     manager: &mut supervisor::branch::BranchManager,
     branch_id: BranchId,
@@ -37,7 +35,9 @@ fn request_merge_sync(
 ) -> Result<supervisor::merge::MergeId, supervisor::branch::BranchError> {
     tokio::task::block_in_place(|| {
         tokio::runtime::Handle::current().block_on(async {
-            manager.request_merge(branch_id, strategy, requires_approval).await
+            manager
+                .request_merge(branch_id, strategy, requires_approval)
+                .await
         })
     })
 }
@@ -55,7 +55,8 @@ async fn test_branch_lifecycle() {
         &mut manager,
         BranchSource::Base(PathBuf::from(TEST_FILES_DIR)),
         TestContext::default_test_config("Test Branch"),
-    ).unwrap();
+    )
+    .unwrap();
 
     // 2. Verify branch created
     let branch = manager.get_branch(branch_id).unwrap().unwrap();
@@ -104,7 +105,8 @@ async fn test_branch_from_parent() {
         &mut manager,
         BranchSource::Base(PathBuf::from(TEST_FILES_DIR)),
         TestContext::default_test_config("Parent Branch"),
-    ).unwrap();
+    )
+    .unwrap();
 
     // Complete parent
     manager.mark_executing(parent_id, 1).unwrap();
@@ -116,7 +118,8 @@ async fn test_branch_from_parent() {
         &mut manager,
         BranchSource::Branch(parent_id),
         TestContext::default_test_config("Child Branch"),
-    ).unwrap();
+    )
+    .unwrap();
 
     let child = manager.get_branch(child_id).unwrap().unwrap();
     assert_eq!(child.parent_id(), Some(parent_id));
@@ -167,7 +170,8 @@ async fn test_completed_branches_dont_count_towards_limit() {
         &mut manager,
         BranchSource::Base(PathBuf::from(TEST_FILES_DIR)),
         TestContext::default_test_config("To Complete"),
-    ).unwrap();
+    )
+    .unwrap();
 
     manager.mark_executing(branch_id, 1).unwrap();
     let result = TestContext::default_test_result(branch_id);
@@ -196,19 +200,16 @@ async fn test_merge_request_with_approval() {
         &mut manager,
         BranchSource::Base(PathBuf::from(TEST_FILES_DIR)),
         TestContext::default_test_config("To Merge"),
-    ).unwrap();
+    )
+    .unwrap();
 
     manager.mark_executing(branch_id, 1).unwrap();
     let result = TestContext::default_test_result(branch_id);
     manager.complete_branch(branch_id, result).unwrap();
 
     // Request merge with approval required
-    let merge_req = request_merge_sync(
-        &mut manager,
-        branch_id,
-        DEFAULT_MERGE_STRATEGY,
-        true,
-    ).unwrap();
+    let merge_req =
+        request_merge_sync(&mut manager, branch_id, DEFAULT_MERGE_STRATEGY, true).unwrap();
 
     // Approve and execute
     manager.approve_merge(merge_req, "test_user").unwrap();
@@ -229,15 +230,11 @@ async fn test_merge_requires_completed_status() {
         &mut manager,
         BranchSource::Base(PathBuf::from(TEST_FILES_DIR)),
         TestContext::default_test_config("Incomplete"),
-    ).unwrap();
+    )
+    .unwrap();
 
     // Try to request merge
-    let result = request_merge_sync(
-        &mut manager,
-        branch_id,
-        DEFAULT_MERGE_STRATEGY,
-        false,
-    );
+    let result = request_merge_sync(&mut manager, branch_id, DEFAULT_MERGE_STRATEGY, false);
 
     assert!(matches!(
         result,
@@ -257,19 +254,15 @@ async fn test_invalid_merge_strategy() {
         &mut manager,
         BranchSource::Base(PathBuf::from(TEST_FILES_DIR)),
         TestContext::default_test_config("To Merge"),
-    ).unwrap();
+    )
+    .unwrap();
 
     manager.mark_executing(branch_id, 1).unwrap();
     let result = TestContext::default_test_result(branch_id);
     manager.complete_branch(branch_id, result).unwrap();
 
     // Request merge with invalid strategy
-    let result = request_merge_sync(
-        &mut manager,
-        branch_id,
-        "invalid-strategy",
-        false,
-    );
+    let result = request_merge_sync(&mut manager, branch_id, "invalid-strategy", false);
 
     assert!(matches!(
         result,
@@ -291,7 +284,8 @@ async fn test_nested_branches() {
         &mut manager,
         BranchSource::Base(PathBuf::from(TEST_FILES_DIR)),
         TestContext::default_test_config("Parent"),
-    ).unwrap();
+    )
+    .unwrap();
 
     // Complete parent so we can branch from it
     manager.mark_executing(parent_id, 1).unwrap();
@@ -303,13 +297,15 @@ async fn test_nested_branches() {
         &mut manager,
         BranchSource::Branch(parent_id),
         TestContext::default_test_config("Child 1"),
-    ).unwrap();
+    )
+    .unwrap();
 
     let child2 = create_branch_sync(
         &mut manager,
         BranchSource::Branch(parent_id),
         TestContext::default_test_config("Child 2"),
-    ).unwrap();
+    )
+    .unwrap();
 
     // Verify tree structure
     let tree = manager.get_branch_tree(parent_id).unwrap();
@@ -332,7 +328,8 @@ async fn test_branch_tree_depth() {
         &mut manager,
         BranchSource::Base(PathBuf::from(TEST_FILES_DIR)),
         TestContext::default_test_config("Root"),
-    ).unwrap();
+    )
+    .unwrap();
 
     // Complete root
     manager.mark_executing(root, 1).unwrap();
@@ -344,7 +341,8 @@ async fn test_branch_tree_depth() {
         &mut manager,
         BranchSource::Branch(root),
         TestContext::default_test_config("Child"),
-    ).unwrap();
+    )
+    .unwrap();
 
     // Complete child
     manager.mark_executing(child, 1).unwrap();
@@ -356,7 +354,8 @@ async fn test_branch_tree_depth() {
         &mut manager,
         BranchSource::Branch(child),
         TestContext::default_test_config("Grandchild"),
-    ).unwrap();
+    )
+    .unwrap();
 
     // Verify tree depth
     let tree = manager.get_branch_tree(root).unwrap();
@@ -385,13 +384,15 @@ async fn test_branch_recovery_after_restart() {
         &mut manager,
         BranchSource::Base(PathBuf::from(TEST_FILES_DIR)),
         TestContext::default_test_config("Branch 1"),
-    ).unwrap();
+    )
+    .unwrap();
 
     let id2 = create_branch_sync(
         &mut manager,
         BranchSource::Base(PathBuf::from(TEST_FILES_DIR)),
         TestContext::default_test_config("Branch 2"),
-    ).unwrap();
+    )
+    .unwrap();
 
     // Mark one as executing
     manager.mark_executing(id1, 1).unwrap();
@@ -422,7 +423,8 @@ async fn test_invalid_status_transitions() {
         &mut manager,
         BranchSource::Base(PathBuf::from(TEST_FILES_DIR)),
         TestContext::default_test_config("Test"),
-    ).unwrap();
+    )
+    .unwrap();
 
     // Cannot complete without executing first
     let result = manager.complete_branch(branch_id, TestContext::default_test_result(branch_id));
@@ -441,7 +443,8 @@ async fn test_terminal_status_is_terminal() {
         &mut manager,
         BranchSource::Base(PathBuf::from(TEST_FILES_DIR)),
         TestContext::default_test_config("To Complete"),
-    ).unwrap();
+    )
+    .unwrap();
 
     // Complete it
     manager.mark_executing(branch_id, 1).unwrap();
@@ -475,7 +478,8 @@ async fn test_branch_with_agents() {
             DEFAULT_MERGE_STRATEGY,
         )
         .unwrap(),
-    ).unwrap();
+    )
+    .unwrap();
 
     let branch = manager.get_branch(branch_id).unwrap().unwrap();
     let config = branch.config();
@@ -506,7 +510,8 @@ async fn test_branch_with_parallel_strategy() {
             "union",
         )
         .unwrap(),
-    ).unwrap();
+    )
+    .unwrap();
 
     let branch = manager.get_branch(branch_id).unwrap().unwrap();
     let config = branch.config();
@@ -600,7 +605,8 @@ async fn test_branch_with_task_override() {
             DEFAULT_MERGE_STRATEGY,
         )
         .unwrap(),
-    ).unwrap();
+    )
+    .unwrap();
 
     let branch = manager.get_branch(branch_id).unwrap().unwrap();
     let config = branch.config();

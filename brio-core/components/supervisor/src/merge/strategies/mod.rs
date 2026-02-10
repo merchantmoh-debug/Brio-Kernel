@@ -116,9 +116,6 @@ impl MergeStrategyRegistry {
 #[cfg(test)]
 mod tests {
     use super::*;
-    
-    
-    
 
     #[test]
     fn test_registry_default_strategies() {

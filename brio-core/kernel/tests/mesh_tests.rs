@@ -62,11 +62,7 @@ async fn mesh_should_route_calls_to_registered_components() {
     }
 
     let err_response = state
-        .mesh_call(
-            "test-agent",
-            "bad_method",
-            Payload::Json(Box::default()),
-        )
+        .mesh_call("test-agent", "bad_method", Payload::Json(Box::default()))
         .await;
 
     assert!(err_response.is_err());

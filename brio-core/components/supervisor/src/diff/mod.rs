@@ -9,7 +9,7 @@ pub mod myers;
 pub mod three_way;
 
 pub use myers::MyersDiff;
-pub use three_way::{three_way_merge, MergeOutcome, ThreeWayMergeError};
+pub use three_way::{MergeOutcome, ThreeWayMergeError, three_way_merge};
 
 /// A single diff operation representing the difference between two texts.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -356,33 +356,41 @@ mod tests {
 
     #[test]
     fn test_diff_op_is_change() {
-        assert!(!DiffOp::Equal {
-            old_start: 0,
-            old_end: 1,
-            new_start: 0,
-            new_end: 1,
-        }
-        .is_change());
+        assert!(
+            !DiffOp::Equal {
+                old_start: 0,
+                old_end: 1,
+                new_start: 0,
+                new_end: 1,
+            }
+            .is_change()
+        );
 
-        assert!(DiffOp::Insert {
-            new_start: 0,
-            new_end: 1,
-        }
-        .is_change());
+        assert!(
+            DiffOp::Insert {
+                new_start: 0,
+                new_end: 1,
+            }
+            .is_change()
+        );
 
-        assert!(DiffOp::Delete {
-            old_start: 0,
-            old_end: 1,
-        }
-        .is_change());
+        assert!(
+            DiffOp::Delete {
+                old_start: 0,
+                old_end: 1,
+            }
+            .is_change()
+        );
 
-        assert!(DiffOp::Replace {
-            old_start: 0,
-            old_end: 1,
-            new_start: 0,
-            new_end: 1,
-        }
-        .is_change());
+        assert!(
+            DiffOp::Replace {
+                old_start: 0,
+                old_end: 1,
+                new_start: 0,
+                new_end: 1,
+            }
+            .is_change()
+        );
     }
 
     #[test]

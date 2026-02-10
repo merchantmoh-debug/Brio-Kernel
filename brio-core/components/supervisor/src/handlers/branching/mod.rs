@@ -17,7 +17,7 @@ pub mod execution;
 pub mod merging;
 pub mod pending;
 
-pub use analyzing::{merge_strategy, AnalyzingForBranchHandler};
+pub use analyzing::{AnalyzingForBranchHandler, merge_strategy};
 pub use execution::BranchingHandler;
 pub use merging::MergingHandler;
 pub use pending::MergePendingApprovalHandler;

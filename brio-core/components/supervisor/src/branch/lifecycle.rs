@@ -170,5 +170,3 @@ impl BranchManager {
         Ok(recovered)
     }
 }
-
-

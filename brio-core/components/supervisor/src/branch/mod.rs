@@ -14,7 +14,6 @@ use std::path::PathBuf;
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 
-
 // Re-export primary types from coordinator module
 pub use coordinator::{
     BranchError, BranchManager, BranchTree, MergeRequestId, SessionError, SessionManager,
@@ -365,7 +364,6 @@ impl Branch {
 #[cfg(test)]
 mod tests {
     use super::*;
-    
 
     fn create_test_config() -> BranchConfig {
         BranchConfig::new(

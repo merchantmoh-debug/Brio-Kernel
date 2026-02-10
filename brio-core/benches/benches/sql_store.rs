@@ -190,7 +190,10 @@ fn bench_bind_params(c: &mut Criterion) {
             BenchmarkId::from_parameter(*name),
             &(sql, params.clone()),
             |b, (sql, params)| {
-                let params_owned: Vec<String> = params.iter().map(std::string::ToString::to_string).collect();
+                let params_owned: Vec<String> = params
+                    .iter()
+                    .map(std::string::ToString::to_string)
+                    .collect();
                 b.iter(|| bind_params(black_box(sql), black_box(&params_owned)));
             },
         );

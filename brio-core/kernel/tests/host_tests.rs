@@ -79,11 +79,7 @@ async fn test_register_and_call_component() -> Result<()> {
 
     // Call the component
     let response = host_clone
-        .mesh_call(
-            "test-component",
-            "ping",
-            Payload::Json(Box::default()),
-        )
+        .mesh_call("test-component", "ping", Payload::Json(Box::default()))
         .await?;
 
     if let Payload::Json(s) = response {
@@ -100,11 +96,7 @@ async fn test_mesh_call_to_missing_target() -> Result<()> {
     let host = BrioHostState::with_provider("sqlite::memory:", Box::new(MockProvider)).await?;
 
     let result = host
-        .mesh_call(
-            "nonexistent",
-            "method",
-            Payload::Json(Box::default()),
-        )
+        .mesh_call("nonexistent", "method", Payload::Json(Box::default()))
         .await;
 
     assert!(result.is_err());
@@ -144,18 +136,10 @@ async fn test_register_multiple_components() -> Result<()> {
 
     // Call both
     let resp1 = host
-        .mesh_call(
-            "component-1",
-            "test",
-            Payload::Json(Box::default()),
-        )
+        .mesh_call("component-1", "test", Payload::Json(Box::default()))
         .await?;
     let resp2 = host
-        .mesh_call(
-            "component-2",
-            "test",
-            Payload::Json(Box::default()),
-        )
+        .mesh_call("component-2", "test", Payload::Json(Box::default()))
         .await?;
 
     if let Payload::Json(s) = resp1 {

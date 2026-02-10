@@ -553,7 +553,10 @@ mod tests {
             let result = WasmToolBridge::split_command(input);
             assert_eq!(
                 result,
-                expected.iter().map(std::string::ToString::to_string).collect::<Vec<_>>(),
+                expected
+                    .iter()
+                    .map(std::string::ToString::to_string)
+                    .collect::<Vec<_>>(),
                 "Failed for input: {input}"
             );
         }

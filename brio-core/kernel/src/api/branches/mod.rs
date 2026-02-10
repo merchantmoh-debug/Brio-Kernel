@@ -21,8 +21,8 @@ pub use types::{
 mod tests {
     use super::*;
     use crate::branch_manager::{
-        BranchError, BranchId, BranchManager, BranchStatus,
-        ExecutionStrategy, MergeRequestId, MergeRequestStatus,
+        BranchError, BranchId, BranchManager, BranchStatus, ExecutionStrategy, MergeRequestId,
+        MergeRequestStatus,
     };
 
     // Test request/response serialization
