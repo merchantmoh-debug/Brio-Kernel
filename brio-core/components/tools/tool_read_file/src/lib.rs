@@ -17,6 +17,7 @@ use std::fs::File;
 use std::io::{self, BufRead, BufReader, Read};
 use wit_bindgen::generate;
 
+// Generate WIT bindings
 generate!({
     world: "read-file-tool",
     path: "../../../wit",

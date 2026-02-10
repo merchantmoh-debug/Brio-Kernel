@@ -22,6 +22,7 @@ use std::fmt;
 use std::process::Command;
 use wit_bindgen::generate;
 
+// Generate WIT bindings
 generate!({
     world: "standard-tool",
     path: "../../../wit/tool.wit",
@@ -43,8 +44,11 @@ pub enum ShellError {
     ExecutionFailed(String),
     /// Command returned non-zero exit code.
     CommandFailed {
+        /// Standard output from the command.
         stdout: String,
+        /// Standard error from the command.
         stderr: String,
+        /// Exit code returned by the command.
         code: i32,
     },
     /// Output contains invalid UTF-8 sequences.

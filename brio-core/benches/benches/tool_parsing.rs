@@ -6,6 +6,8 @@
 //! - `validate_path`: Path traversal prevention
 //! - `validate_shell_command`: Command allowlist validation
 
+#![allow(missing_docs)]
+
 use criterion::{BenchmarkId, Criterion, Throughput, black_box, criterion_group, criterion_main};
 use regex::{Captures, Regex};
 use std::collections::HashMap;

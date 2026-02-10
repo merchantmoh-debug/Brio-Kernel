@@ -16,6 +16,7 @@ use std::fs::File;
 use std::io::{self, BufRead, BufReader};
 use wit_bindgen::generate;
 
+// Generate WIT bindings
 generate!({
     world: "grep-tool",
     path: "../../../wit",
@@ -27,10 +28,15 @@ export_grep_tool!(GrepTool);
 /// Errors that can occur during grep operations.
 #[derive(Debug, Clone)]
 pub enum GrepError {
+    /// The provided path is invalid or contains forbidden characters.
     InvalidPath(String),
+    /// The specified file was not found.
     FileNotFound(String),
+    /// Permission denied when accessing the file.
     PermissionDenied(String),
+    /// An I/O error occurred while reading the file.
     IoError(String),
+    /// The search pattern is invalid.
     InvalidPattern(String),
 }
 

@@ -1,3 +1,9 @@
+//! Integration tests for the Brio kernel.
+//!
+//! These tests verify the core functionality of the WASM engine and host state.
+
+#![allow(missing_docs)]
+
 use anyhow::Result;
 use brio_kernel::engine::{WasmEngine, create_engine_config, create_linker};
 use brio_kernel::host::BrioHostState;

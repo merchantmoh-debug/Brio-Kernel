@@ -1,4 +1,6 @@
 //! Coder Agent - Code writing and modification
+
+// WIT bindings generate many undocumented items - this is expected for auto-generated code
 #![allow(missing_docs)]
 
 use agent_sdk::agent::parsers::{

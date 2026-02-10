@@ -1,3 +1,7 @@
+//! Build script for the Brio kernel.
+//!
+//! This script compiles protobuf definitions for gRPC communication.
+
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     if std::env::var("PROTOC").is_err() {
         unsafe {

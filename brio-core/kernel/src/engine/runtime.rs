@@ -8,6 +8,7 @@ use anyhow::{Context, Result};
 use wasmtime::component::{Component, Linker};
 use wasmtime::{Engine, Store};
 
+/// High-level WASM engine for executing WebAssembly components.
 pub struct WasmEngine {
     engine: Engine,
     linker: Linker<BrioHostState>,

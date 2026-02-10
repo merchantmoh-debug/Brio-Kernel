@@ -1,3 +1,7 @@
+//! End-to-end WASM integration tests for the Brio kernel.
+
+#![allow(missing_docs)]
+
 use anyhow::Result;
 use brio_kernel::engine::{WasmEngine, create_engine_config, create_linker};
 use brio_kernel::host::BrioHostState;

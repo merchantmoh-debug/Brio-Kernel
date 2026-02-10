@@ -5,6 +5,8 @@
 //! - `SqlStore::execute`: INSERT/UPDATE/DELETE operations
 //! - `convert_cell`: Type conversion from database to string
 
+#![allow(missing_docs)]
+
 use criterion::{BenchmarkId, Criterion, black_box, criterion_group, criterion_main};
 
 /// Simulated cell conversion - mirrors store/impl.rs logic

@@ -8,47 +8,57 @@ use anyhow::{Context, Result};
 use wasmtime::component::Component;
 use wasmtime::{Engine, Store};
 
-wasmtime::component::bindgen!({
-    inline: r#"
-        package brio:core;
+// WIT bindings module - generated code allows missing docs
+#[allow(missing_docs)]
+mod wit_bindings {
+    wasmtime::component::bindgen!({
+        inline: r#"
+            package brio:core;
 
-        interface agent-runner {
-            record task-context {
-                task-id: string,
-                description: string,
-                input-files: list<string>,
+            interface agent-runner {
+                record task-context {
+                    task-id: string,
+                    description: string,
+                    input-files: list<string>,
+                }
+            
+                run: func(context: task-context) -> result<string, string>;
             }
-        
-            run: func(context: task-context) -> result<string, string>;
-        }
 
-        interface event-handler {
-            variant payload {
-                json(string),
-                binary(list<u8>)
+            interface event-handler {
+                variant payload {
+                    json(string),
+                    binary(list<u8>)
+                }
+                handle-event: func(topic: string, data: payload);
             }
-            handle-event: func(topic: string, data: payload);
-        }
 
-        world smart-agent {
-            import agent-runner;
-            export agent-runner; 
-            export event-handler; 
-        }
-    "#,
-    world: "smart-agent",
-    additional_derives: [serde::Deserialize, serde::Serialize],
-});
+            world smart-agent {
+                import agent-runner;
+                export agent-runner; 
+                export event-handler; 
+            }
+        "#,
+        world: "smart-agent",
+        additional_derives: [serde::Deserialize, serde::Serialize],
+    });
+}
 
+pub use wit_bindings::*;
+
+/// Type alias for the smart agent instance.
 pub type SmartAgentInstance = SmartAgent;
 pub use exports::brio::core::agent_runner::TaskContext;
 pub use exports::brio::core::event_handler::Payload as EventPayload;
 
+/// Runner for executing WASM agent components.
 pub struct AgentRunner {
+    /// The WASM engine used for component instantiation.
     engine: Engine,
 }
 
 impl AgentRunner {
+    /// Creates a new agent runner with the given engine.
     #[must_use]
     pub fn new(engine: Engine) -> Self {
         Self { engine }
