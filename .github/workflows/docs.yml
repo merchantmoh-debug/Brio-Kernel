@@ -4,13 +4,13 @@ on:
   push:
     branches: [main]
     paths:
-      - 'docs/**'
+      - 'src/**'
       - 'book.toml'
       - '.github/workflows/docs.yml'
   pull_request:
     branches: [main]
     paths:
-      - 'docs/**'
+      - 'src/**'
       - 'book.toml'
   workflow_dispatch:
 
