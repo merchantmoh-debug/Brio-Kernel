@@ -35,7 +35,7 @@ impl BranchManager {
     /// # Errors
     ///
     /// Returns an error if the branch cannot be created.
-    pub async fn create_branch(
+    pub fn create_branch(
         &self,
         name: String,
         agents: Vec<AgentAssignment>,
@@ -78,7 +78,7 @@ impl BranchManager {
     /// # Errors
     ///
     /// Returns an error if the branch is not found.
-    pub async fn get_branch(&self, id: &BranchId) -> Result<Branch, BranchError> {
+    pub fn get_branch(&self, id: &BranchId) -> Result<Branch, BranchError> {
         self.storage
             .get_branch(id)
             .ok_or_else(|| BranchError::BranchNotFound(id.to_string()))
@@ -89,7 +89,7 @@ impl BranchManager {
     /// # Errors
     ///
     /// Returns an error if the database query fails.
-    pub async fn list_branches(
+    pub fn list_branches(
         &self,
         status_filter: Option<&str>,
         parent_id_filter: Option<&BranchId>,
@@ -126,7 +126,7 @@ impl BranchManager {
     /// # Errors
     ///
     /// Returns an error if the branch is not found or cannot be deleted.
-    pub async fn delete_branch(&self, id: &BranchId) -> Result<(), BranchError> {
+    pub fn delete_branch(&self, id: &BranchId) -> Result<(), BranchError> {
         if !self.storage.contains_branch(id) {
             return Err(BranchError::BranchNotFound(id.to_string()));
         }
@@ -139,7 +139,7 @@ impl BranchManager {
     /// # Errors
     ///
     /// Returns an error if the branch is not found or execution fails.
-    pub async fn execute_branch(
+    pub fn execute_branch(
         &self,
         id: &BranchId,
         _agent_filter: Option<Vec<String>>,
@@ -170,7 +170,7 @@ impl BranchManager {
     /// # Errors
     ///
     /// Returns an error if the branch is not found or cannot be aborted.
-    pub async fn abort_branch(&self, id: &BranchId) -> Result<Branch, BranchError> {
+    pub fn abort_branch(&self, id: &BranchId) -> Result<Branch, BranchError> {
         let mut branch = self
             .storage
             .get_branch_mut(id)
@@ -194,7 +194,7 @@ impl BranchManager {
     /// # Errors
     ///
     /// Returns an error if the branch is not found or cannot be merged.
-    pub async fn request_merge(
+    pub fn request_merge(
         &self,
         branch_id: &BranchId,
         strategy: String,
@@ -227,7 +227,7 @@ impl BranchManager {
     /// # Errors
     ///
     /// Returns an error if the merge request is not found.
-    pub async fn approve_merge(
+    pub fn approve_merge(
         &self,
         merge_request_id: &MergeRequestId,
         approver: String,
@@ -249,7 +249,7 @@ impl BranchManager {
     /// # Errors
     ///
     /// Returns an error if the merge request is not found.
-    pub async fn reject_merge(
+    pub fn reject_merge(
         &self,
         merge_request_id: &MergeRequestId,
     ) -> Result<MergeRequestModel, BranchError> {
@@ -268,7 +268,7 @@ impl BranchManager {
     /// # Errors
     ///
     /// Returns an error if the merge request is not found.
-    pub async fn get_merge_request(
+    pub fn get_merge_request(
         &self,
         merge_request_id: &MergeRequestId,
     ) -> Result<MergeRequestModel, BranchError> {
@@ -282,7 +282,7 @@ impl BranchManager {
     /// # Errors
     ///
     /// Returns an error if the operation fails.
-    pub async fn get_branch_merge_requests(
+    pub fn get_branch_merge_requests(
         &self,
         branch_id: &BranchId,
     ) -> Result<Vec<MergeRequestModel>, BranchError> {
@@ -294,7 +294,7 @@ impl BranchManager {
     /// # Errors
     ///
     /// Returns an error if the branch is not found.
-    pub async fn get_branch_tree(&self, id: &BranchId) -> Result<Branch, BranchError> {
-        self.get_branch(id).await
+    pub fn get_branch_tree(&self, id: &BranchId) -> Result<Branch, BranchError> {
+        self.get_branch(id)
     }
 }

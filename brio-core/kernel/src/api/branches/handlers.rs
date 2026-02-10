@@ -11,8 +11,8 @@ use serde_json::json;
 use std::sync::Arc;
 
 use crate::api::branches::types::{
-    BranchResponse, CreateBranchRequest, ExecuteBranchRequest, ListBranchesQuery, MergeRequest,
-    MergeResponse, branch_to_response,
+    BranchNodeResponse, BranchResponse, BranchTreeResponse, CreateBranchRequest,
+    ExecuteBranchRequest, ListBranchesQuery, MergeRequest, MergeResponse, branch_to_response,
 };
 use crate::branch_manager::{
     AgentAssignment, BranchError, BranchId, BranchManager, ExecutionStrategy, MergeRequestId,
@@ -84,7 +84,7 @@ impl IntoResponse for ApiError {
                 StatusCode::SERVICE_UNAVAILABLE,
                 "Branch manager not initialized".to_string(),
             ),
-            _ => (
+            ApiError::Branch(_) => (
                 StatusCode::INTERNAL_SERVER_ERROR,
                 "Internal server error".to_string(),
             ),
@@ -102,11 +102,18 @@ impl IntoResponse for ApiError {
 /// POST /api/v1/branches
 ///
 /// Create a new branch.
+///
+/// # Errors
+///
+/// Returns an error if:
+/// - The branch manager is not initialized
+/// - The branch ID is invalid
+/// - The branch operation fails
 pub async fn create_branch(
     State(state): State<Arc<BrioHostState>>,
     Json(req): Json<CreateBranchRequest>,
 ) -> Result<Json<BranchResponse>, ApiError> {
-    let manager = get_branch_manager(&state).ok_or(ApiError::BranchManagerNotInitialized)?;
+    let manager = get_branch_manager(&state);
 
     let agents: Vec<AgentAssignment> = req
         .config
@@ -136,7 +143,6 @@ pub async fn create_branch(
             req.config.auto_merge,
             req.config.merge_strategy,
         )
-        .await
         .map_err(ApiError::Branch)?;
 
     Ok(Json(branch_to_response(&branch)))
@@ -145,11 +151,18 @@ pub async fn create_branch(
 /// GET /api/v1/branches
 ///
 /// List all branches with optional filters.
+///
+/// # Errors
+///
+/// Returns an error if:
+/// - The branch manager is not initialized
+/// - The parent branch ID is invalid
+/// - The list operation fails
 pub async fn list_branches(
     State(state): State<Arc<BrioHostState>>,
     Query(query): Query<ListBranchesQuery>,
 ) -> Result<Json<Vec<BranchResponse>>, ApiError> {
-    let manager = get_branch_manager(&state).ok_or(ApiError::BranchManagerNotInitialized)?;
+    let manager = get_branch_manager(&state);
 
     let parent_id = match query.parent_id {
         Some(id) => Some(BranchId::new(id.clone()).map_err(|_| ApiError::InvalidBranchId(id))?),
@@ -158,7 +171,6 @@ pub async fn list_branches(
 
     let branches = manager
         .list_branches(query.status.as_deref(), parent_id.as_ref())
-        .await
         .map_err(ApiError::Branch)?;
 
     Ok(Json(
@@ -172,17 +184,21 @@ pub async fn list_branches(
 /// GET /api/v1/branches/{id}
 ///
 /// Get a specific branch by ID.
+///
+/// # Errors
+///
+/// Returns an error if:
+/// - The branch manager is not initialized
+/// - The branch ID is invalid
+/// - The branch is not found
 pub async fn get_branch(
     State(state): State<Arc<BrioHostState>>,
     Path(id): Path<String>,
 ) -> Result<Json<BranchResponse>, ApiError> {
-    let manager = get_branch_manager(&state).ok_or(ApiError::BranchManagerNotInitialized)?;
+    let manager = get_branch_manager(&state);
     let branch_id = BranchId::new(id.clone()).map_err(|_| ApiError::InvalidBranchId(id))?;
 
-    let branch = manager
-        .get_branch(&branch_id)
-        .await
-        .map_err(ApiError::Branch)?;
+    let branch = manager.get_branch(&branch_id).map_err(ApiError::Branch)?;
 
     Ok(Json(branch_to_response(&branch)))
 }
@@ -190,16 +206,22 @@ pub async fn get_branch(
 /// DELETE /api/v1/branches/{id}
 ///
 /// Delete a branch.
+///
+/// # Errors
+///
+/// Returns an error if:
+/// - The branch manager is not initialized
+/// - The branch ID is invalid
+/// - The delete operation fails
 pub async fn delete_branch(
     State(state): State<Arc<BrioHostState>>,
     Path(id): Path<String>,
 ) -> Result<StatusCode, ApiError> {
-    let manager = get_branch_manager(&state).ok_or(ApiError::BranchManagerNotInitialized)?;
+    let manager = get_branch_manager(&state);
     let branch_id = BranchId::new(id.clone()).map_err(|_| ApiError::InvalidBranchId(id))?;
 
     manager
         .delete_branch(&branch_id)
-        .await
         .map_err(ApiError::Branch)?;
 
     Ok(StatusCode::NO_CONTENT)
@@ -208,17 +230,23 @@ pub async fn delete_branch(
 /// POST /api/v1/branches/{id}/execute
 ///
 /// Execute a branch.
+///
+/// # Errors
+///
+/// Returns an error if:
+/// - The branch manager is not initialized
+/// - The branch ID is invalid
+/// - The execution operation fails
 pub async fn execute_branch(
     State(state): State<Arc<BrioHostState>>,
     Path(id): Path<String>,
     Json(req): Json<ExecuteBranchRequest>,
 ) -> Result<Json<BranchResponse>, ApiError> {
-    let manager = get_branch_manager(&state).ok_or(ApiError::BranchManagerNotInitialized)?;
+    let manager = get_branch_manager(&state);
     let branch_id = BranchId::new(id.clone()).map_err(|_| ApiError::InvalidBranchId(id))?;
 
     let branch = manager
         .execute_branch(&branch_id, Some(req.agents), req.task_description)
-        .await
         .map_err(ApiError::Branch)?;
 
     Ok(Json(branch_to_response(&branch)))
@@ -227,17 +255,23 @@ pub async fn execute_branch(
 /// POST /api/v1/branches/{id}/merge
 ///
 /// Request a merge for a branch.
+///
+/// # Errors
+///
+/// Returns an error if:
+/// - The branch manager is not initialized
+/// - The branch ID is invalid
+/// - The merge request operation fails
 pub async fn request_merge(
     State(state): State<Arc<BrioHostState>>,
     Path(id): Path<String>,
     Json(req): Json<MergeRequest>,
 ) -> Result<Json<MergeResponse>, ApiError> {
-    let manager = get_branch_manager(&state).ok_or(ApiError::BranchManagerNotInitialized)?;
+    let manager = get_branch_manager(&state);
     let branch_id = BranchId::new(id.clone()).map_err(|_| ApiError::InvalidBranchId(id))?;
 
     let merge_request = manager
         .request_merge(&branch_id, req.strategy, req.requires_approval)
-        .await
         .map_err(ApiError::Branch)?;
 
     Ok(Json(MergeResponse {
@@ -251,20 +285,25 @@ pub async fn request_merge(
 /// GET /api/v1/branches/{id}/tree
 ///
 /// Get the branch tree.
+///
+/// # Errors
+///
+/// Returns an error if:
+/// - The branch manager is not initialized
+/// - The branch ID is invalid
+/// - The branch tree retrieval fails
 pub async fn get_branch_tree(
     State(state): State<Arc<BrioHostState>>,
     Path(id): Path<String>,
 ) -> Result<Json<crate::api::branches::types::BranchTreeResponse>, ApiError> {
-    let manager = get_branch_manager(&state).ok_or(ApiError::BranchManagerNotInitialized)?;
+    let manager = get_branch_manager(&state);
     let branch_id = BranchId::new(id.clone()).map_err(|_| ApiError::InvalidBranchId(id))?;
 
     let branch = manager
         .get_branch_tree(&branch_id)
-        .await
         .map_err(ApiError::Branch)?;
 
-    use crate::api::branches::types::BranchNodeResponse;
-    Ok(Json(crate::api::branches::types::BranchTreeResponse {
+    Ok(Json(BranchTreeResponse {
         root: BranchNodeResponse {
             id: branch.id.to_string(),
             name: branch.name,
@@ -286,17 +325,21 @@ pub async fn get_branch_tree(
 /// POST /api/v1/branches/{id}/abort
 ///
 /// Abort a branch.
+///
+/// # Errors
+///
+/// Returns an error if:
+/// - The branch manager is not initialized
+/// - The branch ID is invalid
+/// - The abort operation fails
 pub async fn abort_branch(
     State(state): State<Arc<BrioHostState>>,
     Path(id): Path<String>,
 ) -> Result<Json<BranchResponse>, ApiError> {
-    let manager = get_branch_manager(&state).ok_or(ApiError::BranchManagerNotInitialized)?;
+    let manager = get_branch_manager(&state);
     let branch_id = BranchId::new(id.clone()).map_err(|_| ApiError::InvalidBranchId(id))?;
 
-    let branch = manager
-        .abort_branch(&branch_id)
-        .await
-        .map_err(ApiError::Branch)?;
+    let branch = manager.abort_branch(&branch_id).map_err(ApiError::Branch)?;
 
     Ok(Json(branch_to_response(&branch)))
 }
@@ -304,17 +347,23 @@ pub async fn abort_branch(
 /// POST /api/v1/merge-requests/{id}/approve
 ///
 /// Approve a merge request.
+///
+/// # Errors
+///
+/// Returns an error if:
+/// - The branch manager is not initialized
+/// - The merge request ID is invalid
+/// - The approve operation fails
 pub async fn approve_merge(
     State(state): State<Arc<BrioHostState>>,
     Path(id): Path<String>,
 ) -> Result<Json<MergeResponse>, ApiError> {
-    let manager = get_branch_manager(&state).ok_or(ApiError::BranchManagerNotInitialized)?;
+    let manager = get_branch_manager(&state);
     let merge_request_id =
         MergeRequestId::new(id.clone()).map_err(|_| ApiError::InvalidMergeRequestId(id))?;
 
     let merge_request = manager
         .approve_merge(&merge_request_id, "system".to_string())
-        .await
         .map_err(ApiError::Branch)?;
 
     Ok(Json(MergeResponse {
@@ -328,23 +377,29 @@ pub async fn approve_merge(
 /// POST /api/v1/merge-requests/{id}/reject
 ///
 /// Reject a merge request.
+///
+/// # Errors
+///
+/// Returns an error if:
+/// - The branch manager is not initialized
+/// - The merge request ID is invalid
+/// - The reject operation fails
 pub async fn reject_merge(
     State(state): State<Arc<BrioHostState>>,
     Path(id): Path<String>,
 ) -> Result<StatusCode, ApiError> {
-    let manager = get_branch_manager(&state).ok_or(ApiError::BranchManagerNotInitialized)?;
+    let manager = get_branch_manager(&state);
     let merge_request_id =
         MergeRequestId::new(id.clone()).map_err(|_| ApiError::InvalidMergeRequestId(id))?;
 
     manager
         .reject_merge(&merge_request_id)
-        .await
         .map_err(ApiError::Branch)?;
 
     Ok(StatusCode::NO_CONTENT)
 }
 
 /// Get the branch manager from state.
-fn get_branch_manager(state: &Arc<BrioHostState>) -> Option<Arc<BranchManager>> {
-    Some(state.branch_manager())
+fn get_branch_manager(state: &Arc<BrioHostState>) -> Arc<BranchManager> {
+    state.branch_manager()
 }

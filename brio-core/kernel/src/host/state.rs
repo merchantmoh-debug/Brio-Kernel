@@ -294,18 +294,21 @@ impl BrioHostState {
     }
 
     /// Get a reference to the mesh router (internal use).
+    #[allow(dead_code)]
     pub(crate) fn mesh_router(&self) -> &Arc<RwLock<HashMap<String, Sender<MeshMessage>>>> {
         &self.inner.mesh_router
     }
 
     /// Get a reference to the remote router (internal use).
-    pub(crate) fn remote_router(&self) -> &Option<RemoteRouter> {
-        &self.inner.remote_router
+    #[allow(dead_code)]
+    pub(crate) fn remote_router(&self) -> Option<&RemoteRouter> {
+        self.inner.remote_router.as_ref()
     }
 
     /// Get a reference to the plugin registry (internal use).
-    pub(crate) fn plugin_registry_ref(&self) -> &Option<Arc<PluginRegistry>> {
-        &self.inner.plugin_registry
+    #[allow(dead_code)]
+    pub(crate) fn plugin_registry_ref(&self) -> Option<&Arc<PluginRegistry>> {
+        self.inner.plugin_registry.as_ref()
     }
 
     /// Get a reference to the session manager (internal use).

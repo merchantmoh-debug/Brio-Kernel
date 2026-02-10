@@ -331,9 +331,8 @@ impl ToolRegistryBuilder {
 
         // Register ShellTool if SHELL flag is set
         if self.flags.contains(ToolRegistryFlags::SHELL) {
-            let allowlist = config
-                .map(|c| c.shell_allowlist.clone())
-                .unwrap_or_else(|| {
+            let allowlist = config.map_or_else(
+                || {
                     vec![
                         "ls".to_string(),
                         "cat".to_string(),
@@ -347,7 +346,9 @@ impl ToolRegistryBuilder {
                         "sort".to_string(),
                         "uniq".to_string(),
                     ]
-                });
+                },
+                |c| c.shell_allowlist.clone(),
+            );
             registry.register(
                 crate::tools::constants::shell::SHELL,
                 Box::new(ShellTool::new(allowlist)),

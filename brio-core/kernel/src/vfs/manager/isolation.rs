@@ -22,11 +22,19 @@ impl IsolationOps {
     }
 
     /// Compute directory hash for conflict detection.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the hash computation fails.
     pub fn compute_hash(&self, path: &std::path::Path) -> Result<String, String> {
         hashing::compute_directory_hash(path)
     }
 
     /// Copy directory using reflink (copy-on-write).
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the reflink copy operation fails.
     pub fn copy_with_reflink(
         &self,
         source: &std::path::Path,

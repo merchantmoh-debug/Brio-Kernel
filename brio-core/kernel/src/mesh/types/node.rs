@@ -43,7 +43,7 @@ impl NodeId {
     ///
     /// # Errors
     /// Returns `ValidationError::EmptyId` if the provided string is empty.
-    pub fn from_str(s: &str) -> Result<Self, ValidationError> {
+    pub fn try_from_str(s: &str) -> Result<Self, ValidationError> {
         if s.trim().is_empty() {
             return Err(ValidationError::EmptyId);
         }
@@ -220,38 +220,38 @@ mod tests {
 
     #[test]
     fn test_node_id_from_str() {
-        let id = NodeId::from_str("test-node").unwrap();
+        let id = NodeId::try_from_str("test-node").unwrap();
         assert_eq!(id.as_str(), "test-node");
     }
 
     #[test]
     fn test_node_id_from_str_empty() {
-        let result = NodeId::from_str("");
+        let result = NodeId::try_from_str("");
         assert!(matches!(result, Err(ValidationError::EmptyId)));
     }
 
     #[test]
     fn test_node_id_from_str_whitespace() {
-        let result = NodeId::from_str("   ");
+        let result = NodeId::try_from_str("   ");
         assert!(matches!(result, Err(ValidationError::EmptyId)));
     }
 
     #[test]
     fn test_node_id_display() {
-        let id = NodeId::from_str("test-node").unwrap();
+        let id = NodeId::try_from_str("test-node").unwrap();
         assert_eq!(id.to_string(), "test-node");
     }
 
     #[test]
     fn test_node_id_into_string() {
-        let id = NodeId::from_str("test-node").unwrap();
+        let id = NodeId::try_from_str("test-node").unwrap();
         assert_eq!(id.into_string(), "test-node");
     }
 
     #[test]
     fn test_node_info_builder() {
         let info = NodeInfo::builder()
-            .id(NodeId::from_str("node-1").unwrap())
+            .id(NodeId::try_from_str("node-1").unwrap())
             .address(NodeAddress::new("127.0.0.1:8080").unwrap())
             .capability("mesh".to_string())
             .last_seen(100)
@@ -267,7 +267,7 @@ mod tests {
     #[test]
     fn test_node_info_accessors() {
         let info = NodeInfo::new(
-            NodeId::from_str("node-1").unwrap(),
+            NodeId::try_from_str("node-1").unwrap(),
             NodeAddress::new("127.0.0.1:8080").unwrap(),
             vec!["mesh".to_string()],
             100,
@@ -283,7 +283,7 @@ mod tests {
     #[test]
     fn test_node_info_update_last_seen() {
         let mut info = NodeInfo::new(
-            NodeId::from_str("node-1").unwrap(),
+            NodeId::try_from_str("node-1").unwrap(),
             NodeAddress::new("127.0.0.1:8080").unwrap(),
             vec![],
             100,
@@ -297,7 +297,7 @@ mod tests {
     #[test]
     fn test_node_info_add_capability() {
         let mut info = NodeInfo::new(
-            NodeId::from_str("node-1").unwrap(),
+            NodeId::try_from_str("node-1").unwrap(),
             NodeAddress::new("127.0.0.1:8080").unwrap(),
             vec![],
             100,
@@ -319,7 +319,7 @@ mod tests {
     #[test]
     fn test_node_info_builder_missing_address() {
         let result = NodeInfo::builder()
-            .id(NodeId::from_str("node-1").unwrap())
+            .id(NodeId::try_from_str("node-1").unwrap())
             .build();
         assert!(matches!(result, Err(ValidationError::EmptyAddress)));
     }
@@ -327,7 +327,7 @@ mod tests {
     #[test]
     fn test_serialization() {
         let info = NodeInfo::new(
-            NodeId::from_str("node-1").unwrap(),
+            NodeId::try_from_str("node-1").unwrap(),
             NodeAddress::new("127.0.0.1:8080").unwrap(),
             vec!["mesh".to_string()],
             100,

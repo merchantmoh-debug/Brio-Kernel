@@ -59,3 +59,6 @@ cargo = { level = "warn", priority = -1 }
 # Multiple crate versions are expected in complex dependency trees
 # Fixing this requires careful dependency updates that could break the build
 multiple_crate_versions = "allow"
+# Configuration structs naturally have many bool flags for different features
+# Refactoring would unnecessarily complicate the API
+struct_excessive_bools = "allow"

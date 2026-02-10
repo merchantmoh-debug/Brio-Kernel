@@ -98,6 +98,10 @@ impl IntoResponse for ApiError {
 /// GET /health
 ///
 /// Returns basic health status of the kernel.
+///
+/// # Errors
+///
+/// Returns an error if the health check fails.
 pub async fn health_check() -> Result<Json<HealthResponse>, ApiError> {
     Ok(Json(HealthResponse {
         status: "healthy".to_string(),
@@ -108,6 +112,10 @@ pub async fn health_check() -> Result<Json<HealthResponse>, ApiError> {
 /// GET /api/v1/sessions
 ///
 /// List all active sessions with metadata.
+///
+/// # Errors
+///
+/// Returns an error if the session list operation fails.
 pub async fn list_sessions(
     State(state): State<Arc<BrioHostState>>,
 ) -> Result<Json<ListSessionsResponse>, ApiError> {
@@ -127,6 +135,12 @@ pub async fn list_sessions(
 /// POST /api/v1/sessions
 ///
 /// Create a new VFS session.
+///
+/// # Errors
+///
+/// Returns an error if:
+/// - The base path is empty
+/// - The session creation fails
 pub async fn create_session(
     State(state): State<Arc<BrioHostState>>,
     Json(req): Json<CreateSessionRequest>,
@@ -162,6 +176,12 @@ pub async fn create_session(
 /// DELETE /api/v1/sessions/{id}
 ///
 /// Delete/cleanup a session by rolling it back.
+///
+/// # Errors
+///
+/// Returns an error if:
+/// - The session ID is invalid
+/// - The rollback operation fails
 pub async fn delete_session(
     State(state): State<Arc<BrioHostState>>,
     Path(id): Path<String>,
@@ -180,6 +200,12 @@ pub async fn delete_session(
 /// POST /api/v1/sessions/{id}/commit
 ///
 /// Commit a session's changes back to the base directory.
+///
+/// # Errors
+///
+/// Returns an error if:
+/// - The session ID is invalid
+/// - The commit operation fails
 pub async fn commit_session(
     State(state): State<Arc<BrioHostState>>,
     Path(id): Path<String>,

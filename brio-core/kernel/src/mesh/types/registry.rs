@@ -96,7 +96,7 @@ mod tests {
     #[test]
     fn test_mesh_config_new() {
         let config = MeshConfig::new(
-            NodeId::from_str("node-1").unwrap(),
+            NodeId::try_from_str("node-1").unwrap(),
             NodeAddress::new("0.0.0.0:8080").unwrap(),
             vec![NodeAddress::new("127.0.0.1:9090").unwrap()],
         )
@@ -111,7 +111,7 @@ mod tests {
     #[test]
     fn test_mesh_config_builder() {
         let config = MeshConfig::builder()
-            .node_id(NodeId::from_str("node-1").unwrap())
+            .node_id(NodeId::try_from_str("node-1").unwrap())
             .listen_address(NodeAddress::new("0.0.0.0:8080").unwrap())
             .bootstrap_node(NodeAddress::new("127.0.0.1:9090").unwrap())
             .bootstrap_node(NodeAddress::new("127.0.0.1:9091").unwrap())
@@ -134,7 +134,7 @@ mod tests {
     #[test]
     fn test_mesh_config_builder_missing_address() {
         let result = MeshConfig::builder()
-            .node_id(NodeId::from_str("node-1").unwrap())
+            .node_id(NodeId::try_from_str("node-1").unwrap())
             .build();
         assert!(matches!(result, Err(ValidationError::EmptyAddress)));
     }
@@ -142,7 +142,7 @@ mod tests {
     #[test]
     fn test_mesh_config_serialization() {
         let config = MeshConfig::new(
-            NodeId::from_str("node-1").unwrap(),
+            NodeId::try_from_str("node-1").unwrap(),
             NodeAddress::new("0.0.0.0:8080").unwrap(),
             vec![NodeAddress::new("127.0.0.1:9090").unwrap()],
         )

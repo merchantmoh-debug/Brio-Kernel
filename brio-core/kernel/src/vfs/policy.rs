@@ -26,6 +26,7 @@ pub enum PolicyError {
 }
 
 /// Enforces sandbox security policies on file paths.
+#[derive(Debug)]
 pub struct SandboxPolicy {
     allowed_paths: Vec<PathBuf>,
 }

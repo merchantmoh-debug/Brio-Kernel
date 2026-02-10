@@ -66,6 +66,11 @@ pub trait WitInterface: Send + Sync {
     ///
     /// - `Ok(String)` - JSON string result on success
     /// - `Err(String)` - Error message on failure
+    ///
+    /// # Errors
+    ///
+    /// Returns an `Err(String)` if the WASM function call fails or the result
+    /// cannot be converted to a string.
     fn call(&self, function: &str, params: &str) -> Result<String, String>;
 }
 

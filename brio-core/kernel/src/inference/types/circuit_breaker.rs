@@ -117,12 +117,6 @@ impl CircuitBreaker {
         }
     }
 
-    /// Creates a new circuit breaker with default configuration.
-    #[must_use]
-    pub fn default() -> Self {
-        Self::new(CircuitBreakerConfig::default())
-    }
-
     /// Attempts to acquire permission to execute a call.
     /// Returns `true` if the call should proceed, `false` if circuit is open.
     pub fn try_acquire(&mut self) -> bool {

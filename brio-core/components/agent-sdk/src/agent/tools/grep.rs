@@ -99,7 +99,6 @@ impl GrepTool {
 
     /// Searches a single file for pattern matches.
     fn search_file(
-        &self,
         file_path: &Path,
         pattern: &regex::Regex,
         max_results: usize,
@@ -131,13 +130,12 @@ impl GrepTool {
 
     /// Recursively searches directory for pattern matches.
     fn search_directory(
-        &self,
         dir_path: &Path,
         pattern: &regex::Regex,
         max_results: usize,
         current_count: &mut usize,
         matches: &mut Vec<GrepMatch>,
-    ) -> Result<(), FileSystemError> {
+    ) {
         for entry in walkdir::WalkDir::new(dir_path)
             .follow_links(false)
             .into_iter()
@@ -156,14 +154,13 @@ impl GrepTool {
                 }
 
                 // Attempt to search the file, skip binary files silently
-                if let Err(e) = self.search_file(path, pattern, max_results, current_count, matches)
+                if let Err(e) =
+                    Self::search_file(path, pattern, max_results, current_count, matches)
                 {
                     tracing::debug!("Skipping file {}: {}", path.display(), e);
                 }
             }
         }
-
-        Ok(())
     }
 
     /// Formats matches into the standard output format.
@@ -240,7 +237,7 @@ impl Tool for GrepTool {
         let mut current_count = 0;
 
         if validated_path.is_file() {
-            self.search_file(
+            Self::search_file(
                 &validated_path,
                 &pattern,
                 max_results,
@@ -252,17 +249,13 @@ impl Tool for GrepTool {
                 source: Box::new(e),
             })?;
         } else if validated_path.is_dir() {
-            self.search_directory(
+            Self::search_directory(
                 &validated_path,
                 &pattern,
                 max_results,
                 &mut current_count,
                 &mut matches,
-            )
-            .map_err(|e| ToolError::ExecutionFailed {
-                tool: grep::GREP.to_string(),
-                source: Box::new(e),
-            })?;
+            );
         } else {
             return Err(ToolError::ExecutionFailed {
                 tool: grep::GREP.to_string(),

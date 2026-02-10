@@ -80,8 +80,6 @@ impl LLMProvider for FallbackProviderChain {
             ));
         }
 
-        let mut last_error = InferenceError::AllProvidersFailed;
-
         for (idx, (provider, name)) in self
             .providers
             .iter()
@@ -103,11 +101,9 @@ impl LLMProvider for FallbackProviderChain {
                         "Provider failed in fallback chain"
                     );
 
-                    last_error = err;
-
                     // Only continue to next provider if this was a retryable error
                     // Permanent errors (like invalid config) should not trigger fallback
-                    if !last_error.is_retryable() && !last_error.is_circuit_breaker() {
+                    if !err.is_retryable() && !err.is_circuit_breaker() {
                         debug!(
                             provider = %name,
                             "Non-retryable error, stopping fallback chain"

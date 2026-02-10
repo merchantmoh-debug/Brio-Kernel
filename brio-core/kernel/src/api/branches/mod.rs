@@ -198,14 +198,13 @@ mod tests {
                 config.auto_merge,
                 config.merge_strategy.clone(),
             )
-            .await
             .unwrap();
 
         assert_eq!(branch.name, "test-branch");
         assert!(matches!(branch.status, BranchStatus::Pending));
 
         // Get the branch
-        let retrieved = manager.get_branch(&branch.id).await.unwrap();
+        let retrieved = manager.get_branch(&branch.id).unwrap();
         assert_eq!(retrieved.name, branch.name);
     }
 
@@ -229,10 +228,9 @@ mod tests {
                 config.auto_merge,
                 config.merge_strategy.clone(),
             )
-            .await
             .unwrap();
 
-        let branches = manager.list_branches(None, None).await.unwrap();
+        let branches = manager.list_branches(None, None).unwrap();
         assert_eq!(branches.len(), 1);
         assert_eq!(branches[0].name, "branch-1");
     }
@@ -257,12 +255,11 @@ mod tests {
                 config.auto_merge,
                 config.merge_strategy.clone(),
             )
-            .await
             .unwrap();
 
-        manager.delete_branch(&branch.id).await.unwrap();
+        manager.delete_branch(&branch.id).unwrap();
 
-        let result = manager.get_branch(&branch.id).await;
+        let result = manager.get_branch(&branch.id);
         assert!(matches!(result, Err(BranchError::BranchNotFound(_))));
     }
 
@@ -286,7 +283,6 @@ mod tests {
                 config.auto_merge,
                 config.merge_strategy.clone(),
             )
-            .await
             .unwrap();
 
         let merge_req = types::MergeRequest {
@@ -300,7 +296,6 @@ mod tests {
                 merge_req.strategy.clone(),
                 merge_req.requires_approval,
             )
-            .await
             .unwrap();
         assert_eq!(mr.status, MergeRequestStatus::Pending);
         assert!(mr.requires_approval);
@@ -308,7 +303,6 @@ mod tests {
         // Approve
         let approved = manager
             .approve_merge(&mr.id, "test-approver".to_string())
-            .await
             .unwrap();
         assert_eq!(approved.status, MergeRequestStatus::Approved);
     }

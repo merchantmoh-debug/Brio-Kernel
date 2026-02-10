@@ -26,6 +26,8 @@ impl std::fmt::Debug for SessionManager {
         f.debug_struct("SessionManager")
             .field("session_count", &self.sessions.len())
             .field("root_temp_dir", &self.root_temp_dir)
+            .field("policy", &self.policy)
+            .field("isolation", &self.isolation)
             .finish()
     }
 }

@@ -8,6 +8,7 @@ use crate::tools::Tool;
 use crate::tools::constants::branch;
 use std::borrow::Cow;
 use std::collections::HashMap;
+use std::fmt::Write as _;
 
 /// Tool for creating a new branch.
 ///
@@ -48,8 +49,8 @@ impl CreateBranchTool {
 /// # Errors
 ///
 /// Returns `BranchToolError` if required arguments are missing or invalid.
-pub fn parse_branch_config(
-    args: &HashMap<String, String>,
+pub fn parse_branch_config<S: ::std::hash::BuildHasher>(
+    args: &HashMap<String, String, S>,
 ) -> Result<BranchCreationConfig, BranchToolError> {
     let name = args
         .get("name")
@@ -72,7 +73,7 @@ pub fn parse_branch_config(
     let parent = args.get("parent").cloned();
     let inherit_config = args
         .get("inherit_config")
-        .map_or(true, |v| v.parse::<bool>().unwrap_or(true));
+        .is_none_or(|v| v.parse::<bool>().unwrap_or(true));
 
     Ok(BranchCreationConfig {
         name,
@@ -186,10 +187,12 @@ Example:
         let mut output = String::with_capacity(estimated_capacity);
         output.push_str("Active branches:\n");
         for branch in branches {
-            output.push_str(&format!(
-                "- {} ({}): {} - {}\n",
+            writeln!(
+                output,
+                "- {} ({}): {} - {}",
                 branch.name, branch.id, branch.status, branch.created_at
-            ));
+            )
+            .ok();
         }
 
         Ok(output)

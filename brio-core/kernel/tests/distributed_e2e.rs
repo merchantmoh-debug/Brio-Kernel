@@ -26,7 +26,7 @@ async fn wait_for_server(addr: &std::net::SocketAddr, max_retries: u64) -> bool 
 
 // Helper to spawn a node
 async fn spawn_node(id: &str, port: u16) -> (Arc<BrioHostState>, String) {
-    let node_id = NodeId::from_str(id).expect("valid node id");
+    let node_id = NodeId::try_from_str(id).expect("valid node id");
     let addr_str = format!("127.0.0.1:{port}");
 
     // Setup registry
@@ -92,7 +92,7 @@ async fn test_distributed_call() {
 
     // 3. Tell Node A about Node B (Manual Discovery)
     let info_b = NodeInfo::new(
-        NodeId::from_str("node-b").expect("valid node id"),
+        NodeId::try_from_str("node-b").expect("valid node id"),
         NodeAddress::new(&addr_b).expect("valid address"),
         vec![],
         0,

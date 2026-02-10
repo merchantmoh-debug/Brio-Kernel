@@ -36,17 +36,16 @@ impl InferenceError {
     #[must_use]
     pub fn is_retryable(&self) -> bool {
         match self {
-            Self::RateLimit => true,
-            Self::NetworkError(_) => true,
+            Self::RateLimit | Self::NetworkError(_) => true,
             Self::ProviderError(msg) => {
                 // Retry on transient HTTP errors
                 msg.contains("HTTP 50") || msg.contains("HTTP 52")
             }
-            Self::CircuitBreakerOpen(_) => false,
-            Self::AllProvidersFailed => false,
-            Self::ContextLengthExceeded => false,
-            Self::ConfigError(_) => false,
-            Self::ProviderNotFound(_) => false,
+            Self::CircuitBreakerOpen(_)
+            | Self::AllProvidersFailed
+            | Self::ContextLengthExceeded
+            | Self::ConfigError(_)
+            | Self::ProviderNotFound(_) => false,
         }
     }
 

@@ -111,7 +111,9 @@ impl ProgressUpdate {
 
     /// Calculates the percentage complete (0.0 to 100.0).
     #[must_use]
-    pub fn percent_complete(&self) -> f32 {
-        (self.completed_items as f32 / self.total_items as f32) * 100.0
+    pub fn percent_complete(&self) -> f64 {
+        let completed = f64::from(u32::try_from(self.completed_items).unwrap_or(u32::MAX));
+        let total = f64::from(u32::try_from(self.total_items).unwrap_or(u32::MAX));
+        (completed / total) * 100.0
     }
 }

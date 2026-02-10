@@ -3,7 +3,7 @@
 //! Monitors merge operations and completes tasks or handles conflicts.
 
 use crate::domain::{MergeStatus, Task, TaskStatus};
-use crate::handlers::{BranchManager, SupervisorContext, TaskStateHandler};
+use crate::handlers::{SupervisorContext, TaskStateHandler};
 use crate::orchestrator::{Planner, SupervisorError};
 use crate::repository::TaskRepository;
 

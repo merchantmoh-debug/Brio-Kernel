@@ -211,7 +211,7 @@ async fn handle_client_message(
             handle_task_submission(host_state, client_id, content).await
         }
         ClientMessage::Session { action, params } => {
-            handle_session_action(host_state, client_id, action, params).await
+            handle_session_action(&host_state, client_id, &action, params)
         }
         ClientMessage::Query { sql } => handle_query(host_state, client_id, sql).await,
     }
@@ -251,13 +251,13 @@ async fn handle_task_submission(
     }
 }
 
-async fn handle_session_action(
-    host_state: Arc<BrioHostState>,
+fn handle_session_action(
+    host_state: &Arc<BrioHostState>,
     _client_id: ClientId,
-    action: SessionAction,
+    action: &SessionAction,
     params: crate::ws::types::SessionParams,
 ) -> Result<ClientResponse, anyhow::Error> {
-    match action {
+    match *action {
         SessionAction::Begin => {
             let base_path = params
                 .base_path

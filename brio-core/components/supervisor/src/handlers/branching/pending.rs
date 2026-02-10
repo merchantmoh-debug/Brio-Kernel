@@ -3,7 +3,7 @@
 //! Waits for external approval via REST API or WebSocket command.
 
 use crate::domain::{MergeStatus, Task, TaskStatus};
-use crate::handlers::{BranchManager, SupervisorContext, TaskStateHandler};
+use crate::handlers::{SupervisorContext, TaskStateHandler};
 use crate::orchestrator::{Planner, SupervisorError};
 use crate::repository::TaskRepository;
 

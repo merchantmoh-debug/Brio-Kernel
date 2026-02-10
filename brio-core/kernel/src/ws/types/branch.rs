@@ -323,16 +323,16 @@ impl BranchEvent {
     #[must_use]
     pub fn branch_id(&self) -> &BranchId {
         match self {
-            Self::Created { branch_id, .. } => branch_id,
-            Self::ExecutionStarted { branch_id, .. } => branch_id,
-            Self::ExecutionProgress { branch_id, .. } => branch_id,
-            Self::AgentCompleted { branch_id, .. } => branch_id,
-            Self::ExecutionCompleted { branch_id, .. } => branch_id,
-            Self::ExecutionFailed { branch_id, .. } => branch_id,
-            Self::MergeStarted { branch_id, .. } => branch_id,
-            Self::MergeCompleted { branch_id, .. } => branch_id,
-            Self::MergeConflict { branch_id, .. } => branch_id,
-            Self::RolledBack { branch_id, .. } => branch_id,
+            Self::Created { branch_id, .. }
+            | Self::ExecutionStarted { branch_id, .. }
+            | Self::ExecutionProgress { branch_id, .. }
+            | Self::AgentCompleted { branch_id, .. }
+            | Self::ExecutionCompleted { branch_id, .. }
+            | Self::ExecutionFailed { branch_id, .. }
+            | Self::MergeStarted { branch_id, .. }
+            | Self::MergeCompleted { branch_id, .. }
+            | Self::MergeConflict { branch_id, .. }
+            | Self::RolledBack { branch_id, .. } => branch_id,
         }
     }
 
@@ -340,16 +340,16 @@ impl BranchEvent {
     #[must_use]
     pub fn metadata(&self) -> &EventMetadata {
         match self {
-            Self::Created { metadata, .. } => metadata,
-            Self::ExecutionStarted { metadata, .. } => metadata,
-            Self::ExecutionProgress { metadata, .. } => metadata,
-            Self::AgentCompleted { metadata, .. } => metadata,
-            Self::ExecutionCompleted { metadata, .. } => metadata,
-            Self::ExecutionFailed { metadata, .. } => metadata,
-            Self::MergeStarted { metadata, .. } => metadata,
-            Self::MergeCompleted { metadata, .. } => metadata,
-            Self::MergeConflict { metadata, .. } => metadata,
-            Self::RolledBack { metadata, .. } => metadata,
+            Self::Created { metadata, .. }
+            | Self::ExecutionStarted { metadata, .. }
+            | Self::ExecutionProgress { metadata, .. }
+            | Self::AgentCompleted { metadata, .. }
+            | Self::ExecutionCompleted { metadata, .. }
+            | Self::ExecutionFailed { metadata, .. }
+            | Self::MergeStarted { metadata, .. }
+            | Self::MergeCompleted { metadata, .. }
+            | Self::MergeConflict { metadata, .. }
+            | Self::RolledBack { metadata, .. } => metadata,
         }
     }
 
@@ -359,13 +359,17 @@ impl BranchEvent {
     ///
     /// Panics if called on a non-ExecutionProgress event.
     #[must_use]
-    pub fn percent_complete(&self) -> f32 {
+    pub fn percent_complete(&self) -> f64 {
         match self {
             Self::ExecutionProgress {
                 completed_agents,
                 total_agents,
                 ..
-            } => (*completed_agents as f32 / *total_agents as f32) * 100.0,
+            } => {
+                let completed = f64::from(u32::try_from(*completed_agents).unwrap_or(u32::MAX));
+                let total = f64::from(u32::try_from(*total_agents).unwrap_or(u32::MAX));
+                (completed / total) * 100.0
+            }
             _ => panic!("percent_complete called on non-ExecutionProgress event"),
         }
     }
