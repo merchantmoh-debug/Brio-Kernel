@@ -43,7 +43,7 @@ impl From<RepositoryError> for BranchRepositoryError {
         match e {
             RepositoryError::SqlError(msg) => Self::SqlError(msg),
             RepositoryError::ParseError(msg) => Self::ParseError(msg),
-            _ => Self::SqlError(e.to_string()),
+            RepositoryError::NotFound(_) => Self::SqlError(e.to_string()),
         }
     }
 }
@@ -68,12 +68,21 @@ impl From<uuid::Error> for BranchRepositoryError {
 /// - Recovery of branch state after kernel restarts
 pub trait BranchRepository: Send + Sync {
     /// Creates a new branch in the repository.
+    ///
+    /// # Errors
+    /// Returns `BranchRepositoryError` if the operation fails.
     fn create_branch(&self, branch: &BranchRecord) -> Result<BranchId, BranchRepositoryError>;
 
     /// Fetches a branch by its ID.
+    ///
+    /// # Errors
+    /// Returns `BranchRepositoryError` if the query fails.
     fn get_branch(&self, id: BranchId) -> Result<Option<BranchRecord>, BranchRepositoryError>;
 
     /// Updates the status of a branch.
+    ///
+    /// # Errors
+    /// Returns `BranchRepositoryError` if the update fails.
     fn update_branch_status(
         &self,
         id: BranchId,
@@ -81,18 +90,30 @@ pub trait BranchRepository: Send + Sync {
     ) -> Result<(), BranchRepositoryError>;
 
     /// Lists all active branches (pending, active, merging).
+    ///
+    /// # Errors
+    /// Returns `BranchRepositoryError` if the query fails.
     fn list_active_branches(&self) -> Result<Vec<BranchRecord>, BranchRepositoryError>;
 
     /// Lists all branches that have a specific parent.
+    ///
+    /// # Errors
+    /// Returns `BranchRepositoryError` if the query fails.
     fn list_branches_by_parent(
         &self,
         parent_id: BranchId,
     ) -> Result<Vec<BranchRecord>, BranchRepositoryError>;
 
     /// Deletes a branch and all its associated data.
+    ///
+    /// # Errors
+    /// Returns `BranchRepositoryError` if the deletion fails.
     fn delete_branch(&self, id: BranchId) -> Result<(), BranchRepositoryError>;
 
     /// Creates a new merge request in the queue.
+    ///
+    /// # Errors
+    /// Returns `BranchRepositoryError` if the creation fails.
     fn create_merge_request(
         &self,
         branch_id: BranchId,
@@ -101,20 +122,29 @@ pub trait BranchRepository: Send + Sync {
     ) -> Result<MergeId, BranchRepositoryError>;
 
     /// Gets a merge request by its ID.
+    ///
+    /// # Errors
+    /// Returns `BranchRepositoryError` if the query fails.
     fn get_merge_request(
         &self,
         merge_id: MergeId,
     ) -> Result<Option<MergeRequest>, BranchRepositoryError>;
 
     /// Updates a merge request's status and staging information.
+    ///
+    /// # Errors
+    /// Returns `BranchRepositoryError` if the update fails.
     fn update_merge_request(
         &self,
         merge_request: &MergeRequest,
     ) -> Result<(), BranchRepositoryError>;
 
     /// Approves a merge request.
+    ///
+    /// # Errors
+    /// Returns `BranchRepositoryError` if the approval fails.
     fn approve_merge(&self, merge_id: MergeId, approver: &str)
-    -> Result<(), BranchRepositoryError>;
+        -> Result<(), BranchRepositoryError>;
 }
 
 #[cfg(test)]

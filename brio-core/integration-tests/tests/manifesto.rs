@@ -472,9 +472,7 @@ async fn agent_logic(host: Arc<BrioHostState>, mut rx: mpsc::Receiver<MeshMessag
 #[tokio::test(flavor = "multi_thread")]
 async fn manifesto_scenario_real_ai() -> Result<()> {
     // 1. Check for Key (Conditional Execution)
-    let api_key = if let Ok(k) = std::env::var("OPENROUTER_API_KEY") {
-        k
-    } else {
+    let Ok(api_key) = std::env::var("OPENROUTER_API_KEY") else {
         println!("Skipping real AI test: OPENROUTER_API_KEY not set");
         return Ok(());
     };

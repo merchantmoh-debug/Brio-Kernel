@@ -408,11 +408,6 @@ impl BranchManager {
         Ok(())
     }
 
-    /// Generates the next branch ID.
-    fn next_branch_id(&mut self) -> BranchId {
-        BranchId::new()
-    }
-
     /// Gets the base path from a branch source.
     fn get_base_path_from_source(&self, source: &BranchSource) -> Result<PathBuf, BranchError> {
         match source {
@@ -513,7 +508,7 @@ impl BranchManager {
         };
 
         // 4. Create Branch entity
-        let branch_id = self.next_branch_id();
+        let branch_id = BranchManager::next_branch_id();
         let parent_id = match &source {
             BranchSource::Branch(id) => Some(*id),
             _ => None,
@@ -836,8 +831,7 @@ impl BranchManager {
         // 10. Apply non-conflicting changes to staging area
         if !merge_result.has_conflicts() {
             // Apply all changes to staging session
-            self.apply_changes_to_staging(&staging_session_id, &merge_result.merged_changes)
-                .await?;
+            self.apply_changes_to_staging(&staging_session_id, &merge_result.merged_changes)?;
         }
 
         // 11. Update merge request status
@@ -846,7 +840,7 @@ impl BranchManager {
             .iter()
             .map(|c| Conflict {
                 file_path: c.path.clone(),
-                conflict_type: crate::domain::ConflictType::Content,
+                kind: crate::domain::ConflictType::Content,
                 base_content: None,
                 branch_contents: std::collections::HashMap::new(),
             })
@@ -1033,7 +1027,7 @@ impl BranchManager {
     ///
     /// # Errors
     /// Returns `BranchError` if file operations fail.
-    async fn apply_changes_to_staging(
+    fn apply_changes_to_staging(
         &self,
         _staging_session_id: &str,
         changes: &[MergeFileChange],

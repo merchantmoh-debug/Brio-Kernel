@@ -1,4 +1,4 @@
-//! Tests for the BrioHostState and host functionality.
+//! Tests for the `BrioHostState` and host functionality.
 
 use anyhow::Result;
 use brio_kernel::host::{BrioHostState, MeshHandler};
@@ -82,7 +82,7 @@ async fn test_register_and_call_component() -> Result<()> {
         .mesh_call(
             "test-component",
             "ping",
-            Payload::Json(Box::new("".to_string())),
+            Payload::Json(Box::default()),
         )
         .await?;
 
@@ -103,7 +103,7 @@ async fn test_mesh_call_to_missing_target() -> Result<()> {
         .mesh_call(
             "nonexistent",
             "method",
-            Payload::Json(Box::new("".to_string())),
+            Payload::Json(Box::default()),
         )
         .await;
 
@@ -147,14 +147,14 @@ async fn test_register_multiple_components() -> Result<()> {
         .mesh_call(
             "component-1",
             "test",
-            Payload::Json(Box::new("".to_string())),
+            Payload::Json(Box::default()),
         )
         .await?;
     let resp2 = host
         .mesh_call(
             "component-2",
             "test",
-            Payload::Json(Box::new("".to_string())),
+            Payload::Json(Box::default()),
         )
         .await?;
 

@@ -8,7 +8,6 @@
 //! This component is built as a WASI Preview 2 module.
 
 #![deny(missing_docs)]
-#![warn(clippy::pedantic)]
 
 pub mod branch;
 pub mod diff;

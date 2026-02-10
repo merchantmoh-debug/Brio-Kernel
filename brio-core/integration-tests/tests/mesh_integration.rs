@@ -6,7 +6,6 @@
 use anyhow::Result;
 use brio_kernel::host::MeshHandler;
 use brio_kernel::mesh::Payload;
-use std::sync::Arc;
 use tokio::sync::mpsc;
 use tokio::time::{Duration, timeout};
 
@@ -169,12 +168,12 @@ async fn test_mesh_remote_node_communication() -> Result<()> {
     // This test simulates remote node communication
     // In a real scenario, this would use gRPC transport
 
-    let ctx = common::IntegrationTestContext::new().await?;
+    let _ctx = common::IntegrationTestContext::new().await?;
 
     // Create a mock remote node identifier
     let remote_node_id = "remote_node_1";
     let remote_component = "remote_agent";
-    let target = format!("{}/{}", remote_node_id, remote_component);
+    let target = format!("{remote_node_id}/{remote_component}");
 
     // The mesh routing should identify this as a remote target
     // based on the "node_id/component" format
@@ -190,7 +189,7 @@ async fn test_mesh_remote_node_communication() -> Result<()> {
     );
 
     // Verify remote routing path construction
-    let expected_format = format!("{}/{}", remote_node_id, remote_component);
+    let expected_format = format!("{remote_node_id}/{remote_component}");
     assert_eq!(
         target, expected_format,
         "Target should follow remote format"
@@ -234,8 +233,7 @@ async fn test_mesh_message_timeout() -> Result<()> {
         // This can happen if the channel closes or other conditions
         // For now, we accept this as the test environment may behave differently
         println!(
-            "Warning: mesh_call returned Ok before timeout: {:?}",
-            result
+            "Warning: mesh_call returned Ok before timeout: {result:?}"
         );
     }
     // Temporarily disable the strict assertion - the test documents expected behavior
@@ -255,7 +253,7 @@ async fn test_mesh_routing_priority() -> Result<()> {
 
     for priority in priorities {
         let (tx, mut rx) = mpsc::channel(10);
-        let agent_id = format!("agent_{}", priority);
+        let agent_id = format!("agent_{priority}");
         ctx.host.register_component(&agent_id, tx);
 
         // Spawn handler that records order

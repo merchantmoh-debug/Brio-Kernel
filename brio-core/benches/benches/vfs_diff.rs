@@ -31,7 +31,7 @@ fn bench_compute_hash(c: &mut Criterion) {
     let mut group = c.benchmark_group("vfs_diff/compute_hash");
 
     // Test different file sizes
-    let sizes = [1024usize, 8192, 65536, 524288, 1048576, 10485760];
+    let sizes = [1024usize, 8192, 65536, 524_288, 1_048_576, 10_485_760];
 
     for size in sizes {
         let temp_dir = tempfile::tempdir().unwrap();
@@ -41,7 +41,7 @@ fn bench_compute_hash(c: &mut Criterion) {
 
         group.throughput(Throughput::Bytes(size as u64));
         group.bench_with_input(
-            BenchmarkId::from_parameter(format!("{}_bytes", size)),
+            BenchmarkId::from_parameter(format!("{size}_bytes")),
             &size,
             |b, _| b.iter(|| compute_hash(black_box(&file_path))),
         );
@@ -66,7 +66,7 @@ fn bench_compute_hash_small_files(c: &mut Criterion) {
         let file_path = temp_dir.path().join("test_file.txt");
         // Simulate source code file with varied content
         let content: String = (0..size)
-            .map(|i| (b'a' + ((i % 26) as u8)) as char)
+            .map(|i| char::from(b'a' + u8::try_from(i % 26).unwrap()))
             .collect();
         fs::write(&file_path, content).unwrap();
 
@@ -90,7 +90,7 @@ fn bench_buffer_sizes(c: &mut Criterion) {
     let buffer_sizes = [1024usize, 4096, 8192, 16384, 65536];
 
     for buf_size in buffer_sizes {
-        group.bench_function(format!("{}_bytes", buf_size), |b| {
+        group.bench_function(format!("{buf_size}_bytes"), |b| {
             b.iter(|| {
                 let mut file = fs::File::open(&file_path).unwrap();
                 let mut hasher = Sha256::new();
@@ -105,7 +105,7 @@ fn bench_buffer_sizes(c: &mut Criterion) {
                 }
 
                 black_box(hex::encode(hasher.finalize()))
-            })
+            });
         });
     }
 
@@ -126,25 +126,24 @@ fn bench_scan_directory(c: &mut Criterion) {
         for i in 0..count {
             let subdir = root.join(format!("dir{}", i % 10));
             fs::create_dir_all(&subdir).unwrap();
-            let file_path = subdir.join(format!("file{}.txt", i));
-            fs::write(&file_path, format!("content {}", i)).unwrap();
+            let file_path = subdir.join(format!("file{i}.txt"));
+            fs::write(&file_path, format!("content {i}")).unwrap();
         }
 
         group.bench_with_input(
-            BenchmarkId::from_parameter(format!("{}_files", count)),
+            BenchmarkId::from_parameter(format!("{count}_files")),
             &count,
             |b, _| {
                 b.iter(|| {
                     let mut files = Vec::new();
                     for entry in walkdir::WalkDir::new(black_box(root)) {
-                        if let Ok(e) = entry {
-                            if e.file_type().is_file() {
+                        if let Ok(e) = entry
+                            && e.file_type().is_file() {
                                 files.push(e.path().to_path_buf());
                             }
-                        }
                     }
                     black_box(files)
-                })
+                });
             },
         );
     }

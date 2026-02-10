@@ -13,14 +13,11 @@ use tokio::time::{sleep, timeout};
 
 mod common;
 
-use brio_kernel::host::MeshHandler;
-use brio_kernel::mesh::Payload;
-use supervisor::domain::{TaskId, TaskStatus};
 
 /// Test task failure recovery.
 #[tokio::test]
 async fn test_task_failure_recovery() -> Result<()> {
-    let mut ctx = common::IntegrationTestContext::new().await?;
+    let ctx = common::IntegrationTestContext::new().await?;
 
     // Initialize tasks table
     common::init_tasks_table(&ctx.host).await?;
@@ -63,7 +60,7 @@ async fn test_task_failure_recovery() -> Result<()> {
 /// Test agent crash recovery.
 #[tokio::test]
 async fn test_agent_crash_recovery() -> Result<()> {
-    let mut ctx = common::IntegrationTestContext::new().await?;
+    let ctx = common::IntegrationTestContext::new().await?;
 
     // Initialize tasks table
     common::init_tasks_table(&ctx.host).await?;
@@ -104,7 +101,7 @@ async fn test_agent_crash_recovery() -> Result<()> {
 /// Test partial failure handling in multi-step operations.
 #[tokio::test]
 async fn test_partial_failure_handling() -> Result<()> {
-    let ctx = common::IntegrationTestContext::new().await?;
+    let _ctx = common::IntegrationTestContext::new().await?;
 
     // Track which steps completed
     let steps_completed = Arc::new(AtomicU32::new(0));
@@ -117,7 +114,7 @@ async fn test_partial_failure_handling() -> Result<()> {
 
         // Step 2: Fail
         steps_clone.fetch_add(1, Ordering::SeqCst);
-        return Err("Step 2 failed");
+        Err("Step 2 failed")
 
         // Step 3: Never reached due to early return
     };
@@ -142,7 +139,7 @@ async fn test_partial_failure_handling() -> Result<()> {
 /// Test timeout handling.
 #[tokio::test]
 async fn test_timeout_handling() -> Result<()> {
-    let ctx = common::IntegrationTestContext::new().await?;
+    let _ctx = common::IntegrationTestContext::new().await?;
 
     // Operation that takes too long
     let slow_operation = async {
@@ -171,7 +168,7 @@ async fn test_timeout_handling() -> Result<()> {
 /// Test timeout with resource cleanup.
 #[tokio::test]
 async fn test_timeout_cleanup() -> Result<()> {
-    let ctx = common::IntegrationTestContext::new().await?;
+    let _ctx = common::IntegrationTestContext::new().await?;
 
     // Create a resource that needs cleanup
     let resource = Arc::new(AtomicU32::new(0));
@@ -209,27 +206,16 @@ async fn test_timeout_cleanup() -> Result<()> {
 /// Test retry logic.
 #[tokio::test]
 async fn test_retry_logic() -> Result<()> {
-    let ctx = common::IntegrationTestContext::new().await?;
+    let _ctx = common::IntegrationTestContext::new().await?;
 
     // Counter for retry attempts
     let attempts = Arc::new(AtomicU32::new(0));
-    let attempts_clone = attempts.clone();
-
-    // Operation that fails then succeeds
-    let operation = async move {
-        let current = attempts_clone.fetch_add(1, Ordering::SeqCst);
-        if current < 2 {
-            Err(format!("Attempt {} failed", current + 1))
-        } else {
-            Ok("Success!")
-        }
-    };
 
     // Retry logic
     let max_retries = 3;
     let mut last_result: Result<&str, String> = Err("Not attempted".to_string());
 
-    for attempt in 0..max_retries {
+    for _attempt in 0..max_retries {
         // Clone counter for this attempt
         let attempts_clone = attempts.clone();
         let operation = async {
@@ -262,20 +248,10 @@ async fn test_retry_logic() -> Result<()> {
 /// Test retry with exponential backoff.
 #[tokio::test]
 async fn test_retry_with_backoff() -> Result<()> {
-    let ctx = common::IntegrationTestContext::new().await?;
+    let _ctx = common::IntegrationTestContext::new().await?;
 
     let attempts = Arc::new(AtomicU32::new(0));
-    let attempts_clone = attempts.clone();
     let start_time = std::time::Instant::now();
-
-    let operation = async move {
-        let current = attempts_clone.fetch_add(1, Ordering::SeqCst);
-        if current < 2 {
-            Err(format!("Attempt {} failed", current + 1))
-        } else {
-            Ok(())
-        }
-    };
 
     // Retry with exponential backoff
     let mut total_delay = Duration::from_millis(0);
@@ -296,7 +272,8 @@ async fn test_retry_with_backoff() -> Result<()> {
         }
 
         // Exponential backoff: 10ms, 20ms
-        let delay = Duration::from_millis(10 * (attempt as u64 + 1));
+        let attempt_num = u64::try_from(attempt).unwrap_or(0);
+        let delay = Duration::from_millis(10 * (attempt_num + 1));
         total_delay += delay;
         sleep(delay).await;
     }
@@ -313,7 +290,7 @@ async fn test_retry_with_backoff() -> Result<()> {
 /// Test circuit breaker pattern (simulated).
 #[tokio::test]
 async fn test_circuit_breaker() -> Result<()> {
-    let ctx = common::IntegrationTestContext::new().await?;
+    let _ctx = common::IntegrationTestContext::new().await?;
 
     // Circuit breaker state
     let failures = Arc::new(AtomicU32::new(0));
@@ -364,7 +341,7 @@ async fn test_circuit_breaker() -> Result<()> {
 /// Test graceful degradation under load.
 #[tokio::test]
 async fn test_graceful_degradation() -> Result<()> {
-    let ctx = common::IntegrationTestContext::new().await?;
+    let _ctx = common::IntegrationTestContext::new().await?;
 
     // Simulate system under heavy load
     let max_concurrent = 5;
@@ -376,10 +353,10 @@ async fn test_graceful_degradation() -> Result<()> {
             if i < max_concurrent {
                 // Process normally
                 sleep(Duration::from_millis(10)).await;
-                Ok(format!("Task {} completed", i))
+                Ok(format!("Task {i} completed"))
             } else {
                 // Degrade: return cached result or partial data
-                Ok(format!("Task {} - degraded response", i))
+                Ok(format!("Task {i} - degraded response"))
             }
         });
         handles.push(handle);

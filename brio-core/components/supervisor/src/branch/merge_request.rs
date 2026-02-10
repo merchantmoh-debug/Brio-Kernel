@@ -101,6 +101,12 @@ impl BranchManager {
     /// - Strategy not found
     /// - Merge execution fails
     /// - Session creation fails
+    ///
+    /// # Panics
+    ///
+    /// This function will panic if the merge result is not available after a successful
+    /// merge operation. This should never happen under normal circumstances.
+    #[allow(clippy::too_many_lines)]
     #[instrument(skip(self, merge_request_id))]
     pub async fn execute_merge(
         &self,
@@ -225,7 +231,6 @@ impl BranchManager {
             // Apply all changes to staging session
             if let Err(e) = self
                 .apply_changes_to_staging(&staging_session_id, &merge_result.merged_changes)
-                .await
             {
                 // Clean up staging session on error
                 if let Ok(mut session_manager) = self.lock_session_manager() {
@@ -382,19 +387,4 @@ impl BranchManager {
     }
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use crate::domain::{BranchConfig, ExecutionStrategy};
 
-    fn create_test_config() -> BranchConfig {
-        BranchConfig::new(
-            "test-branch",
-            vec![],
-            ExecutionStrategy::Sequential,
-            false,
-            "union",
-        )
-        .unwrap()
-    }
-}

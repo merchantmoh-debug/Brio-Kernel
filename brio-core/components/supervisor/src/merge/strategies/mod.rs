@@ -14,6 +14,9 @@ use tracing::debug;
 use crate::merge::conflict::{BranchResult, MAX_BRANCHES, MergeError, MergeResult};
 
 /// Validates that the number of branches doesn't exceed the maximum allowed.
+///
+/// # Errors
+/// Returns `MergeError::TooManyBranches` if the branch count exceeds the maximum.
 pub fn validate_branch_count(branches: &[BranchResult]) -> Result<(), MergeError> {
     if branches.len() > MAX_BRANCHES {
         return Err(MergeError::TooManyBranches(branches.len()));
@@ -94,6 +97,9 @@ impl MergeStrategyRegistry {
     }
 
     /// Returns the default strategy (union).
+    ///
+    /// # Panics
+    /// Panics if the union strategy is not registered (this should never happen).
     #[must_use]
     pub fn default_strategy(&self) -> &dyn MergeStrategy {
         self.get("union")
@@ -110,9 +116,9 @@ impl MergeStrategyRegistry {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::merge::strategies::three_way::OursStrategy;
-    use crate::merge::strategies::union::UnionStrategy;
-    use std::path::Path;
+    
+    
+    
 
     #[test]
     fn test_registry_default_strategies() {

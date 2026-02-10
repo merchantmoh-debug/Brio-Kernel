@@ -93,20 +93,15 @@ impl MergeRequestStatus {
     /// Checks if the merge can transition to a new status.
     #[must_use]
     pub fn can_transition_to(&self, new_status: Self) -> bool {
-        match (self, new_status) {
-            (Self::Pending, Self::Approved) => true,
-            (Self::Pending, Self::Rejected) => true,
-            (Self::Approved, Self::InProgress) => true,
-            (Self::InProgress, Self::HasConflicts) => true,
-            (Self::InProgress, Self::ReadyToCommit) => true,
-            (Self::HasConflicts, Self::InProgress) => true,
-            (Self::HasConflicts, Self::ReadyToCommit) => true,
-            (Self::ReadyToCommit, Self::Committed) => true,
-            (Self::ReadyToCommit, Self::InProgress) => true,
-            // Self-transitions are allowed
-            (old, new) if std::mem::discriminant(old) == std::mem::discriminant(&new) => true,
-            _ => false,
-        }
+        std::mem::discriminant(self) == std::mem::discriminant(&new_status)
+            || matches!(
+                (self, new_status),
+                (Self::Pending, Self::Approved | Self::Rejected)
+                    | (Self::Approved, Self::InProgress)
+                    | (Self::InProgress, Self::HasConflicts | Self::ReadyToCommit)
+                    | (Self::HasConflicts, Self::InProgress | Self::ReadyToCommit)
+                    | (Self::ReadyToCommit, Self::Committed | Self::InProgress)
+            )
     }
 
     /// Checks if this status represents a terminal state.

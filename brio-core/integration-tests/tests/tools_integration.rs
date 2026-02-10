@@ -37,15 +37,17 @@ async fn test_shell_tool_blocks_dangerous_commands() {
     for (cmd, args) in dangerous_commands {
         // In actual shell tool, these would be blocked at validation time
         // For integration test, we verify the validation logic exists
-        let string_args: Vec<String> = args.iter().map(|s| s.to_string()).collect();
+        let string_args: Vec<String> = args.iter().map(std::string::ToString::to_string).collect();
         let result = validate_command_for_test(cmd, &string_args);
         assert!(
             result.is_err(),
-            "Command '{}' should be blocked as dangerous",
-            cmd
+            "Command '{cmd}' should be blocked as dangerous"
         );
     }
 }
+
+/// Shell metacharacters that are dangerous in commands.
+const DANGEROUS_CHARS: &[char] = &['|', ';', '&', '$', '`', '>', '<'];
 
 /// Test helper to simulate shell tool validation.
 fn validate_command_for_test(command: &str, args: &[String]) -> Result<(), String> {
@@ -60,7 +62,6 @@ fn validate_command_for_test(command: &str, args: &[String]) -> Result<(), Strin
     }
 
     // Check for shell metacharacters
-    const DANGEROUS_CHARS: &[char] = &['|', ';', '&', '$', '`', '>', '<'];
     if command.chars().any(|c| DANGEROUS_CHARS.contains(&c)) {
         return Err(format!("Command contains shell metacharacters: {command}"));
     }
@@ -120,12 +121,12 @@ async fn test_grep_tool_regex_matching() -> Result<()> {
     // Create a temporary file with function definitions
     let temp_dir = TempDir::new()?;
     let file_path = temp_dir.path().join("code.rs");
-    let content = r#"
+    let content = r"
 fn main() {}
 fn helper() {}
 struct Foo;
 fn another_func(x: i32) {}
-"#;
+";
     std::fs::write(&file_path, content)?;
 
     // Test regex pattern like "fn \w+\("
@@ -175,6 +176,9 @@ async fn test_read_file_tool_reads_content() -> Result<()> {
     Ok(())
 }
 
+/// Maximum file size for reading (10MB).
+const MAX_FILE_SIZE: u64 = 10 * 1024 * 1024;
+
 /// Test that read file tool respects size limits.
 #[tokio::test]
 async fn test_read_file_tool_respects_size_limits() -> Result<()> {
@@ -190,8 +194,7 @@ async fn test_read_file_tool_respects_size_limits() -> Result<()> {
     let metadata = std::fs::metadata(&file_path)?;
     let size = metadata.len();
 
-    // Try to read with size limit (10MB)
-    const MAX_FILE_SIZE: u64 = 10 * 1024 * 1024;
+    // Try to read with size limit
     let result = if size > MAX_FILE_SIZE {
         Err(format!(
             "File too large: {size} bytes (max {MAX_FILE_SIZE})"
@@ -202,7 +205,7 @@ async fn test_read_file_tool_respects_size_limits() -> Result<()> {
 
     // Assert: Size limit error
     assert!(result.is_err(), "Should return size limit error");
-    let err_msg = result.unwrap_err().to_string();
+    let err_msg = result.unwrap_err().clone();
     assert!(
         err_msg.contains("too large"),
         "Error should mention file size"
@@ -214,12 +217,16 @@ async fn test_read_file_tool_respects_size_limits() -> Result<()> {
 /// Test that read file tool handles line ranges correctly.
 #[tokio::test]
 async fn test_read_file_tool_line_ranges() -> Result<()> {
+    use std::fmt::Write as _;
     use tempfile::TempDir;
 
     // Create test file with numbered lines
     let temp_dir = TempDir::new()?;
     let file_path = temp_dir.path().join("lines.txt");
-    let content: String = (1..=100).map(|i| format!("Line {i}\n")).collect();
+    let content: String = (1..=100).fold(String::new(), |mut acc, i| {
+        writeln!(acc, "Line {i}").unwrap();
+        acc
+    });
     std::fs::write(&file_path, content)?;
 
     // Read lines 10-20
@@ -230,7 +237,7 @@ async fn test_read_file_tool_line_ranges() -> Result<()> {
 
     let mut result = String::new();
     for (line_num, line) in reader.lines().enumerate() {
-        let current_line = (line_num + 1) as u32;
+        let current_line = u32::try_from(line_num + 1).unwrap_or(0);
         if current_line > end_line {
             break;
         }
@@ -298,6 +305,22 @@ async fn test_tool_registry_builder_creates_registry() {
         "Read file tool should be registered"
     );
     assert_eq!(registry.len(), 3, "Should have exactly 3 tools");
+
+    // Assert: Tool info fields are correct
+    let shell_info = registry.get("shell").unwrap();
+    assert_eq!(shell_info.name, "shell");
+    assert_eq!(shell_info.description, "Execute shell commands");
+    assert!(!shell_info.requires_session);
+
+    let grep_info = registry.get("grep").unwrap();
+    assert_eq!(grep_info.name, "grep");
+    assert_eq!(grep_info.description, "Search for patterns in files");
+    assert!(grep_info.requires_session);
+
+    let read_file_info = registry.get("read_file").unwrap();
+    assert_eq!(read_file_info.name, "read_file");
+    assert_eq!(read_file_info.description, "Read file contents");
+    assert!(read_file_info.requires_session);
 }
 
 /// Tool info struct for testing.

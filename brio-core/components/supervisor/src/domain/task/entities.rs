@@ -104,9 +104,9 @@ impl TaskStatus {
             Self::Failed => Some("failed"),
             Self::AnalyzingForBranch => Some("analyzing_for_branch"),
             // Complex variants with data should be serialized as JSON
-            Self::Branching { .. } => None,
-            Self::Merging { .. } => None,
-            Self::MergePendingApproval { .. } => None,
+            Self::Branching { .. } | Self::Merging { .. } | Self::MergePendingApproval { .. } => {
+                None
+            }
         }
     }
 

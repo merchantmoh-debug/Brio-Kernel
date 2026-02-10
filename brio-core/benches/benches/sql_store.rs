@@ -6,7 +6,6 @@
 //! - `convert_cell`: Type conversion from database to string
 
 use criterion::{BenchmarkId, Criterion, black_box, criterion_group, criterion_main};
-use std::collections::HashMap;
 
 /// Simulated cell conversion - mirrors store/impl.rs logic
 fn convert_cell(type_info: &str, value: &str) -> String {
@@ -36,12 +35,12 @@ fn convert_cell(type_info: &str, value: &str) -> String {
 }
 
 /// Simulated policy check
-fn authorize_policy(scope: &str, sql: &str, allowed_tables: &[&str]) -> bool {
+fn authorize_policy(_scope: &str, sql: &str, allowed_tables: &[&str]) -> bool {
     // Check if SQL references only allowed tables
     for table in allowed_tables {
         if sql
             .to_lowercase()
-            .contains(&format!("from {}", table).to_lowercase())
+            .contains(&format!("from {table}").to_lowercase())
         {
             return true;
         }
@@ -99,7 +98,7 @@ fn bench_convert_cell_batch(c: &mut Criterion) {
                 result.push(convert_cell(black_box(type_info), black_box(row_values[i])));
             }
             black_box(result)
-        })
+        });
     });
 
     // Simulate converting many rows
@@ -108,13 +107,13 @@ fn bench_convert_cell_batch(c: &mut Criterion) {
         .map(|i| {
             let types = ["INTEGER", "TEXT", "REAL"];
             let type_info = types[i % 3];
-            let value = format!("value_{}", i);
+            let value = format!("value_{i}");
             (type_info, value.leak() as &'static str)
         })
         .collect();
 
     group.bench_with_input(
-        BenchmarkId::from_parameter(format!("{}_rows_3_cols", batch_size)),
+        BenchmarkId::from_parameter(format!("{batch_size}_rows_3_cols")),
         &batch_size,
         |b, _| {
             b.iter(|| {
@@ -123,7 +122,7 @@ fn bench_convert_cell_batch(c: &mut Criterion) {
                     results.push(convert_cell(black_box(type_info), black_box(*value)));
                 }
                 black_box(results)
-            })
+            });
         },
     );
 
@@ -157,7 +156,7 @@ fn bench_authorize_policy(c: &mut Criterion) {
                     black_box(q),
                     black_box(allowed_tables),
                 )
-            })
+            });
         });
     }
 
@@ -191,8 +190,8 @@ fn bench_bind_params(c: &mut Criterion) {
             BenchmarkId::from_parameter(*name),
             &(sql, params.clone()),
             |b, (sql, params)| {
-                let params_owned: Vec<String> = params.iter().map(|s| s.to_string()).collect();
-                b.iter(|| bind_params(black_box(sql), black_box(&params_owned)))
+                let params_owned: Vec<String> = params.iter().map(std::string::ToString::to_string).collect();
+                b.iter(|| bind_params(black_box(sql), black_box(&params_owned)));
             },
         );
     }

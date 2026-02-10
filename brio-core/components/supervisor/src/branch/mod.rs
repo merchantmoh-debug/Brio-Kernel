@@ -14,8 +14,6 @@ use std::path::PathBuf;
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 
-#[cfg(test)]
-use uuid::Uuid;
 
 // Re-export primary types from coordinator module
 pub use coordinator::{
@@ -114,7 +112,6 @@ impl Branch {
     ///
     /// # Errors
     /// Returns `BranchValidationError` if validation fails.
-    #[must_use]
     pub fn new(
         id: BranchId,
         parent_id: Option<BranchId>,
@@ -368,7 +365,7 @@ impl Branch {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::collections::HashMap;
+    
 
     fn create_test_config() -> BranchConfig {
         BranchConfig::new(

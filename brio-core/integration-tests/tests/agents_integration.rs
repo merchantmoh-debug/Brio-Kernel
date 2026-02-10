@@ -7,7 +7,7 @@
 //! - Council Agent: Strategic planning
 //! - Smart Agent: Feature-rich general-purpose agent
 //!
-//! All tests follow SOLID, DRY, KISS, LoD, CQS, and POLA principles.
+//! All tests follow SOLID, DRY, KISS, `LoD`, CQS, and POLA principles.
 
 #![allow(
     clippy::cast_possible_wrap,
@@ -16,7 +16,6 @@
 )]
 
 use agent_sdk::{
-    AgentConfig, AgentEngineBuilder, InferenceResponse, Message, Role, TaskContext, ToolRegistry,
     agent::{
         parsers::{
             create_done_parser, create_list_parser, create_read_parser, create_shell_parser,
@@ -26,6 +25,7 @@ use agent_sdk::{
     },
     error::{AgentError, ToolError},
     tools::{Tool, ToolParser},
+    AgentConfig, AgentEngineBuilder, InferenceResponse, Message, TaskContext, ToolRegistry,
 };
 use anyhow::Result;
 use regex::Captures;
@@ -63,6 +63,10 @@ pub struct AgentTestContext {
 
 impl AgentTestContext {
     /// Creates a new test context with temporary directory and default configuration.
+    ///
+    /// # Panics
+    /// Panics if creating the temporary directory fails.
+    #[must_use]
     pub fn new() -> Self {
         let temp_dir = TempDir::new().expect("Failed to create temp directory");
         let test_root = temp_dir.path().to_path_buf();
@@ -78,6 +82,10 @@ impl AgentTestContext {
     }
 
     /// Creates a test file with the given content.
+    ///
+    /// # Panics
+    /// Panics if creating parent directories or writing the file fails.
+    #[must_use]
     pub fn create_test_file(&self, relative_path: &str, content: &str) -> PathBuf {
         let path = self.test_root.join(relative_path);
         if let Some(parent) = path.parent() {
@@ -88,17 +96,23 @@ impl AgentTestContext {
     }
 
     /// Reads a test file's content.
+    ///
+    /// # Panics
+    /// Panics if reading the file fails.
+    #[must_use]
     pub fn read_test_file(&self, relative_path: &str) -> String {
         let path = self.test_root.join(relative_path);
         std::fs::read_to_string(&path).expect("Failed to read test file")
     }
 
     /// Checks if a test file exists.
+    #[must_use]
     pub fn file_exists(&self, relative_path: &str) -> bool {
         self.test_root.join(relative_path).exists()
     }
 
     /// Returns the full path for a relative test file path.
+    #[must_use]
     pub fn file_path(&self, relative_path: &str) -> PathBuf {
         self.test_root.join(relative_path)
     }
@@ -109,6 +123,7 @@ impl AgentTestContext {
     }
 
     /// Creates a task context for testing.
+    #[must_use]
     pub fn create_task_context(&self, task_id: &str, description: &str) -> TaskContext {
         TaskContext::new(task_id, description)
     }
@@ -116,15 +131,18 @@ impl AgentTestContext {
     /// Changes the current directory to the test root and returns a guard
     /// that restores the original directory when dropped.
     /// Also acquires a global mutex to prevent parallel tests from interfering.
+    ///
+    /// # Panics
+    /// Panics if acquiring the mutex, getting current directory, or setting the test directory fails.
     pub fn with_test_dir(&self) -> TestDirGuard<'_> {
-        let _guard = TEST_DIR_MUTEX
+        let guard = TEST_DIR_MUTEX
             .lock()
             .expect("Failed to acquire test directory mutex");
         let original_dir = std::env::current_dir().expect("Failed to get current directory");
         std::env::set_current_dir(&self.test_root).expect("Failed to set test directory");
         TestDirGuard {
             _ctx: self,
-            _guard,
+            _guard: guard,
             original_dir,
         }
     }
@@ -137,7 +155,7 @@ pub struct TestDirGuard<'a> {
     original_dir: PathBuf,
 }
 
-impl<'a> Drop for TestDirGuard<'a> {
+impl Drop for TestDirGuard<'_> {
     fn drop(&mut self) {
         let _ = std::env::set_current_dir(&self.original_dir);
     }
@@ -163,6 +181,7 @@ pub struct MockLLMProvider {
 
 impl MockLLMProvider {
     /// Creates a new mock provider with empty response queue.
+    #[must_use]
     pub fn new() -> Self {
         Self {
             responses: Mutex::new(VecDeque::new()),
@@ -170,6 +189,9 @@ impl MockLLMProvider {
     }
 
     /// Queues a response to be returned by the mock provider.
+    ///
+    /// # Panics
+    /// Panics if the internal mutex is poisoned.
     pub fn queue_response(&self, response: impl Into<String>) {
         let mut responses = self.responses.lock().unwrap();
         responses.push_back(response.into());
@@ -184,12 +206,18 @@ impl MockLLMProvider {
     }
 
     /// Clears all queued responses.
+    ///
+    /// # Panics
+    /// Panics if the internal mutex is poisoned.
     pub fn clear(&self) {
         let mut responses = self.responses.lock().unwrap();
         responses.clear();
     }
 
     /// Returns the number of queued responses.
+    ///
+    /// # Panics
+    /// Panics if the internal mutex is poisoned.
     pub fn queued_count(&self) -> usize {
         let responses = self.responses.lock().unwrap();
         responses.len()
@@ -233,6 +261,9 @@ pub fn create_static_inference(
 }
 
 /// Creates an inference function from a vector of responses.
+///
+/// # Panics
+/// Panics if the internal mutex is poisoned when accessing responses.
 pub fn create_sequential_inference(
     responses: Vec<String>,
 ) -> impl Fn(&str, &[Message]) -> Result<InferenceResponse, AgentError> {
@@ -266,7 +297,7 @@ impl MockTool {
     /// Creates a new successful mock tool.
     pub fn new(name: impl Into<String>, result: impl Into<String>) -> Self {
         let name_str: String = name.into();
-        let desc = format!("<{} /> - Mock tool for testing", name_str);
+        let desc = format!("<{name_str} /> - Mock tool for testing");
         Self {
             name: Cow::Owned(name_str),
             description: Cow::Owned(desc),
@@ -300,7 +331,7 @@ impl FailingMockTool {
     /// Creates a new failing mock tool.
     pub fn new(name: impl Into<String>, error_message: impl Into<String>) -> Self {
         let name_str: String = name.into();
-        let desc = format!("<{} /> - Failing mock tool for testing", name_str);
+        let desc = format!("<{name_str} /> - Failing mock tool for testing");
         Self {
             name: Cow::Owned(name_str),
             description: Cow::Owned(desc),
@@ -327,8 +358,12 @@ impl Tool for FailingMockTool {
 }
 
 /// Creates a simple parser for mock tools.
+///
+/// # Panics
+/// Panics if the regex pattern fails to compile.
+#[must_use]
 pub fn create_mock_parser(tool_name: &str) -> Arc<ToolParser> {
-    let pattern = format!(r"<{}>(.*?)</{}>", tool_name, tool_name);
+    let pattern = format!(r"<{tool_name}>(.*?)</{tool_name}>");
     let name = tool_name.to_string();
     Arc::new(
         ToolParser::new(&pattern, move |caps: &Captures| {
@@ -344,6 +379,7 @@ pub fn create_mock_parser(tool_name: &str) -> Arc<ToolParser> {
 }
 
 /// Creates a tool registry with done tool only.
+#[must_use]
 pub fn create_minimal_registry() -> ToolRegistry {
     let mut registry = ToolRegistry::new();
     registry.register("done", Box::new(DoneTool), create_done_parser());
@@ -351,6 +387,7 @@ pub fn create_minimal_registry() -> ToolRegistry {
 }
 
 /// Creates a full-featured tool registry with read, write, ls, and done tools.
+#[must_use]
 pub fn create_full_registry(config: &AgentConfig) -> ToolRegistry {
     let mut registry = ToolRegistry::new();
     registry.register("done", Box::new(DoneTool), create_done_parser());
@@ -423,6 +460,7 @@ pub struct ShellTool {
 
 impl ShellTool {
     /// Creates a new shell tool with the specified allowlist.
+    #[must_use]
     pub fn new(allowlist: Vec<String>) -> Self {
         Self { allowlist }
     }
@@ -507,7 +545,7 @@ mod coder_tests {
         assert!(tools.contains(&"done"), "Coder should have done tool");
     }
 
-    /// Test 1: Basic code generation via write_file tool.
+    /// Test 1: Basic code generation via `write_file` tool.
     #[test]
     fn test_coder_generates_code() {
         let ctx = AgentTestContext::new();
@@ -520,8 +558,7 @@ mod coder_tests {
 
         // Setup: Mock LLM to return write_file invocation
         let response = format!(
-            r#"<write_file path="{}">pub fn add(a: i32, b: i32) -> i32 {{ a + b }}</write_file><done>Task completed</done>"#,
-            relative_path
+            r#"<write_file path="{relative_path}">pub fn add(a: i32, b: i32) -> i32 {{ a + b }}</write_file><done>Task completed</done>"#
         );
 
         let mut registry = create_full_registry(&ctx.config);
@@ -575,18 +612,15 @@ mod coder_tests {
         // Use relative paths since the tools validate against current directory
         let read_response = format!(
             r#"
-<read_file path="{}" />"#,
-            relative_path
+<read_file path="{relative_path}" />"#
         );
-        let modify_response = format!(
+        let _modify_response = format!(
             r#"
-<write_file path="{}">pub fn new_func() {{ println!("updated"); }}</write_file>
-<done>Task completed</done>"#,
-            relative_path
+<write_file path="{relative_path}">pub fn new_func() {{ println!("updated"); }}</write_file>
+<done>Task completed</done>"#
         );
         let modify_response = format!(
-            r#"<write_file path="{}">pub fn new_func() {{ println!("updated"); }}</write_file><done>Task completed</done>"#,
-            relative_path
+            r#"<write_file path="{relative_path}">pub fn new_func() {{ println!("updated"); }}</write_file><done>Task completed</done>"#
         );
 
         let mut registry = create_full_registry(&ctx.config);
@@ -656,7 +690,7 @@ mod coder_tests {
 mod reviewer_tests {
     use super::*;
 
-    /// Test 4: Code review via read_file tool.
+    /// Test 4: Code review via `read_file` tool.
     #[test]
     fn test_reviewer_reads_and_reviews() {
         let ctx = AgentTestContext::new();
@@ -674,10 +708,8 @@ mod reviewer_tests {
 
         // Mock LLM to read and provide review
         // Use relative paths since the tools validate against current directory
-        let read_response = format!(
-            r#"<read_file path="{}" /><done>Read complete</done>"#,
-            relative_path
-        );
+        let read_response =
+            format!(r#"<read_file path="{relative_path}" /><done>Read complete</done>"#);
 
         // Reviewer only has read, ls, and done tools - NO write_file
         let registry = create_full_registry(&ctx.config);
@@ -698,7 +730,7 @@ mod reviewer_tests {
         assert_eq!(content, "fn main() { println!(\"Hello\"); }");
     }
 
-    /// Test 5: Reviewer tool registry does not contain write_file.
+    /// Test 5: Reviewer tool registry does not contain `write_file`.
     #[test]
     fn test_reviewer_cannot_write() {
         let ctx = AgentTestContext::new();
@@ -852,8 +884,8 @@ mod council_tests {
         let ctx = AgentTestContext::new();
 
         // Setup: Create multiple files to analyze
-        ctx.create_test_file("docs/requirements.md", "# Requirements\nBuild a web app");
-        ctx.create_test_file("docs/architecture.md", "# Architecture\nUse Rust backend");
+        let _ = ctx.create_test_file("docs/requirements.md", "# Requirements\nBuild a web app");
+        let _ = ctx.create_test_file("docs/architecture.md", "# Architecture\nUse Rust backend");
 
         // Council agent has minimal tools (just done)
         let registry = create_minimal_registry();
@@ -1045,7 +1077,7 @@ mod error_scenarios {
             AgentError::Timeout { .. } => {
                 // Expected
             }
-            other => panic!("Expected Timeout error, got: {:?}", other),
+            other => panic!("Expected Timeout error, got: {other:?}"),
         }
     }
 
@@ -1111,7 +1143,7 @@ mod error_scenarios {
             AgentError::MaxIterationsExceeded { max } => {
                 assert_eq!(max, 3, "Should stop at 3 iterations");
             }
-            other => panic!("Expected MaxIterationsExceeded error, got: {:?}", other),
+            other => panic!("Expected MaxIterationsExceeded error, got: {other:?}"),
         }
     }
 
@@ -1147,7 +1179,7 @@ mod error_scenarios {
             AgentError::ToolExecution { .. } => {
                 // Expected - tool execution failed
             }
-            other => panic!("Expected ToolExecution error, got: {:?}", other),
+            other => panic!("Expected ToolExecution error, got: {other:?}"),
         }
     }
 }
@@ -1366,7 +1398,7 @@ mod test_helpers_tests {
                 assert_eq!(tool, "write_file");
                 assert!(reason.contains("path"));
             }
-            other => panic!("Expected InvalidArguments error, got: {:?}", other),
+            other => panic!("Expected InvalidArguments error, got: {other:?}"),
         }
     }
 
@@ -1383,7 +1415,7 @@ mod test_helpers_tests {
                 assert_eq!(tool, "write_file");
                 assert!(reason.contains("content"));
             }
-            other => panic!("Expected InvalidArguments error, got: {:?}", other),
+            other => panic!("Expected InvalidArguments error, got: {other:?}"),
         }
     }
 
@@ -1414,7 +1446,7 @@ mod test_helpers_tests {
                 assert_eq!(tool, "shell");
                 assert!(!reason.is_empty());
             }
-            other => panic!("Expected Blocked error, got: {:?}", other),
+            other => panic!("Expected Blocked error, got: {other:?}"),
         }
     }
 
@@ -1430,7 +1462,7 @@ mod test_helpers_tests {
                 assert_eq!(tool, "shell");
                 assert!(reason.contains("command"));
             }
-            other => panic!("Expected InvalidArguments error, got: {:?}", other),
+            other => panic!("Expected InvalidArguments error, got: {other:?}"),
         }
     }
 }

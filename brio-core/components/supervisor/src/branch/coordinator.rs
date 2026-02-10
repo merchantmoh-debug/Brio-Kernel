@@ -74,12 +74,15 @@ impl core::fmt::Display for SessionError {
             } => {
                 write!(
                     f,
-                    "Conflict at {path:?}: hash changed from {original_hash} to {current_hash}"
+                    "Conflict at {}: hash changed from {original_hash} to {current_hash}",
+                    path.display()
                 )
             }
-            Self::SessionDirectoryLost(path) => write!(f, "Session directory lost: {path:?}"),
+            Self::SessionDirectoryLost(path) => {
+                write!(f, "Session directory lost: {}", path.display())
+            }
             Self::CleanupFailed { path, source } => {
-                write!(f, "Cleanup failed at {path:?}: {source}")
+                write!(f, "Cleanup failed at {}: {source}", path.display())
             }
             Self::ReadDirectoryFailed(msg) => write!(f, "Read directory failed: {msg}"),
         }
@@ -340,7 +343,7 @@ impl BranchManager {
     }
 
     /// Generates the next branch ID.
-    pub(super) fn next_branch_id(&mut self) -> BranchId {
+    pub(super) fn next_branch_id() -> BranchId {
         BranchId::new()
     }
 
@@ -437,11 +440,11 @@ impl BranchManager {
         let root = Branch::try_from_record(&root_record).map_err(BranchError::Validation)?;
 
         // Recursively build the tree
-        self.build_branch_tree(root)
+        self.build_branch_tree(&root)
     }
 
     /// Recursively builds a branch tree.
-    fn build_branch_tree(&self, branch: Branch) -> Result<BranchTree, BranchError> {
+    fn build_branch_tree(&self, branch: &Branch) -> Result<BranchTree, BranchError> {
         let mut tree = BranchTree::new(branch.clone());
 
         // Get child branch records
@@ -450,7 +453,7 @@ impl BranchManager {
         for child_record in child_records {
             // Convert record to domain entity
             let child = Branch::try_from_record(&child_record).map_err(BranchError::Validation)?;
-            let child_tree = self.build_branch_tree(child)?;
+            let child_tree = self.build_branch_tree(&child)?;
             tree.add_child(child_tree);
         }
 

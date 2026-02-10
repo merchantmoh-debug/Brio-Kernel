@@ -93,7 +93,7 @@ impl BranchManager {
     ///
     /// # Errors
     /// Returns `BranchError` if file operations fail.
-    pub async fn apply_changes_to_staging(
+    pub fn apply_changes_to_staging(
         &self,
         _staging_session_id: &str,
         changes: &[MergeFileChange],

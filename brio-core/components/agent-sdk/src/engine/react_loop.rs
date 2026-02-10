@@ -234,7 +234,7 @@ mod tests {
     impl MockTool {
         fn new(name: impl Into<String>) -> Self {
             let name_str: String = name.into();
-            let desc = format!("<{} />", name_str);
+            let desc = format!("<{name_str} />");
             Self {
                 name: Cow::Owned(name_str),
                 description: Cow::Owned(desc),
@@ -244,7 +244,7 @@ mod tests {
 
         fn failing(name: impl Into<String>) -> Self {
             let name_str: String = name.into();
-            let desc = format!("<{} />", name_str);
+            let desc = format!("<{name_str} />");
             Self {
                 name: Cow::Owned(name_str),
                 description: Cow::Owned(desc),
@@ -266,8 +266,7 @@ mod tests {
             if self.should_fail {
                 Err(ToolError::ExecutionFailed {
                     tool: self.name.to_string(),
-                    source: Box::new(std::io::Error::new(
-                        std::io::ErrorKind::Other,
+                    source: Box::new(std::io::Error::other(
                         "Mock tool failure",
                     )),
                 })
@@ -291,7 +290,7 @@ mod tests {
     }
 
     fn create_mock_parser(tool_name: &str) -> Arc<ToolParser> {
-        let pattern = format!(r"<{}>(.*?)</{}>", tool_name, tool_name);
+        let pattern = format!(r"<{tool_name}>(.*?)</{tool_name}>");
         let name = tool_name.to_string();
         Arc::new(
             ToolParser::new(&pattern, move |caps: &Captures| {

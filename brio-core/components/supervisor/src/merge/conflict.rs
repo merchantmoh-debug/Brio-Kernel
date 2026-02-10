@@ -140,6 +140,7 @@ impl Conflict {
 
     /// Creates a new line-level conflict with detailed information.
     #[must_use]
+    #[allow(clippy::too_many_arguments)]
     pub fn with_line_info(
         path: PathBuf,
         branch_ids: Vec<BranchId>,
@@ -385,7 +386,9 @@ pub fn is_binary_file(path: &Path) -> Result<bool, std::io::Error> {
         .count();
 
     let ratio = if bytes_read > 0 {
-        non_printable as f64 / bytes_read as f64
+        #[allow(clippy::cast_precision_loss)]
+        let result = non_printable as f64 / bytes_read as f64;
+        result
     } else {
         0.0
     };
@@ -443,7 +446,10 @@ pub fn detect_conflicts(
                 conflicts.push(Conflict::new(
                     path.clone(),
                     branch_ids,
-                    format!("Multiple branches have conflicting changes for {path:?}"),
+                    format!(
+                        "Multiple branches have conflicting changes for {}",
+                        path.display()
+                    ),
                 ));
             }
         }
@@ -465,16 +471,13 @@ pub fn changes_conflict(change1: &FileChange, change2: &FileChange) -> bool {
         return false;
     }
 
-    match (change1, change2) {
-        // Two modifications to the same file conflict
-        (FileChange::Modified(_), FileChange::Modified(_)) => true,
-        // Deletion conflicts with any other change
-        (FileChange::Deleted(_), _) | (_, FileChange::Deleted(_)) => true,
-        // Two additions to the same path conflict (would overwrite)
-        (FileChange::Added(_), FileChange::Added(_)) => true,
-        // Other combinations are conflicts
-        _ => true,
-    }
+    matches!(
+        (change1, change2),
+        (FileChange::Modified(_), FileChange::Modified(_))
+            | (FileChange::Deleted(_), _)
+            | (_, FileChange::Deleted(_))
+            | (FileChange::Added(_), FileChange::Added(_))
+    )
 }
 
 #[cfg(test)]

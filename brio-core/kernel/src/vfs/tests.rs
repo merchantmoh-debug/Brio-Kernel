@@ -17,7 +17,7 @@ fn test_rollback_basic() -> anyhow::Result<()> {
         .session_path(&session_id)
         .ok_or(anyhow::anyhow!("session path not found"))?;
 
-    fs::write(&session_path.join("file1.txt"), "modified")?;
+    fs::write(session_path.join("file1.txt"), "modified")?;
 
     manager.rollback_session(&session_id)?;
 
@@ -58,10 +58,10 @@ fn test_rollback_cleanup() -> anyhow::Result<()> {
         .session_path(&session_id)
         .ok_or(anyhow::anyhow!("session path not found"))?;
 
-    fs::write(&session_path.join("file1.txt"), "content1")?;
-    fs::write(&session_path.join("file2.txt"), "content2")?;
-    fs::create_dir(&session_path.join("subdir"))?;
-    fs::write(&session_path.join("subdir/file3.txt"), "content3")?;
+    fs::write(session_path.join("file1.txt"), "content1")?;
+    fs::write(session_path.join("file2.txt"), "content2")?;
+    fs::create_dir(session_path.join("subdir"))?;
+    fs::write(session_path.join("subdir/file3.txt"), "content3")?;
 
     assert!(session_path.join("file1.txt").exists());
     assert!(session_path.join("file2.txt").exists());
@@ -94,12 +94,12 @@ fn test_rollback_after_partial_changes() -> anyhow::Result<()> {
         .session_path(&session_id)
         .ok_or(anyhow::anyhow!("session path not found"))?;
 
-    fs::write(&session_path.join("dir_a/file_a.txt"), "modified a")?;
-    fs::write(&session_path.join("file_new.txt"), "new file")?;
-    fs::remove_file(&session_path.join("dir_c/file_c.txt"))?;
+    fs::write(session_path.join("dir_a/file_a.txt"), "modified a")?;
+    fs::write(session_path.join("file_new.txt"), "new file")?;
+    fs::remove_file(session_path.join("dir_c/file_c.txt"))?;
 
     assert_eq!(
-        fs::read_to_string(&session_path.join("dir_a/file_a.txt"))?,
+        fs::read_to_string(session_path.join("dir_a/file_a.txt"))?,
         "modified a"
     );
     assert!(session_path.join("file_new.txt").exists());

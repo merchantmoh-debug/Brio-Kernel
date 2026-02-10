@@ -4,8 +4,8 @@ use crate::agent::tools::branch::callbacks::{
     BranchCreationCallback, BranchCreationConfig, BranchListCallback, BranchToolError,
 };
 use crate::error::ToolError;
-use crate::tools::Tool;
 use crate::tools::constants::branch;
+use crate::tools::Tool;
 use std::borrow::Cow;
 use std::collections::HashMap;
 use std::fmt::Write as _;
@@ -208,7 +208,7 @@ mod tests {
 
     #[test]
     fn test_create_branch_tool_parsing() {
-        let callback: BranchCreationCallback = Arc::new(|config| {
+        let callback: BranchCreationCallback = Arc::new(|_config| {
             Ok(BranchCreationResult {
                 branch_id: BranchId::new("test-id"),
                 session_id: "session-123".to_string(),
@@ -254,7 +254,7 @@ mod tests {
 
         let tool = CreateBranchTool::new(callback);
         let mut args = HashMap::new();
-        args.insert("name".to_string(), "".to_string());
+        args.insert("name".to_string(), String::new());
 
         let result = tool.execute(&args);
         assert!(result.is_err());

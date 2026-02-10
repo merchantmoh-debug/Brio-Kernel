@@ -1,4 +1,5 @@
 //! Myers diff algorithm.
+#![allow(clippy::many_single_char_names)]
 use crate::diff::{DiffAlgorithm, DiffOp};
 /// Myers diff algorithm.
 #[derive(Debug, Clone, Copy, Default)]
@@ -48,24 +49,27 @@ pub(crate) fn compute_ses(base: &[&str], target: &[&str]) -> Vec<EditOp> {
     let mut trace: Vec<Vec<isize>> = Vec::new();
     'outer: for d in 0..=max_d {
         trace.push(v.clone());
-        for k in -(d as isize)..=(d as isize) {
-            if k.abs() % 2 != d as isize % 2 {
+        for k in -d.cast_signed()..=d.cast_signed() {
+            if k.abs() % 2 != d.cast_signed() % 2 {
                 continue;
             }
-            let k_idx = (k + max_d as isize) as usize;
-            let x: isize = if k == -(d as isize) || (k != d as isize && v[k_idx - 1] < v[k_idx + 1])
-            {
-                v[k_idx + 1]
-            } else {
-                v[k_idx - 1] + 1
-            };
+            let k_idx = (k + max_d.cast_signed()).cast_unsigned();
+            let x: isize =
+                if k == -d.cast_signed() || (k != d.cast_signed() && v[k_idx - 1] < v[k_idx + 1]) {
+                    v[k_idx + 1]
+                } else {
+                    v[k_idx - 1] + 1
+                };
             let (mut x, mut y) = (x, x - k);
-            while x < n as isize && y < m as isize && base[x as usize] == target[y as usize] {
+            while x < n.cast_signed()
+                && y < m.cast_signed()
+                && base[x.cast_unsigned()] == target[y.cast_unsigned()]
+            {
                 x += 1;
                 y += 1;
             }
             v[k_idx] = x;
-            if x >= n as isize && y >= m as isize {
+            if x >= n.cast_signed() && y >= m.cast_signed() {
                 break 'outer;
             }
         }
@@ -80,20 +84,17 @@ pub(crate) fn backtrack(
 ) -> Vec<EditOp> {
     let (mut edits, mut x, mut y) = (Vec::new(), base.len(), target.len());
     for (d, v) in trace.iter().enumerate().rev().skip(1) {
-        let (d, k, k_idx) = (
-            d as isize,
-            x as isize - y as isize,
-            ((x as isize - y as isize) + max_d as isize) as usize,
-        );
-        let prev_k = if k == -d || (k != d && v[k_idx - 1] < v[k_idx + 1]) {
+        let d_isize = d.cast_signed();
+        let k = x.cast_signed() - y.cast_signed();
+        let k_idx = (k + max_d.cast_signed()).cast_unsigned();
+        let prev_k = if k == -d_isize || (k != d_isize && v[k_idx - 1] < v[k_idx + 1]) {
             k + 1
         } else {
             k - 1
         };
-        let (prev_x, prev_y) = (
-            v[(prev_k + max_d as isize) as usize] as usize,
-            (v[(prev_k + max_d as isize) as usize] - prev_k) as usize,
-        );
+        let prev_k_idx = (prev_k + max_d.cast_signed()).cast_unsigned();
+        let prev_x = v[prev_k_idx].cast_unsigned();
+        let prev_y = (v[prev_k_idx] - prev_k).cast_unsigned();
         while x > prev_x && y > prev_y {
             edits.push(EditOp::Keep);
             x -= 1;

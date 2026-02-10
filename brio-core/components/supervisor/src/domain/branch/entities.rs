@@ -29,6 +29,7 @@ impl BranchRecord {
     ///
     /// # Errors
     /// Returns `ValidationError::EmptyBranchName` if name is empty.
+    #[allow(clippy::too_many_arguments)]
     pub fn new(
         id: BranchId,
         parent_id: Option<BranchId>,

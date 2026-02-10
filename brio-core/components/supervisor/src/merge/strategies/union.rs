@@ -245,6 +245,6 @@ mod tests {
         // Should have 3 non-conflicting additions + 1 conflict
         assert_eq!(result.merged_changes.len(), 3);
         assert_eq!(result.conflicts.len(), 1);
-        assert!(*result.conflicts[0].path() == PathBuf::from("shared.txt"));
+        assert_eq!(result.conflicts[0].path().as_os_str(), "shared.txt");
     }
 }

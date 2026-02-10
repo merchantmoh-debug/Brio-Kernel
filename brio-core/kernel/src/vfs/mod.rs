@@ -8,5 +8,6 @@ pub mod manager;
 pub use manager::SessionError;
 pub(crate) mod policy;
 pub mod reflink;
+/// Tests for the VFS module.
 #[cfg(test)]
 pub mod tests;

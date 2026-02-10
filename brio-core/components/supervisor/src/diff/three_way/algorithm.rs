@@ -3,6 +3,9 @@ use crate::diff::three_way::conflict::{ChangeKind, ChangeRange};
 use crate::diff::three_way::outcome::{LineConflict, MergeOutcome, ThreeWayMergeError};
 use crate::diff::{DiffAlgorithm, DiffOp};
 /// Performs a three-way merge.
+///
+/// # Errors
+/// Returns `ThreeWayMergeError` if the merge cannot be completed (e.g., binary files).
 pub fn three_way_merge<A: DiffAlgorithm + ?Sized>(
     base: &str,
     branch_a: &str,
@@ -19,6 +22,9 @@ pub fn three_way_merge<A: DiffAlgorithm + ?Sized>(
     Ok(perform_merge(&base_l, &a_l, &b_l, &ch_a, &ch_b))
 }
 /// Three-way merge with configuration.
+///
+/// # Errors
+/// Returns `ThreeWayMergeError` if the merge cannot be completed.
 pub fn three_way_merge_with_config<A: DiffAlgorithm>(
     base: &str,
     branch_a: &str,
@@ -64,6 +70,7 @@ pub(crate) fn changes_overlap(a: &ChangeRange, b: &ChangeRange) -> bool {
     );
     ar.0 < br.1 && br.0 < ar.1
 }
+#[allow(clippy::too_many_lines)]
 pub(crate) fn perform_merge(
     base: &[&str],
     branch_a: &[&str],
@@ -162,9 +169,13 @@ pub(crate) fn perform_merge(
             match overlap[0].kind {
                 ChangeKind::Insert => {
                     if let Some((s, e)) = overlap[0].target_range {
-                        for k in s..e {
-                            merged.push(branch_a[k].to_string());
-                        }
+                        merged.extend(
+                            branch_a
+                                .iter()
+                                .skip(s)
+                                .take(e - s)
+                                .map(std::string::ToString::to_string),
+                        );
                     }
                 }
                 ChangeKind::Delete => {
@@ -182,9 +193,12 @@ pub(crate) fn perform_merge(
                         } else {
                             branch_b
                         };
-                        for k in s..e {
-                            merged.push(src[k].to_string());
-                        }
+                        merged.extend(
+                            src.iter()
+                                .skip(s)
+                                .take(e - s)
+                                .map(std::string::ToString::to_string),
+                        );
                     }
                 }
             }

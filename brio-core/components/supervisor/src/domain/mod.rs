@@ -102,7 +102,7 @@ mod tests {
     fn task_rejects_empty_content() {
         let err = Task::new(
             TaskId::new(1),
-            "".to_string(),
+            String::new(),
             Priority::DEFAULT,
             TaskStatus::Pending,
             None,

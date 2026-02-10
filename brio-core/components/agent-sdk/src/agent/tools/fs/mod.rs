@@ -26,7 +26,7 @@ pub use write::WriteFileTool;
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::tools::{Tool, constants::fs};
+    use crate::tools::Tool;
     use std::collections::HashMap;
 
     // Use the shared mutex from lib.rs to serialize directory-changing tests

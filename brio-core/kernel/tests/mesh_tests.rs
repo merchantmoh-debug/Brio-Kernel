@@ -65,7 +65,7 @@ async fn mesh_should_route_calls_to_registered_components() {
         .mesh_call(
             "test-agent",
             "bad_method",
-            Payload::Json(Box::new(String::new())),
+            Payload::Json(Box::default()),
         )
         .await;
 
@@ -76,7 +76,7 @@ async fn mesh_should_route_calls_to_registered_components() {
     );
 
     let missing_response = state
-        .mesh_call("ghost", "boo", Payload::Json(Box::new(String::new())))
+        .mesh_call("ghost", "boo", Payload::Json(Box::default()))
         .await;
 
     assert!(missing_response.is_err());

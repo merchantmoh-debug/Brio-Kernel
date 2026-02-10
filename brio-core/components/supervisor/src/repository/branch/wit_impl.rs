@@ -96,6 +96,7 @@ impl WitBranchRepository {
     }
 
     /// Parses a single row into a `MergeRequest`.
+    #[allow(clippy::too_many_lines)]
     pub(crate) fn parse_merge_request_row(
         columns: &[String],
         values: &[String],
@@ -231,21 +232,9 @@ impl WitBranchRepository {
         // Handle status transitions based on current status
         // Note: approve() and start() already set status, but we need to handle
         // other status transitions if the current status differs
-        match status {
-            MergeRequestStatus::HasConflicts => {
-                // This status is set via set_conflicts(), but we don't have conflict data here
-                // The status will be restored from the database value when saved back
-            }
-            MergeRequestStatus::ReadyToCommit => {
-                // This status follows HasConflicts or is set when no conflicts
-                // mark_conflicts_resolved() would set this, but we don't have the conflict state
-            }
-            MergeRequestStatus::Rejected => {
-                // Rejected status - we need a way to set this
-                // For now, the status from database will be preserved on save
-            }
-            _ => {} // Pending, Approved, InProgress, Committed handled by other methods
-        }
+        // HasConflicts, ReadyToCommit, Rejected, Pending, Approved, InProgress, Committed
+        // are either handled by other methods or don't need special handling here
+        let _ = status;
 
         Ok(merge_request)
     }

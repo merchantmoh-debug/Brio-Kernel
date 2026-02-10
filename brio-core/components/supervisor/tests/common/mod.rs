@@ -3,12 +3,16 @@
 //! This module provides shared test infrastructure for the supervisor component,
 //! including in-memory repositories and execution contexts.
 
+// Allow dead code since this is a shared test utilities module
+// and different tests may use different parts
+#![allow(dead_code)]
+
 use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 use std::time::{SystemTime, UNIX_EPOCH};
 
-use supervisor::branch::{BranchManager, BranchSource};
+use supervisor::branch::BranchManager;
 use supervisor::domain::{
     BranchConfig, BranchId, BranchRecord, BranchResult, BranchStatus, ExecutionMetrics,
     ExecutionStrategy, MergeRequest, Task,
@@ -109,7 +113,8 @@ impl MockBranchRepository {
         SystemTime::now()
             .duration_since(UNIX_EPOCH)
             .unwrap_or_default()
-            .as_secs() as i64
+            .as_secs()
+            .cast_signed()
     }
 }
 
@@ -220,7 +225,7 @@ impl BranchRepository for MockBranchRepository {
             .lock()
             .map_err(|_| BranchRepositoryError::SqlError("Lock failed".to_string()))?;
 
-        let merge_id = MergeId::from_uuid(uuid::Uuid::from_u128(*next_id as u128));
+        let merge_id = MergeId::from_uuid(uuid::Uuid::from_u128(u128::from(*next_id)));
         *next_id += 1;
 
         merge_requests.insert(
@@ -239,7 +244,7 @@ impl BranchRepository for MockBranchRepository {
 
     fn get_merge_request(
         &self,
-        merge_id: MergeId,
+        _merge_id: MergeId,
     ) -> Result<Option<MergeRequest>, BranchRepositoryError> {
         Err(BranchRepositoryError::SqlError(
             "Not implemented".to_string(),
@@ -307,19 +312,23 @@ impl TestContext {
         self.branch_manager.clone()
     }
 
-    pub async fn create_test_branch(&self, name: impl Into<String>) -> BranchId {
+    pub fn create_test_branch(&self, name: impl Into<String>) -> BranchId {
+        use supervisor::branch::BranchSource;
+        use std::path::PathBuf;
+        let config = Self::default_test_config(name);
         let mut manager = self.branch_manager.lock().unwrap();
-        manager
-            .create_branch(
-                BranchSource::Base(PathBuf::from(TEST_FILES_DIR)),
-                Self::default_test_config(name),
-            )
-            .await
-            .unwrap()
+        tokio::task::block_in_place(|| {
+            tokio::runtime::Handle::current().block_on(async {
+                manager
+                    .create_branch(BranchSource::Base(PathBuf::from(TEST_FILES_DIR)), config)
+                    .await
+            })
+        })
+        .unwrap()
     }
 
-    pub async fn create_and_complete_test_branch(&self) -> BranchId {
-        let id = self.create_test_branch("Completed Branch").await;
+    pub fn create_and_complete_test_branch(&self) -> BranchId {
+        let id = self.create_test_branch("Completed Branch");
         let manager = self.branch_manager.lock().unwrap();
         manager.mark_executing(id, 1).unwrap();
 
@@ -328,19 +337,19 @@ impl TestContext {
         id
     }
 
-    pub async fn create_test_branch_with_file(
+    pub fn create_test_branch_with_file(
         &self,
         file_path: impl Into<String>,
         content: impl Into<String>,
     ) -> BranchId {
-        let id = self.create_test_branch("Branch with File").await;
+        let id = self.create_test_branch("Branch with File");
         // The file content would be written to the session path in a real implementation
         // For testing purposes, we just return the branch ID
         let _ = (file_path, content);
         id
     }
 
-    /// Returns a default BranchConfig for testing
+    /// Returns a default `BranchConfig` for testing
     pub fn default_test_config(name: impl Into<String>) -> BranchConfig {
         BranchConfig::new(
             name,
@@ -352,7 +361,7 @@ impl TestContext {
         .unwrap()
     }
 
-    /// Returns default ExecutionMetrics for testing
+    /// Returns default `ExecutionMetrics` for testing
     pub fn default_test_metrics() -> ExecutionMetrics {
         ExecutionMetrics {
             total_duration_ms: 100,
@@ -362,7 +371,7 @@ impl TestContext {
         }
     }
 
-    /// Returns a default BranchResult for testing with the given branch_id
+    /// Returns a default `BranchResult` for testing with the given `branch_id`
     pub fn default_test_result(branch_id: BranchId) -> BranchResult {
         BranchResult::new(branch_id, vec![], vec![], Self::default_test_metrics())
     }

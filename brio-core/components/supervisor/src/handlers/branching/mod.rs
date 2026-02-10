@@ -13,12 +13,12 @@ use crate::repository::RepositoryError;
 use std::collections::HashMap;
 
 pub mod analyzing;
-pub mod branching;
+pub mod execution;
 pub mod merging;
 pub mod pending;
 
-pub use analyzing::{AnalyzingForBranchHandler, merge_strategy};
-pub use branching::BranchingHandler;
+pub use analyzing::{merge_strategy, AnalyzingForBranchHandler};
+pub use execution::BranchingHandler;
 pub use merging::MergingHandler;
 pub use pending::MergePendingApprovalHandler;
 
@@ -234,196 +234,8 @@ impl BranchManager for NoOpBranchManager {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
-    use crate::branch::MergeRequestId;
-    use crate::domain::{
-        AgentId, BranchConfig, BranchId, BranchStatus, MergeStatus, Priority, Task, TaskId,
-        TaskStatus,
-    };
+    use crate::domain::{Priority, Task, TaskId, TaskStatus};
     use std::collections::HashSet;
-
-    /// Mock BranchManager for testing.
-    ///
-    /// Uses interior mutability to allow modifications through immutable references,
-    /// which is required since BranchManager trait methods take &self.
-    /// Uses RwLock instead of RefCell to satisfy Send + Sync requirements.
-    use std::sync::RwLock;
-
-    struct MockBranchManager {
-        branches: RwLock<HashMap<BranchId, BranchStatus>>,
-        merges: RwLock<HashMap<MergeRequestId, (MergeStatus, Vec<Conflict>)>>,
-        next_branch_id: RwLock<u64>,
-    }
-
-    impl MockBranchManager {
-        fn new() -> Self {
-            Self {
-                branches: RwLock::new(HashMap::new()),
-                merges: RwLock::new(HashMap::new()),
-                next_branch_id: RwLock::new(1),
-            }
-        }
-
-        fn complete_branch(&self, branch_id: BranchId) {
-            self.branches
-                .write()
-                .unwrap()
-                .insert(branch_id, BranchStatus::Completed);
-        }
-
-        fn fail_branch(&self, branch_id: BranchId) {
-            self.branches
-                .write()
-                .unwrap()
-                .insert(branch_id, BranchStatus::Failed);
-        }
-
-        fn approve_merge_request(&self, merge_id: MergeRequestId) {
-            if let Some((status, _)) = self.merges.write().unwrap().get_mut(&merge_id) {
-                *status = MergeStatus::Approved;
-            }
-        }
-
-        fn complete_merge(&self, merge_id: MergeRequestId) {
-            if let Some((status, _)) = self.merges.write().unwrap().get_mut(&merge_id) {
-                *status = MergeStatus::Merged;
-            }
-        }
-    }
-
-    impl BranchManager for MockBranchManager {
-        fn create_branch(
-            &self,
-            _parent_branch_id: Option<BranchId>,
-            _name: String,
-            _config: BranchConfig,
-        ) -> Result<BranchId, BranchManagerError> {
-            let mut id_ref = self.next_branch_id.write().unwrap();
-            let id = BranchId::from_uuid(uuid::Uuid::from_u128(*id_ref as u128));
-            *id_ref += 1;
-            self.branches
-                .write()
-                .unwrap()
-                .insert(id, BranchStatus::Pending);
-            Ok(id)
-        }
-
-        fn get_branch_status(
-            &self,
-            branch_id: BranchId,
-        ) -> Result<BranchStatus, BranchManagerError> {
-            self.branches
-                .read()
-                .unwrap()
-                .get(&branch_id)
-                .copied()
-                .ok_or_else(|| {
-                    BranchManagerError::QueryError(format!("Branch {branch_id} not found"))
-                })
-        }
-
-        fn get_branch_statuses(
-            &self,
-            branch_ids: &[BranchId],
-        ) -> Result<HashMap<BranchId, BranchStatus>, BranchManagerError> {
-            let mut result = HashMap::new();
-            let branches = self.branches.read().unwrap();
-            for id in branch_ids {
-                if let Some(status) = branches.get(id) {
-                    result.insert(*id, *status);
-                }
-            }
-            Ok(result)
-        }
-
-        fn create_merge_request(
-            &self,
-            _branches: &[BranchId],
-            _strategy: &str,
-            _requires_approval: bool,
-        ) -> Result<MergeRequestId, BranchManagerError> {
-            let id = MergeRequestId::new();
-            self.merges
-                .write()
-                .unwrap()
-                .insert(id, (MergeStatus::Pending, Vec::new()));
-            Ok(id)
-        }
-
-        fn get_merge_status(
-            &self,
-            merge_request_id: MergeRequestId,
-        ) -> Result<MergeStatus, BranchManagerError> {
-            self.merges
-                .read()
-                .unwrap()
-                .get(&merge_request_id)
-                .map(|(status, _)| *status)
-                .ok_or_else(|| {
-                    BranchManagerError::QueryError(format!("Merge {merge_request_id} not found"))
-                })
-        }
-
-        fn get_merge_conflicts(
-            &self,
-            merge_request_id: MergeRequestId,
-        ) -> Result<Vec<Conflict>, BranchManagerError> {
-            self.merges
-                .read()
-                .unwrap()
-                .get(&merge_request_id)
-                .map(|(_, conflicts)| conflicts.clone())
-                .ok_or_else(|| {
-                    BranchManagerError::QueryError(format!("Merge {merge_request_id} not found"))
-                })
-        }
-
-        fn approve_merge(
-            &self,
-            merge_request_id: MergeRequestId,
-            _approver: &str,
-        ) -> Result<(), BranchManagerError> {
-            if let Some((status, _)) = self.merges.write().unwrap().get_mut(&merge_request_id) {
-                *status = MergeStatus::Approved;
-                Ok(())
-            } else {
-                Err(BranchManagerError::ApprovalError(format!(
-                    "Merge {merge_request_id} not found"
-                )))
-            }
-        }
-
-        fn execute_merge(
-            &self,
-            merge_request_id: MergeRequestId,
-        ) -> Result<(), BranchManagerError> {
-            if let Some((status, _)) = self.merges.write().unwrap().get_mut(&merge_request_id) {
-                *status = MergeStatus::Merged;
-                Ok(())
-            } else {
-                Err(BranchManagerError::MergeRequestError(format!(
-                    "Merge {merge_request_id} not found"
-                )))
-            }
-        }
-
-        fn is_merge_pending_approval(&self, merge_request_id: MergeRequestId) -> bool {
-            self.merges
-                .read()
-                .unwrap()
-                .get(&merge_request_id)
-                .map(|(status, _)| *status == MergeStatus::Pending)
-                .unwrap_or(false)
-        }
-
-        fn execute_branches(&self, branches: &[BranchId]) -> Result<(), BranchManagerError> {
-            let mut branches_mut = self.branches.write().unwrap();
-            for id in branches {
-                branches_mut.insert(*id, BranchStatus::Active);
-            }
-            Ok(())
-        }
-    }
 
     fn test_task_with_content(id: u64, content: &str, status: TaskStatus) -> Task {
         Task::new(

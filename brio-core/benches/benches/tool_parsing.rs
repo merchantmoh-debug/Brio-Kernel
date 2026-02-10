@@ -6,7 +6,7 @@
 //! - `validate_path`: Path traversal prevention
 //! - `validate_shell_command`: Command allowlist validation
 
-use criterion::{BenchmarkId, Criterion, Throughput, black_box, criterion_group, criterion_main};
+use criterion::{black_box, criterion_group, criterion_main, BenchmarkId, Criterion, Throughput};
 use regex::{Captures, Regex};
 use std::collections::HashMap;
 
@@ -16,17 +16,22 @@ pub struct ToolParser {
 }
 
 impl ToolParser {
+    /// Creates a new `ToolParser` with the given regex pattern.
+    ///
+    /// # Errors
+    /// Returns an error if the regex pattern is invalid.
     pub fn new(pattern: &str) -> Result<Self, regex::Error> {
         let regex = Regex::new(pattern)?;
         Ok(Self { regex })
     }
 
+    #[must_use]
     pub fn parse(&self, input: &str) -> Vec<ParsedInvocation> {
         let mut results = Vec::new();
 
         for mat in self.regex.find_iter(input) {
             if let Some(caps) = self.regex.captures(mat.as_str()) {
-                let args = self.extract_args(&caps);
+                let args = Self::extract_args(&caps);
                 results.push(ParsedInvocation {
                     name: caps
                         .get(1)
@@ -42,7 +47,7 @@ impl ToolParser {
         results
     }
 
-    fn extract_args(&self, caps: &Captures) -> HashMap<String, String> {
+    fn extract_args(caps: &Captures) -> HashMap<String, String> {
         let mut args = HashMap::new();
         for (name, value) in caps.iter().skip(2).zip(caps.iter().skip(3)) {
             if let (Some(n), Some(v)) = (name, value) {
@@ -74,7 +79,7 @@ fn bench_parse_simple(c: &mut Criterion) {
 
     for (name, input) in &test_inputs {
         group.bench_with_input(BenchmarkId::from_parameter(*name), *input, |b, i| {
-            b.iter(|| parser.parse(black_box(i)))
+            b.iter(|| parser.parse(black_box(i)));
         });
     }
 
@@ -89,7 +94,7 @@ fn bench_parse_complex(c: &mut Criterion) {
 
     let large_input = "I'll help you with that. <read_file path='/src/main.rs' /> <search pattern='fn main' /> <write_file path='/src/lib.rs' content='pub fn add(a: i32, b: i32) -> i32 { a + b }' /> <done />";
 
-    let very_large = format!("{}", large_input.repeat(10));
+    let very_large = large_input.repeat(10).clone();
 
     group.throughput(Throughput::Bytes(large_input.len() as u64));
     group.bench_with_input(
@@ -122,7 +127,7 @@ fn bench_parse_throughput(c: &mut Criterion) {
 
         group.throughput(Throughput::Bytes(input.len() as u64));
         group.bench_with_input(
-            BenchmarkId::from_parameter(format!("{}_bytes", size)),
+            BenchmarkId::from_parameter(format!("{size}_bytes")),
             &input,
             |b, i| b.iter(|| parser.parse(black_box(i))),
         );
@@ -131,18 +136,18 @@ fn bench_parse_throughput(c: &mut Criterion) {
     group.finish();
 }
 
+fn validate_path(path: &str) -> Result<(), &str> {
+    if path.contains("..") {
+        return Err("path_traversal");
+    }
+    if path.starts_with('/') || path.starts_with("\\\\") {
+        return Err("absolute_path");
+    }
+    Ok(())
+}
+
 fn bench_validate_path(c: &mut Criterion) {
     let mut group = c.benchmark_group("tool_parsing/validate_path");
-
-    fn validate_path(path: &str) -> Result<(), &str> {
-        if path.contains("..") {
-            return Err("path_traversal");
-        }
-        if path.starts_with('/') || path.starts_with("\\\\") {
-            return Err("absolute_path");
-        }
-        Ok(())
-    }
 
     let test_paths = [
         ("valid_simple", "src/main.rs", true),
@@ -154,32 +159,32 @@ fn bench_validate_path(c: &mut Criterion) {
 
     for (name, path, _should_pass) in &test_paths {
         group.bench_with_input(BenchmarkId::from_parameter(*name), *path, |b, p| {
-            b.iter(|| validate_path(black_box(p)))
+            b.iter(|| validate_path(black_box(p)));
         });
     }
 
     group.finish();
 }
 
+fn validate_shell_command<'a>(command: &'a str, allowlist: &[&'a str]) -> Result<(), &'a str> {
+    let cmd_trimmed = command.trim();
+    let first_word = cmd_trimmed.split_whitespace().next().unwrap_or(cmd_trimmed);
+
+    let is_allowed = allowlist.contains(&first_word);
+    if !is_allowed {
+        return Err("not_allowed");
+    }
+
+    let dangerous_chars = [b';', b'&', b'|', b'>', b'<', b'`', b'$', b'('];
+    if command.bytes().any(|c| dangerous_chars.contains(&c)) {
+        return Err("dangerous_chars");
+    }
+
+    Ok(())
+}
+
 fn bench_validate_shell_command(c: &mut Criterion) {
     let mut group = c.benchmark_group("tool_parsing/validate_shell");
-
-    fn validate_shell_command<'a>(command: &'a str, allowlist: &[&'a str]) -> Result<(), &'a str> {
-        let cmd_trimmed = command.trim();
-        let first_word = cmd_trimmed.split_whitespace().next().unwrap_or(cmd_trimmed);
-
-        let is_allowed = allowlist.iter().any(|prefix| first_word == *prefix);
-        if !is_allowed {
-            return Err("not_allowed");
-        }
-
-        let dangerous_chars = [b';', b'&', b'|', b'>', b'<', b'`', b'$', b'('];
-        if command.bytes().any(|c| dangerous_chars.contains(&c)) {
-            return Err("dangerous_chars");
-        }
-
-        Ok(())
-    }
 
     let allowlist = &["ls", "cat", "echo", "grep", "pwd"];
 
@@ -193,7 +198,7 @@ fn bench_validate_shell_command(c: &mut Criterion) {
 
     for (name, command, _should_pass) in &test_commands {
         group.bench_with_input(BenchmarkId::from_parameter(*name), *command, |b, cmd| {
-            b.iter(|| validate_shell_command(black_box(cmd), black_box(allowlist)))
+            b.iter(|| validate_shell_command(black_box(cmd), black_box(allowlist)));
         });
     }
 
@@ -211,7 +216,7 @@ fn bench_regex_compilation(c: &mut Criterion) {
 
     for (name, pattern) in &patterns {
         group.bench_with_input(BenchmarkId::from_parameter(*name), *pattern, |b, p| {
-            b.iter(|| Regex::new(black_box(p)))
+            b.iter(|| Regex::new(black_box(p)));
         });
     }
 

@@ -108,7 +108,7 @@ impl Default for ProviderRegistry {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::inference::types::{ChatRequest, ChatResponse, InferenceError, Message, Role};
+    use crate::inference::types::{ChatRequest, ChatResponse, InferenceError};
     use async_trait::async_trait;
 
     struct MockProvider {

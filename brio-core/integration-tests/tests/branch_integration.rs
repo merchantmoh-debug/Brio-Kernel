@@ -3,12 +3,10 @@
 //! Tests branch creation, checkout, merge operations, and conflict detection
 //! including three-way merge functionality.
 
-use anyhow::Result;
-use std::collections::HashMap;
-use supervisor::branch::{Branch, BranchSource, BranchValidationError, SessionSnapshot};
+use supervisor::branch::{Branch, BranchValidationError, SessionSnapshot};
 use supervisor::domain::{
     BranchConfig, BranchId, BranchResult, BranchStatus, ExecutionMetrics, ExecutionStrategy,
-    MergeResult, Priority,
+    MergeResult,
 };
 
 /// Test branch creation.
@@ -177,16 +175,16 @@ async fn test_three_way_merge() {
 
         if ours_line != base_line && theirs_line != base_line {
             // Both changed - conflict
-            if ours_line != theirs_line {
-                has_conflict = true;
-                result.push(format!("<<<<<<< OURS"));
-                result.push(ours_line.to_string());
-                result.push(format!("====="));
-                result.push(theirs_line.to_string());
-                result.push(format!(">>>>>>> THEIRS"));
-            } else {
+            if ours_line == theirs_line {
                 // Both changed to same value
                 result.push(ours_line.to_string());
+            } else {
+                has_conflict = true;
+                result.push("<<<<<<< OURS".to_string());
+                result.push(ours_line.to_string());
+                result.push("=====".to_string());
+                result.push(theirs_line.to_string());
+                result.push(">>>>>>> THEIRS".to_string());
             }
         } else if ours_line != base_line {
             // Only ours changed

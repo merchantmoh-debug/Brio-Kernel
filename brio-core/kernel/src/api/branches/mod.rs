@@ -21,8 +21,8 @@ pub use types::{
 mod tests {
     use super::*;
     use crate::branch_manager::{
-        Branch, BranchConfig, BranchError, BranchId, BranchManager, BranchStatus,
-        ExecutionStrategy, MergeRequestId, MergeRequestModel, MergeRequestStatus,
+        BranchError, BranchId, BranchManager, BranchStatus,
+        ExecutionStrategy, MergeRequestId, MergeRequestStatus,
     };
 
     // Test request/response serialization
@@ -149,7 +149,7 @@ mod tests {
         assert!(id.is_ok());
 
         // Empty ID
-        let id = BranchId::new("".to_string());
+        let id = BranchId::new(String::new());
         assert!(matches!(id, Err(BranchError::Internal(_))));
     }
 
@@ -158,7 +158,7 @@ mod tests {
         let id = MergeRequestId::new("mr-123".to_string());
         assert!(id.is_ok());
 
-        let id = MergeRequestId::new("".to_string());
+        let id = MergeRequestId::new(String::new());
         assert!(matches!(id, Err(BranchError::Internal(_))));
     }
 

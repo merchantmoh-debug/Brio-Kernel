@@ -24,7 +24,7 @@ pub enum ConflictType {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Conflict {
     file_path: PathBuf,
-    conflict_type: ConflictType,
+    kind: ConflictType,
     base_content: Option<String>,
     branch_contents: HashMap<BranchId, String>,
 }
@@ -34,13 +34,13 @@ impl Conflict {
     #[must_use]
     pub fn new(
         file_path: PathBuf,
-        conflict_type: ConflictType,
+        kind: ConflictType,
         base_content: Option<String>,
         branch_contents: HashMap<BranchId, String>,
     ) -> Self {
         Self {
             file_path,
-            conflict_type,
+            kind,
             base_content,
             branch_contents,
         }
@@ -54,8 +54,8 @@ impl Conflict {
 
     /// Returns the type of conflict.
     #[must_use]
-    pub const fn conflict_type(&self) -> ConflictType {
-        self.conflict_type
+    pub const fn kind(&self) -> ConflictType {
+        self.kind
     }
 
     /// Returns the base content (common ancestor).
@@ -73,19 +73,19 @@ impl Conflict {
     /// Checks if this is a content conflict.
     #[must_use]
     pub fn is_content_conflict(&self) -> bool {
-        matches!(self.conflict_type, ConflictType::Content)
+        matches!(self.kind, ConflictType::Content)
     }
 
     /// Checks if this is a delete-modify conflict.
     #[must_use]
     pub fn is_delete_modify_conflict(&self) -> bool {
-        matches!(self.conflict_type, ConflictType::DeleteModify)
+        matches!(self.kind, ConflictType::DeleteModify)
     }
 
     /// Checks if this is an add-add conflict.
     #[must_use]
     pub fn is_add_add_conflict(&self) -> bool {
-        matches!(self.conflict_type, ConflictType::AddAdd)
+        matches!(self.kind, ConflictType::AddAdd)
     }
 }
 
@@ -119,7 +119,7 @@ mod tests {
         );
 
         assert_eq!(conflict.file_path(), &file_path);
-        assert!(matches!(conflict.conflict_type(), ConflictType::Content));
+        assert!(matches!(conflict.kind(), ConflictType::Content));
         assert_eq!(conflict.base_content(), Some("base"));
         assert_eq!(conflict.branch_contents(), &branch_contents);
     }

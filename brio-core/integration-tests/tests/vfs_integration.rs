@@ -5,7 +5,6 @@
 
 use anyhow::Result;
 use brio_kernel::infrastructure::config::SandboxSettings;
-use std::io::BufRead;
 
 mod common;
 
@@ -187,8 +186,7 @@ async fn test_vfs_sandbox_policy() -> Result<()> {
         let err_str = e.to_string();
         assert!(
             err_str.contains("PolicyViolation") || err_str.contains("policy"),
-            "Error should indicate policy violation: {}",
-            err_str
+            "Error should indicate policy violation: {err_str}"
         );
     }
 
@@ -229,8 +227,7 @@ async fn test_vfs_conflict_detection() -> Result<()> {
         let err_str = e.to_string();
         assert!(
             err_str.contains("Conflict") || err_str.contains("conflict"),
-            "Error should indicate conflict: {}",
-            err_str
+            "Error should indicate conflict: {err_str}"
         );
     }
 
@@ -255,7 +252,7 @@ async fn test_vfs_concurrent_sessions() -> Result<()> {
 
         // Each session modifies the file
         let session_file = session_path.join("concurrent.txt");
-        std::fs::write(&session_file, format!("session {}", i))?;
+        std::fs::write(&session_file, format!("session {i}"))?;
 
         session_ids.push(session_id);
     }

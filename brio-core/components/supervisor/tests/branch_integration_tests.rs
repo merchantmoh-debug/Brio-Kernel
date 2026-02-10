@@ -8,29 +8,54 @@ use std::path::PathBuf;
 use supervisor::branch::BranchError;
 use supervisor::branch::BranchSource;
 use supervisor::domain::{
-    AgentAssignment, BranchConfig, BranchId, BranchStatus, ExecutionMetrics, ExecutionStrategy,
+    AgentAssignment, BranchConfig, BranchId, BranchStatus, ExecutionStrategy,
     Priority,
 };
 
 mod common;
 use common::{DEFAULT_MERGE_STRATEGY, TEST_FILES_DIR, TestContext};
 
+// Helper function to run async branch creation synchronously
+fn create_branch_sync(
+    manager: &mut supervisor::branch::BranchManager,
+    source: BranchSource,
+    config: BranchConfig,
+) -> Result<BranchId, supervisor::branch::BranchError> {
+    tokio::task::block_in_place(|| {
+        tokio::runtime::Handle::current().block_on(async {
+            manager.create_branch(source, config).await
+        })
+    })
+}
+
+// Helper function to run async request_merge synchronously  
+fn request_merge_sync(
+    manager: &mut supervisor::branch::BranchManager,
+    branch_id: BranchId,
+    strategy: &str,
+    requires_approval: bool,
+) -> Result<supervisor::merge::MergeId, supervisor::branch::BranchError> {
+    tokio::task::block_in_place(|| {
+        tokio::runtime::Handle::current().block_on(async {
+            manager.request_merge(branch_id, strategy, requires_approval).await
+        })
+    })
+}
+
 // ============= Branch Lifecycle Tests =============
 
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn test_branch_lifecycle() {
     let ctx = TestContext::new();
     let manager_arc = ctx.branch_manager();
     let mut manager = manager_arc.lock().unwrap();
 
     // 1. Create branch
-    let branch_id = manager
-        .create_branch(
-            BranchSource::Base(PathBuf::from(TEST_FILES_DIR)),
-            TestContext::default_test_config("Test Branch"),
-        )
-        .await
-        .unwrap();
+    let branch_id = create_branch_sync(
+        &mut manager,
+        BranchSource::Base(PathBuf::from(TEST_FILES_DIR)),
+        TestContext::default_test_config("Test Branch"),
+    ).unwrap();
 
     // 2. Verify branch created
     let branch = manager.get_branch(branch_id).unwrap().unwrap();
@@ -51,11 +76,11 @@ async fn test_branch_lifecycle() {
     assert!(matches!(branch.status(), BranchStatus::Completed));
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn test_branch_creation_validation() {
     let ctx = TestContext::new();
     let manager_arc = ctx.branch_manager();
-    let mut manager = manager_arc.lock().unwrap();
+    let _manager = manager_arc.lock().unwrap();
 
     // Test empty name - should fail validation
     let config_result = BranchConfig::new(
@@ -68,20 +93,18 @@ async fn test_branch_creation_validation() {
     assert!(config_result.is_err());
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn test_branch_from_parent() {
     let ctx = TestContext::new();
     let manager_arc = ctx.branch_manager();
     let mut manager = manager_arc.lock().unwrap();
 
     // Create parent branch
-    let parent_id = manager
-        .create_branch(
-            BranchSource::Base(PathBuf::from(TEST_FILES_DIR)),
-            TestContext::default_test_config("Parent Branch"),
-        )
-        .await
-        .unwrap();
+    let parent_id = create_branch_sync(
+        &mut manager,
+        BranchSource::Base(PathBuf::from(TEST_FILES_DIR)),
+        TestContext::default_test_config("Parent Branch"),
+    ).unwrap();
 
     // Complete parent
     manager.mark_executing(parent_id, 1).unwrap();
@@ -89,13 +112,11 @@ async fn test_branch_from_parent() {
     manager.complete_branch(parent_id, result).unwrap();
 
     // Create child from parent
-    let child_id = manager
-        .create_branch(
-            BranchSource::Branch(parent_id),
-            TestContext::default_test_config("Child Branch"),
-        )
-        .await
-        .unwrap();
+    let child_id = create_branch_sync(
+        &mut manager,
+        BranchSource::Branch(parent_id),
+        TestContext::default_test_config("Child Branch"),
+    ).unwrap();
 
     let child = manager.get_branch(child_id).unwrap().unwrap();
     assert_eq!(child.parent_id(), Some(parent_id));
@@ -103,7 +124,7 @@ async fn test_branch_from_parent() {
 
 // ============= Max Branch Limit Tests =============
 
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn test_max_branch_limit() {
     let ctx = TestContext::new();
     let manager_arc = ctx.branch_manager();
@@ -111,22 +132,20 @@ async fn test_max_branch_limit() {
 
     // Create 8 branches (max)
     for i in 0..8 {
-        let result = manager
-            .create_branch(
-                BranchSource::Base(PathBuf::from(TEST_FILES_DIR)),
-                TestContext::default_test_config(format!("Branch {}", i)),
-            )
-            .await;
-        assert!(result.is_ok(), "Should be able to create branch {}", i);
+        let result = create_branch_sync(
+            &mut manager,
+            BranchSource::Base(PathBuf::from(TEST_FILES_DIR)),
+            TestContext::default_test_config(format!("Branch {i}")),
+        );
+        assert!(result.is_ok(), "Should be able to create branch {i}");
     }
 
     // 9th should fail
-    let result = manager
-        .create_branch(
-            BranchSource::Base(PathBuf::from(TEST_FILES_DIR)),
-            TestContext::default_test_config("Over limit"),
-        )
-        .await;
+    let result = create_branch_sync(
+        &mut manager,
+        BranchSource::Base(PathBuf::from(TEST_FILES_DIR)),
+        TestContext::default_test_config("Over limit"),
+    );
 
     assert!(matches!(
         result,
@@ -137,62 +156,59 @@ async fn test_max_branch_limit() {
     ));
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn test_completed_branches_dont_count_towards_limit() {
     let ctx = TestContext::new();
     let manager_arc = ctx.branch_manager();
     let mut manager = manager_arc.lock().unwrap();
 
     // Create and complete a branch
-    let branch_id = manager
-        .create_branch(
-            BranchSource::Base(PathBuf::from(TEST_FILES_DIR)),
-            TestContext::default_test_config("To Complete"),
-        )
-        .await
-        .unwrap();
+    let branch_id = create_branch_sync(
+        &mut manager,
+        BranchSource::Base(PathBuf::from(TEST_FILES_DIR)),
+        TestContext::default_test_config("To Complete"),
+    ).unwrap();
 
     manager.mark_executing(branch_id, 1).unwrap();
     let result = TestContext::default_test_result(branch_id);
     manager.complete_branch(branch_id, result).unwrap();
 
     // Should be able to create another branch (total still 1 active, not 8)
-    let result = manager
-        .create_branch(
-            BranchSource::Base(PathBuf::from(TEST_FILES_DIR)),
-            TestContext::default_test_config("New Branch"),
-        )
-        .await;
+    let result = create_branch_sync(
+        &mut manager,
+        BranchSource::Base(PathBuf::from(TEST_FILES_DIR)),
+        TestContext::default_test_config("New Branch"),
+    );
 
     assert!(result.is_ok());
 }
 
 // ============= Merge Tests =============
 
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn test_merge_request_with_approval() {
     let ctx = TestContext::new();
     let manager_arc = ctx.branch_manager();
     let mut manager = manager_arc.lock().unwrap();
 
     // Create and complete branch
-    let branch_id = manager
-        .create_branch(
-            BranchSource::Base(PathBuf::from(TEST_FILES_DIR)),
-            TestContext::default_test_config("To Merge"),
-        )
-        .await
-        .unwrap();
+    let branch_id = create_branch_sync(
+        &mut manager,
+        BranchSource::Base(PathBuf::from(TEST_FILES_DIR)),
+        TestContext::default_test_config("To Merge"),
+    ).unwrap();
 
     manager.mark_executing(branch_id, 1).unwrap();
     let result = TestContext::default_test_result(branch_id);
     manager.complete_branch(branch_id, result).unwrap();
 
     // Request merge with approval required
-    let merge_req = manager
-        .request_merge(branch_id, DEFAULT_MERGE_STRATEGY, true)
-        .await
-        .unwrap();
+    let merge_req = request_merge_sync(
+        &mut manager,
+        branch_id,
+        DEFAULT_MERGE_STRATEGY,
+        true,
+    ).unwrap();
 
     // Approve and execute
     manager.approve_merge(merge_req, "test_user").unwrap();
@@ -202,25 +218,26 @@ async fn test_merge_request_with_approval() {
     assert!(matches!(branch.status(), BranchStatus::Completed));
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn test_merge_requires_completed_status() {
     let ctx = TestContext::new();
     let manager_arc = ctx.branch_manager();
     let mut manager = manager_arc.lock().unwrap();
 
     // Create branch but don't complete it
-    let branch_id = manager
-        .create_branch(
-            BranchSource::Base(PathBuf::from(TEST_FILES_DIR)),
-            TestContext::default_test_config("Incomplete"),
-        )
-        .await
-        .unwrap();
+    let branch_id = create_branch_sync(
+        &mut manager,
+        BranchSource::Base(PathBuf::from(TEST_FILES_DIR)),
+        TestContext::default_test_config("Incomplete"),
+    ).unwrap();
 
     // Try to request merge
-    let result = manager
-        .request_merge(branch_id, DEFAULT_MERGE_STRATEGY, false)
-        .await;
+    let result = request_merge_sync(
+        &mut manager,
+        branch_id,
+        DEFAULT_MERGE_STRATEGY,
+        false,
+    );
 
     assert!(matches!(
         result,
@@ -229,29 +246,30 @@ async fn test_merge_requires_completed_status() {
     ));
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn test_invalid_merge_strategy() {
     let ctx = TestContext::new();
     let manager_arc = ctx.branch_manager();
     let mut manager = manager_arc.lock().unwrap();
 
     // Create and complete branch
-    let branch_id = manager
-        .create_branch(
-            BranchSource::Base(PathBuf::from(TEST_FILES_DIR)),
-            TestContext::default_test_config("To Merge"),
-        )
-        .await
-        .unwrap();
+    let branch_id = create_branch_sync(
+        &mut manager,
+        BranchSource::Base(PathBuf::from(TEST_FILES_DIR)),
+        TestContext::default_test_config("To Merge"),
+    ).unwrap();
 
     manager.mark_executing(branch_id, 1).unwrap();
     let result = TestContext::default_test_result(branch_id);
     manager.complete_branch(branch_id, result).unwrap();
 
     // Request merge with invalid strategy
-    let result = manager
-        .request_merge(branch_id, "invalid-strategy", false)
-        .await;
+    let result = request_merge_sync(
+        &mut manager,
+        branch_id,
+        "invalid-strategy",
+        false,
+    );
 
     assert!(matches!(
         result,
@@ -262,20 +280,18 @@ async fn test_invalid_merge_strategy() {
 
 // ============= Nested Branches Tests =============
 
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn test_nested_branches() {
     let ctx = TestContext::new();
     let manager_arc = ctx.branch_manager();
     let mut manager = manager_arc.lock().unwrap();
 
     // Create parent branch
-    let parent_id = manager
-        .create_branch(
-            BranchSource::Base(PathBuf::from(TEST_FILES_DIR)),
-            TestContext::default_test_config("Parent"),
-        )
-        .await
-        .unwrap();
+    let parent_id = create_branch_sync(
+        &mut manager,
+        BranchSource::Base(PathBuf::from(TEST_FILES_DIR)),
+        TestContext::default_test_config("Parent"),
+    ).unwrap();
 
     // Complete parent so we can branch from it
     manager.mark_executing(parent_id, 1).unwrap();
@@ -283,21 +299,17 @@ async fn test_nested_branches() {
     manager.complete_branch(parent_id, result).unwrap();
 
     // Create child branches
-    let child1 = manager
-        .create_branch(
-            BranchSource::Branch(parent_id),
-            TestContext::default_test_config("Child 1"),
-        )
-        .await
-        .unwrap();
+    let child1 = create_branch_sync(
+        &mut manager,
+        BranchSource::Branch(parent_id),
+        TestContext::default_test_config("Child 1"),
+    ).unwrap();
 
-    let child2 = manager
-        .create_branch(
-            BranchSource::Branch(parent_id),
-            TestContext::default_test_config("Child 2"),
-        )
-        .await
-        .unwrap();
+    let child2 = create_branch_sync(
+        &mut manager,
+        BranchSource::Branch(parent_id),
+        TestContext::default_test_config("Child 2"),
+    ).unwrap();
 
     // Verify tree structure
     let tree = manager.get_branch_tree(parent_id).unwrap();
@@ -309,20 +321,18 @@ async fn test_nested_branches() {
     assert!(child_ids.contains(&child2));
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn test_branch_tree_depth() {
     let ctx = TestContext::new();
     let manager_arc = ctx.branch_manager();
     let mut manager = manager_arc.lock().unwrap();
 
     // Create nested branches: root -> child -> grandchild
-    let root = manager
-        .create_branch(
-            BranchSource::Base(PathBuf::from(TEST_FILES_DIR)),
-            TestContext::default_test_config("Root"),
-        )
-        .await
-        .unwrap();
+    let root = create_branch_sync(
+        &mut manager,
+        BranchSource::Base(PathBuf::from(TEST_FILES_DIR)),
+        TestContext::default_test_config("Root"),
+    ).unwrap();
 
     // Complete root
     manager.mark_executing(root, 1).unwrap();
@@ -330,13 +340,11 @@ async fn test_branch_tree_depth() {
     manager.complete_branch(root, result).unwrap();
 
     // Create child
-    let child = manager
-        .create_branch(
-            BranchSource::Branch(root),
-            TestContext::default_test_config("Child"),
-        )
-        .await
-        .unwrap();
+    let child = create_branch_sync(
+        &mut manager,
+        BranchSource::Branch(root),
+        TestContext::default_test_config("Child"),
+    ).unwrap();
 
     // Complete child
     manager.mark_executing(child, 1).unwrap();
@@ -344,13 +352,11 @@ async fn test_branch_tree_depth() {
     manager.complete_branch(child, result).unwrap();
 
     // Create grandchild
-    let grandchild = manager
-        .create_branch(
-            BranchSource::Branch(child),
-            TestContext::default_test_config("Grandchild"),
-        )
-        .await
-        .unwrap();
+    let grandchild = create_branch_sync(
+        &mut manager,
+        BranchSource::Branch(child),
+        TestContext::default_test_config("Grandchild"),
+    ).unwrap();
 
     // Verify tree depth
     let tree = manager.get_branch_tree(root).unwrap();
@@ -368,28 +374,24 @@ async fn test_branch_tree_depth() {
 
 // ============= Recovery Tests =============
 
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn test_branch_recovery_after_restart() {
     let ctx = TestContext::new();
     let manager_arc = ctx.branch_manager();
     let mut manager = manager_arc.lock().unwrap();
 
     // Create branches
-    let id1 = manager
-        .create_branch(
-            BranchSource::Base(PathBuf::from(TEST_FILES_DIR)),
-            TestContext::default_test_config("Branch 1"),
-        )
-        .await
-        .unwrap();
+    let id1 = create_branch_sync(
+        &mut manager,
+        BranchSource::Base(PathBuf::from(TEST_FILES_DIR)),
+        TestContext::default_test_config("Branch 1"),
+    ).unwrap();
 
-    let id2 = manager
-        .create_branch(
-            BranchSource::Base(PathBuf::from(TEST_FILES_DIR)),
-            TestContext::default_test_config("Branch 2"),
-        )
-        .await
-        .unwrap();
+    let id2 = create_branch_sync(
+        &mut manager,
+        BranchSource::Base(PathBuf::from(TEST_FILES_DIR)),
+        TestContext::default_test_config("Branch 2"),
+    ).unwrap();
 
     // Mark one as executing
     manager.mark_executing(id1, 1).unwrap();
@@ -409,20 +411,18 @@ async fn test_branch_recovery_after_restart() {
 
 // ============= Status Transition Tests =============
 
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn test_invalid_status_transitions() {
     let ctx = TestContext::new();
     let manager_arc = ctx.branch_manager();
     let mut manager = manager_arc.lock().unwrap();
 
     // Create branch
-    let branch_id = manager
-        .create_branch(
-            BranchSource::Base(PathBuf::from(TEST_FILES_DIR)),
-            TestContext::default_test_config("Test"),
-        )
-        .await
-        .unwrap();
+    let branch_id = create_branch_sync(
+        &mut manager,
+        BranchSource::Base(PathBuf::from(TEST_FILES_DIR)),
+        TestContext::default_test_config("Test"),
+    ).unwrap();
 
     // Cannot complete without executing first
     let result = manager.complete_branch(branch_id, TestContext::default_test_result(branch_id));
@@ -430,20 +430,18 @@ async fn test_invalid_status_transitions() {
     assert!(result.is_err());
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn test_terminal_status_is_terminal() {
     let ctx = TestContext::new();
     let manager_arc = ctx.branch_manager();
     let mut manager = manager_arc.lock().unwrap();
 
     // Create branch
-    let branch_id = manager
-        .create_branch(
-            BranchSource::Base(PathBuf::from(TEST_FILES_DIR)),
-            TestContext::default_test_config("To Complete"),
-        )
-        .await
-        .unwrap();
+    let branch_id = create_branch_sync(
+        &mut manager,
+        BranchSource::Base(PathBuf::from(TEST_FILES_DIR)),
+        TestContext::default_test_config("To Complete"),
+    ).unwrap();
 
     // Complete it
     manager.mark_executing(branch_id, 1).unwrap();
@@ -458,7 +456,7 @@ async fn test_terminal_status_is_terminal() {
 
 // ============= Configuration Tests =============
 
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn test_branch_with_agents() {
     let ctx = TestContext::new();
     let manager_arc = ctx.branch_manager();
@@ -466,20 +464,18 @@ async fn test_branch_with_agents() {
 
     let agent = AgentAssignment::new("agent_coder", None, Priority::new(100)).unwrap();
 
-    let branch_id = manager
-        .create_branch(
-            BranchSource::Base(PathBuf::from(TEST_FILES_DIR)),
-            BranchConfig::new(
-                "With Agents",
-                vec![agent],
-                ExecutionStrategy::Sequential,
-                false,
-                DEFAULT_MERGE_STRATEGY,
-            )
-            .unwrap(),
+    let branch_id = create_branch_sync(
+        &mut manager,
+        BranchSource::Base(PathBuf::from(TEST_FILES_DIR)),
+        BranchConfig::new(
+            "With Agents",
+            vec![agent],
+            ExecutionStrategy::Sequential,
+            false,
+            DEFAULT_MERGE_STRATEGY,
         )
-        .await
-        .unwrap();
+        .unwrap(),
+    ).unwrap();
 
     let branch = manager.get_branch(branch_id).unwrap().unwrap();
     let config = branch.config();
@@ -487,7 +483,7 @@ async fn test_branch_with_agents() {
     assert_eq!(config.agents()[0].agent_id().as_str(), "agent_coder");
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn test_branch_with_parallel_strategy() {
     let ctx = TestContext::new();
     let manager_arc = ctx.branch_manager();
@@ -499,20 +495,18 @@ async fn test_branch_with_parallel_strategy() {
         AgentAssignment::new("agent3", None, Priority::new(100)).unwrap(),
     ];
 
-    let branch_id = manager
-        .create_branch(
-            BranchSource::Base(PathBuf::from("./test_files")),
-            BranchConfig::new(
-                "Parallel",
-                agents,
-                ExecutionStrategy::Parallel { max_concurrent: 2 },
-                false,
-                "union",
-            )
-            .unwrap(),
+    let branch_id = create_branch_sync(
+        &mut manager,
+        BranchSource::Base(PathBuf::from("./test_files")),
+        BranchConfig::new(
+            "Parallel",
+            agents,
+            ExecutionStrategy::Parallel { max_concurrent: 2 },
+            false,
+            "union",
         )
-        .await
-        .unwrap();
+        .unwrap(),
+    ).unwrap();
 
     let branch = manager.get_branch(branch_id).unwrap().unwrap();
     let config = branch.config();
@@ -521,7 +515,7 @@ async fn test_branch_with_parallel_strategy() {
 
 // ============= Error Handling Tests =============
 
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn test_get_nonexistent_branch() {
     let ctx = TestContext::new();
     let manager_arc = ctx.branch_manager();
@@ -532,7 +526,7 @@ async fn test_get_nonexistent_branch() {
     assert!(result.unwrap().is_none());
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn test_update_nonexistent_branch() {
     let ctx = TestContext::new();
     let manager_arc = ctx.branch_manager();
@@ -542,7 +536,7 @@ async fn test_update_nonexistent_branch() {
     assert!(matches!(result, Err(BranchError::BranchNotFound(_))));
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn test_approve_nonexistent_merge() {
     let ctx = TestContext::new();
     let manager_arc = ctx.branch_manager();
@@ -555,7 +549,7 @@ async fn test_approve_nonexistent_merge() {
 
 // ============= Edge Cases =============
 
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn test_branch_name_length_limits() {
     let ctx = TestContext::new();
     let manager_arc = ctx.branch_manager();
@@ -563,12 +557,11 @@ async fn test_branch_name_length_limits() {
 
     // Test max length name (256 chars) - should succeed
     let long_name = "a".repeat(256);
-    let result = manager
-        .create_branch(
-            BranchSource::Base(PathBuf::from(TEST_FILES_DIR)),
-            TestContext::default_test_config(long_name),
-        )
-        .await;
+    let result = create_branch_sync(
+        &mut manager,
+        BranchSource::Base(PathBuf::from(TEST_FILES_DIR)),
+        TestContext::default_test_config(long_name),
+    );
     assert!(result.is_ok());
 
     // Test name too long (257 chars) - should fail validation
@@ -583,7 +576,7 @@ async fn test_branch_name_length_limits() {
     assert!(config_result.is_err());
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn test_branch_with_task_override() {
     let ctx = TestContext::new();
     let manager_arc = ctx.branch_manager();
@@ -596,20 +589,18 @@ async fn test_branch_with_task_override() {
     )
     .unwrap();
 
-    let branch_id = manager
-        .create_branch(
-            BranchSource::Base(PathBuf::from(TEST_FILES_DIR)),
-            BranchConfig::new(
-                "With Override",
-                vec![agent],
-                ExecutionStrategy::Sequential,
-                false,
-                DEFAULT_MERGE_STRATEGY,
-            )
-            .unwrap(),
+    let branch_id = create_branch_sync(
+        &mut manager,
+        BranchSource::Base(PathBuf::from(TEST_FILES_DIR)),
+        BranchConfig::new(
+            "With Override",
+            vec![agent],
+            ExecutionStrategy::Sequential,
+            false,
+            DEFAULT_MERGE_STRATEGY,
         )
-        .await
-        .unwrap();
+        .unwrap(),
+    ).unwrap();
 
     let branch = manager.get_branch(branch_id).unwrap().unwrap();
     let config = branch.config();

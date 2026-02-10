@@ -75,8 +75,7 @@ async fn test_server_error_returns_provider_error() {
     let err = result.unwrap_err();
     assert!(
         matches!(&err, InferenceError::ProviderError(msg) if msg.contains("500")),
-        "Expected ProviderError with 500, got {:?}",
-        err
+        "Expected ProviderError with 500, got {err:?}"
     );
 }
 
@@ -99,8 +98,7 @@ async fn test_service_unavailable_returns_provider_error() {
     let err = result.unwrap_err();
     assert!(
         matches!(&err, InferenceError::ProviderError(msg) if msg.contains("503")),
-        "Expected ProviderError with 503, got {:?}",
-        err
+        "Expected ProviderError with 503, got {err:?}"
     );
 }
 
@@ -127,8 +125,7 @@ async fn test_malformed_json_returns_provider_error() {
     let err = result.unwrap_err();
     assert!(
         matches!(&err, InferenceError::ProviderError(msg) if msg.contains("Parse error")),
-        "Expected ProviderError with parse error, got {:?}",
-        err
+        "Expected ProviderError with parse error, got {err:?}"
     );
 }
 
@@ -153,8 +150,7 @@ async fn test_empty_choices_returns_provider_error() {
     let err = result.unwrap_err();
     assert!(
         matches!(&err, InferenceError::ProviderError(msg) if msg.contains("No choices")),
-        "Expected ProviderError about no choices, got {:?}",
-        err
+        "Expected ProviderError about no choices, got {err:?}"
     );
 }
 

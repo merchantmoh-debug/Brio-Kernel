@@ -1,5 +1,6 @@
 //! Outcome types for three-way merge operations.
 
+use std::fmt::Write;
 use std::path::PathBuf;
 use thiserror::Error;
 
@@ -41,8 +42,8 @@ pub struct LineConflict {
     line_start: usize,
     pub(crate) line_end: usize,
     base_lines: Vec<String>,
-    branch_a_lines: Vec<String>,
-    branch_b_lines: Vec<String>,
+    lines_a: Vec<String>,
+    lines_b: Vec<String>,
 }
 
 impl LineConflict {
@@ -52,15 +53,15 @@ impl LineConflict {
         line_start: usize,
         line_end: usize,
         base_lines: Vec<String>,
-        branch_a_lines: Vec<String>,
-        branch_b_lines: Vec<String>,
+        lines_a: Vec<String>,
+        lines_b: Vec<String>,
     ) -> Self {
         Self {
             line_start,
             line_end,
             base_lines,
-            branch_a_lines,
-            branch_b_lines,
+            lines_a,
+            lines_b,
         }
     }
 
@@ -85,26 +86,26 @@ impl LineConflict {
     /// Returns lines from branch A.
     #[must_use]
     pub fn branch_a_lines(&self) -> &[String] {
-        &self.branch_a_lines
+        &self.lines_a
     }
 
     /// Returns lines from branch B.
     #[must_use]
     pub fn branch_b_lines(&self) -> &[String] {
-        &self.branch_b_lines
+        &self.lines_b
     }
 
     /// Formats the conflict using Git-style conflict markers.
     #[must_use]
-    pub fn format_with_markers(&self, branch_a_name: &str, branch_b_name: &str) -> String {
+    pub fn format_with_markers(&self, name_a: &str, name_b: &str) -> String {
         let mut output = String::new();
 
-        output.push_str(&format!("<<<<<<< {branch_a_name}"));
-        if self.branch_a_lines.is_empty() {
+        write!(output, "<<<<<<< {name_a}").unwrap();
+        if self.lines_a.is_empty() {
             output.push('\n');
         } else {
             output.push('\n');
-            for line in &self.branch_a_lines {
+            for line in &self.lines_a {
                 output.push_str(line);
                 output.push('\n');
             }
@@ -120,14 +121,14 @@ impl LineConflict {
 
         output.push_str("=======\n");
 
-        if !self.branch_b_lines.is_empty() {
-            for line in &self.branch_b_lines {
+        if !self.lines_b.is_empty() {
+            for line in &self.lines_b {
                 output.push_str(line);
                 output.push('\n');
             }
         }
 
-        output.push_str(&format!(">>>>>>> {branch_b_name}\n"));
+        writeln!(output, ">>>>>>> {name_b}").unwrap();
 
         output
     }
@@ -147,14 +148,14 @@ impl ThreeWayConfig {
     pub fn new(
         max_file_size: usize,
         allow_binary: bool,
-        branch_a_name: impl Into<String>,
-        branch_b_name: impl Into<String>,
+        name_a: impl Into<String>,
+        name_b: impl Into<String>,
     ) -> Self {
         Self {
             max_file_size,
             allow_binary,
-            branch_a_name: branch_a_name.into(),
-            branch_b_name: branch_b_name.into(),
+            branch_a_name: name_a.into(),
+            branch_b_name: name_b.into(),
         }
     }
 

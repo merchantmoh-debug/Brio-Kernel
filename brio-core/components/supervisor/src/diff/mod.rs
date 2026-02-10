@@ -3,11 +3,13 @@
 //! This module provides a trait-based approach to diff algorithms,
 //! allowing users to swap implementations while maintaining a consistent interface.
 
+use std::fmt::Write;
+
 pub mod myers;
 pub mod three_way;
 
 pub use myers::MyersDiff;
-pub use three_way::{MergeOutcome, ThreeWayMergeError, three_way_merge};
+pub use three_way::{three_way_merge, MergeOutcome, ThreeWayMergeError};
 
 /// A single diff operation representing the difference between two texts.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -57,9 +59,9 @@ impl DiffOp {
         match self {
             Self::Equal {
                 old_start, old_end, ..
-            } => Some((*old_start, *old_end)),
-            Self::Delete { old_start, old_end } => Some((*old_start, *old_end)),
-            Self::Replace {
+            }
+            | Self::Delete { old_start, old_end }
+            | Self::Replace {
                 old_start, old_end, ..
             } => Some((*old_start, *old_end)),
             Self::Insert { .. } => None,
@@ -72,9 +74,9 @@ impl DiffOp {
         match self {
             Self::Equal {
                 new_start, new_end, ..
-            } => Some((*new_start, *new_end)),
-            Self::Insert { new_start, new_end } => Some((*new_start, *new_end)),
-            Self::Replace {
+            }
+            | Self::Insert { new_start, new_end }
+            | Self::Replace {
                 new_start, new_end, ..
             } => Some((*new_start, *new_end)),
             Self::Delete { .. } => None,
@@ -93,9 +95,9 @@ impl DiffOp {
         match self {
             Self::Equal {
                 old_start, old_end, ..
-            } => old_end - old_start,
-            Self::Delete { old_start, old_end } => old_end - old_start,
-            Self::Replace {
+            }
+            | Self::Delete { old_start, old_end }
+            | Self::Replace {
                 old_start, old_end, ..
             } => old_end - old_start,
             Self::Insert { .. } => 0,
@@ -108,9 +110,9 @@ impl DiffOp {
         match self {
             Self::Equal {
                 new_start, new_end, ..
-            } => new_end - new_start,
-            Self::Insert { new_start, new_end } => new_end - new_start,
-            Self::Replace {
+            }
+            | Self::Insert { new_start, new_end }
+            | Self::Replace {
                 new_start, new_end, ..
             } => new_end - new_start,
             Self::Delete { .. } => 0,
@@ -177,26 +179,11 @@ pub fn apply_diff(base: &[&str], diff_ops: &[DiffOp]) -> Vec<String> {
                     }
                 }
             }
-            DiffOp::Delete {
-                old_start: _,
-                old_end: _,
-            } => {
-                // Skip these lines (they're deleted)
-            }
-            DiffOp::Insert {
-                new_start: _,
-                new_end: _,
-            } => {
-                // Insertions require the target text, which we don't have here
+            DiffOp::Delete { .. } | DiffOp::Insert { .. } | DiffOp::Replace { .. } => {
+                // Skip these operations - they don't contribute to base reconstruction
+                // Insertions and replacements require target text which we don't have here
                 // This is a limitation - in practice, three_way_merge handles this
                 // by working with the actual text content
-            }
-            DiffOp::Replace {
-                old_start: _,
-                old_end: _,
-                ..
-            } => {
-                // Replacements require target text too
             }
         }
     }
@@ -298,8 +285,8 @@ pub fn format_unified_diff(
     let mut output = String::new();
 
     // Headers
-    output.push_str(&format!("--- {old_path}\n"));
-    output.push_str(&format!("+++ {new_path}\n"));
+    writeln!(output, "--- {old_path}").unwrap();
+    writeln!(output, "+++ {new_path}").unwrap();
 
     for op in diff_ops {
         match op {
@@ -310,10 +297,10 @@ pub fn format_unified_diff(
             DiffOp::Delete { old_start, old_end } => {
                 let count = old_end - old_start;
                 if count > 0 {
-                    output.push_str(&format!("@@ -{},{} +0,0 @@\n", old_start + 1, count));
+                    writeln!(output, "@@ -{},{} +0,0 @@", old_start + 1, count).unwrap();
                     for i in *old_start..*old_end {
                         if i < old_lines.len() {
-                            output.push_str(&format!("-{}\n", old_lines[i]));
+                            writeln!(output, "-{}", old_lines[i]).unwrap();
                         }
                     }
                 }
@@ -321,10 +308,10 @@ pub fn format_unified_diff(
             DiffOp::Insert { new_start, new_end } => {
                 let count = new_end - new_start;
                 if count > 0 {
-                    output.push_str(&format!("@@ -0,0 +{},{} @@\n", new_start + 1, count));
+                    writeln!(output, "@@ -0,0 +{},{} @@", new_start + 1, count).unwrap();
                     for i in *new_start..*new_end {
                         if i < new_lines.len() {
-                            output.push_str(&format!("+{}\n", new_lines[i]));
+                            writeln!(output, "+{}", new_lines[i]).unwrap();
                         }
                     }
                 }
@@ -337,21 +324,23 @@ pub fn format_unified_diff(
             } => {
                 let old_count = old_end - old_start;
                 let new_count = new_end - new_start;
-                output.push_str(&format!(
-                    "@@ -{},{} +{},{} @@\n",
+                writeln!(
+                    output,
+                    "@@ -{},{} +{},{} @@",
                     old_start + 1,
                     old_count,
                     new_start + 1,
                     new_count
-                ));
+                )
+                .unwrap();
                 for i in *old_start..*old_end {
                     if i < old_lines.len() {
-                        output.push_str(&format!("-{}\n", old_lines[i]));
+                        writeln!(output, "-{}", old_lines[i]).unwrap();
                     }
                 }
                 for i in *new_start..*new_end {
                     if i < new_lines.len() {
-                        output.push_str(&format!("+{}\n", new_lines[i]));
+                        writeln!(output, "+{}", new_lines[i]).unwrap();
                     }
                 }
             }
@@ -367,41 +356,33 @@ mod tests {
 
     #[test]
     fn test_diff_op_is_change() {
-        assert!(
-            !DiffOp::Equal {
-                old_start: 0,
-                old_end: 1,
-                new_start: 0,
-                new_end: 1,
-            }
-            .is_change()
-        );
+        assert!(!DiffOp::Equal {
+            old_start: 0,
+            old_end: 1,
+            new_start: 0,
+            new_end: 1,
+        }
+        .is_change());
 
-        assert!(
-            DiffOp::Insert {
-                new_start: 0,
-                new_end: 1,
-            }
-            .is_change()
-        );
+        assert!(DiffOp::Insert {
+            new_start: 0,
+            new_end: 1,
+        }
+        .is_change());
 
-        assert!(
-            DiffOp::Delete {
-                old_start: 0,
-                old_end: 1,
-            }
-            .is_change()
-        );
+        assert!(DiffOp::Delete {
+            old_start: 0,
+            old_end: 1,
+        }
+        .is_change());
 
-        assert!(
-            DiffOp::Replace {
-                old_start: 0,
-                old_end: 1,
-                new_start: 0,
-                new_end: 1,
-            }
-            .is_change()
-        );
+        assert!(DiffOp::Replace {
+            old_start: 0,
+            old_end: 1,
+            new_start: 0,
+            new_end: 1,
+        }
+        .is_change());
     }
 
     #[test]

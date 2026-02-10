@@ -42,25 +42,17 @@ impl BranchStatus {
         &self,
         target: &Self,
     ) -> Result<(), crate::domain::BranchValidationError> {
-        let valid = match (self, target) {
+        let valid = matches!(
+            (self, target),
             // Pending can transition to Active or Failed
-            (Self::Pending, Self::Active) => true,
-            (Self::Pending, Self::Failed) => true,
-            // Active can transition to Completed, Merging, or Failed
-            (Self::Active, Self::Completed) => true,
-            (Self::Active, Self::Merging) => true,
-            (Self::Active, Self::Failed) => true,
-            // Completed can transition to Merging
-            (Self::Completed, Self::Merging) => true,
-            // Merging can transition to Merged or Failed
-            (Self::Merging, Self::Merged) => true,
-            (Self::Merging, Self::Failed) => true,
-            // Terminal states cannot transition
-            (Self::Merged, _) => false,
-            (Self::Failed, _) => false,
-            // All other transitions are invalid
-            _ => false,
-        };
+            (Self::Pending, Self::Active | Self::Failed)
+                // Active can transition to Completed, Merging, or Failed
+                | (Self::Active, Self::Completed | Self::Merging | Self::Failed)
+                // Completed can transition to Merging
+                | (Self::Completed, Self::Merging)
+                // Merging can transition to Merged or Failed
+                | (Self::Merging, Self::Merged | Self::Failed)
+        );
 
         if valid {
             Ok(())

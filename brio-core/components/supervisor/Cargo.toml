@@ -31,5 +31,9 @@ brio-kernel = { path = "../../kernel" }
 [dev-dependencies]
 tempfile = { workspace = true }
 
+[features]
+default = []
+session-fs-ops = []
+
 [lints]
 workspace = true

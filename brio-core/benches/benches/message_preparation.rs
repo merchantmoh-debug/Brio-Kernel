@@ -6,7 +6,7 @@
 //! - Token counting estimation
 //! - Role mapping and content extraction
 
-use criterion::{BenchmarkId, Criterion, black_box, criterion_group, criterion_main};
+use criterion::{black_box, criterion_group, criterion_main, BenchmarkId, Criterion};
 
 /// Mirrors brio-core/kernel/src/inference/types.rs
 #[derive(Debug, Clone)]
@@ -56,7 +56,7 @@ pub struct AnthropicMessage {
     pub content: String,
 }
 
-/// Simulates OpenAI message preparation (mostly passthrough)
+/// Simulates `OpenAI` message preparation (mostly passthrough)
 fn prepare_messages_openai(messages: &[Message]) -> Vec<OpenAIMessage> {
     messages
         .iter()
@@ -94,13 +94,13 @@ fn bench_prepare_messages(c: &mut Criterion) {
                 };
                 Message {
                     role,
-                    content: format!("Message content for message {} with some text here", i),
+                    content: format!("Message content for message {i} with some text here"),
                 }
             })
             .collect();
 
         group.bench_with_input(
-            BenchmarkId::from_parameter(format!("{}_msgs", size)),
+            BenchmarkId::from_parameter(format!("{size}_msgs")),
             &messages,
             |b, msgs| b.iter(|| prepare_messages_anthropic(black_box(msgs))),
         );
@@ -124,13 +124,13 @@ fn bench_prepare_messages_openai(c: &mut Criterion) {
                 };
                 Message {
                     role,
-                    content: format!("Message content for message {} with some text here", i),
+                    content: format!("Message content for message {i} with some text here"),
                 }
             })
             .collect();
 
         group.bench_with_input(
-            BenchmarkId::from_parameter(format!("{}_msgs", size)),
+            BenchmarkId::from_parameter(format!("{size}_msgs")),
             &messages,
             |b, msgs| b.iter(|| prepare_messages_openai(black_box(msgs))),
         );
@@ -146,7 +146,7 @@ fn bench_message_sizes(c: &mut Criterion) {
         ("short", 100usize),
         ("medium", 1000),
         ("long", 10000),
-        ("very_long", 100000),
+        ("very_long", 100_000),
     ];
 
     for (name, size) in &content_sizes {
@@ -163,40 +163,40 @@ fn bench_message_sizes(c: &mut Criterion) {
         ];
 
         group.bench_with_input(BenchmarkId::from_parameter(*name), &messages, |b, msgs| {
-            b.iter(|| prepare_messages_anthropic(black_box(msgs)))
+            b.iter(|| prepare_messages_anthropic(black_box(msgs)));
         });
     }
 
     group.finish();
 }
 
+/// Naive token estimation (roughly 4 chars per token on average)
+fn estimate_tokens(content: &str) -> usize {
+    content.len() / 4
+}
+
+/// More accurate token estimation
+fn estimate_tokens_precise(content: &str) -> usize {
+    // Split by whitespace and punctuation
+    let tokens: Vec<&str> = content
+        .split(|c: char| c.is_whitespace() || c.is_ascii_punctuation())
+        .filter(|s| !s.is_empty())
+        .collect();
+    tokens.len()
+}
+
 fn bench_token_counting(c: &mut Criterion) {
     let mut group = c.benchmark_group("message_preparation/token_count");
-
-    /// Naive token estimation (roughly 4 chars per token on average)
-    fn estimate_tokens(content: &str) -> usize {
-        content.len() / 4
-    }
-
-    /// More accurate token estimation
-    fn estimate_tokens_precise(content: &str) -> usize {
-        // Split by whitespace and punctuation
-        let tokens: Vec<&str> = content
-            .split(|c: char| c.is_whitespace() || c.is_ascii_punctuation())
-            .filter(|s| !s.is_empty())
-            .collect();
-        tokens.len()
-    }
 
     let content =
         "This is a sample message with multiple words for token counting estimation. ".repeat(100);
 
     group.bench_function("naive_estimate", |b| {
-        b.iter(|| estimate_tokens(black_box(&content)))
+        b.iter(|| estimate_tokens(black_box(&content)));
     });
 
     group.bench_function("precise_estimate", |b| {
-        b.iter(|| estimate_tokens_precise(black_box(&content)))
+        b.iter(|| estimate_tokens_precise(black_box(&content)));
     });
 
     group.finish();
@@ -244,7 +244,7 @@ fn bench_role_mapping(c: &mut Criterion) {
             .collect();
 
         group.bench_with_input(BenchmarkId::from_parameter(name), &messages, |b, msgs| {
-            b.iter(|| prepare_messages_anthropic(black_box(msgs)))
+            b.iter(|| prepare_messages_anthropic(black_box(msgs)));
         });
     }
 

@@ -32,6 +32,9 @@ pub trait FileSystem: Send + Sync {
     /// * `Ok(Some(String))` - File content if file exists and is readable
     /// * `Ok(None)` - File does not exist
     /// * `Err(String)` - Error reading the file
+    ///
+    /// # Errors
+    /// Returns an error string if file read fails.
     fn read_file(&self, path: &Path) -> Result<Option<String>, String>;
 
     /// Checks if a file exists at the given path.
@@ -42,6 +45,9 @@ pub trait FileSystem: Send + Sync {
     /// # Returns
     /// * `Ok(bool)` - true if file exists, false otherwise
     /// * `Err(String)` - Error checking existence
+    ///
+    /// # Errors
+    /// Returns an error string if existence check fails.
     fn file_exists(&self, path: &Path) -> Result<bool, String>;
 }
 

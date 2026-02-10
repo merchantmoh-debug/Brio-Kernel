@@ -11,6 +11,7 @@ use crate::domain::{BranchId, BranchResult, BranchStatus};
 impl BranchManager {
     /// Checks if a status is terminal.
     #[cfg(test)]
+    #[must_use]
     pub const fn is_terminal_status(status: BranchStatus) -> bool {
         matches!(
             status,
@@ -19,29 +20,24 @@ impl BranchManager {
     }
 
     /// Validates status transition.
+    ///
+    /// # Errors
+    /// Returns `BranchError::InvalidStatusTransition` if the transition is invalid.
     pub fn validate_status_transition(
         from: BranchStatus,
         to: BranchStatus,
     ) -> Result<(), BranchError> {
-        let valid = match (from, to) {
+        let valid = matches!(
+            (from, to),
             // Pending can transition to Active or Failed
-            (BranchStatus::Pending, BranchStatus::Active) => true,
-            (BranchStatus::Pending, BranchStatus::Failed) => true,
+            (BranchStatus::Pending, BranchStatus::Active | BranchStatus::Failed)
             // Active can transition to Completed, Merging, or Failed
-            (BranchStatus::Active, BranchStatus::Completed) => true,
-            (BranchStatus::Active, BranchStatus::Merging) => true,
-            (BranchStatus::Active, BranchStatus::Failed) => true,
+            | (BranchStatus::Active, BranchStatus::Completed | BranchStatus::Merging | BranchStatus::Failed)
             // Completed can transition to Merging
-            (BranchStatus::Completed, BranchStatus::Merging) => true,
+            | (BranchStatus::Completed, BranchStatus::Merging)
             // Merging can transition to Merged or Failed
-            (BranchStatus::Merging, BranchStatus::Merged) => true,
-            (BranchStatus::Merging, BranchStatus::Failed) => true,
-            // Terminal states cannot transition
-            (BranchStatus::Merged, _) => false,
-            (BranchStatus::Failed, _) => false,
-            // All other transitions are invalid
-            _ => false,
-        };
+            | (BranchStatus::Merging, BranchStatus::Merged | BranchStatus::Failed)
+        );
 
         if valid {
             Ok(())
@@ -124,19 +120,18 @@ mod tests {
     #[test]
     fn branch_status_transition_validation() {
         // Valid transitions
-        assert!(
-            BranchManager::validate_status_transition(BranchStatus::Pending, BranchStatus::Active)
-                .is_ok()
-        );
+        assert!(BranchManager::validate_status_transition(
+            BranchStatus::Pending,
+            BranchStatus::Active
+        )
+        .is_ok());
 
         // Invalid transitions
-        assert!(
-            BranchManager::validate_status_transition(
-                BranchStatus::Pending,
-                BranchStatus::Completed
-            )
-            .is_err()
-        );
+        assert!(BranchManager::validate_status_transition(
+            BranchStatus::Pending,
+            BranchStatus::Completed
+        )
+        .is_err());
     }
 
     #[test]
@@ -151,73 +146,79 @@ mod tests {
     #[test]
     fn validate_all_valid_transitions() {
         // Pending -> Active (valid)
-        assert!(
-            BranchManager::validate_status_transition(BranchStatus::Pending, BranchStatus::Active)
-                .is_ok()
-        );
+        assert!(BranchManager::validate_status_transition(
+            BranchStatus::Pending,
+            BranchStatus::Active
+        )
+        .is_ok());
         // Pending -> Failed (valid)
-        assert!(
-            BranchManager::validate_status_transition(BranchStatus::Pending, BranchStatus::Failed)
-                .is_ok()
-        );
+        assert!(BranchManager::validate_status_transition(
+            BranchStatus::Pending,
+            BranchStatus::Failed
+        )
+        .is_ok());
         // Active -> Completed (valid)
-        assert!(
-            BranchManager::validate_status_transition(
-                BranchStatus::Active,
-                BranchStatus::Completed
-            )
-            .is_ok()
-        );
+        assert!(BranchManager::validate_status_transition(
+            BranchStatus::Active,
+            BranchStatus::Completed
+        )
+        .is_ok());
         // Active -> Merging (valid)
-        assert!(
-            BranchManager::validate_status_transition(BranchStatus::Active, BranchStatus::Merging)
-                .is_ok()
-        );
+        assert!(BranchManager::validate_status_transition(
+            BranchStatus::Active,
+            BranchStatus::Merging
+        )
+        .is_ok());
         // Active -> Failed (valid)
-        assert!(
-            BranchManager::validate_status_transition(BranchStatus::Active, BranchStatus::Failed)
-                .is_ok()
-        );
+        assert!(BranchManager::validate_status_transition(
+            BranchStatus::Active,
+            BranchStatus::Failed
+        )
+        .is_ok());
         // Completed -> Merging (valid)
-        assert!(
-            BranchManager::validate_status_transition(
-                BranchStatus::Completed,
-                BranchStatus::Merging
-            )
-            .is_ok()
-        );
+        assert!(BranchManager::validate_status_transition(
+            BranchStatus::Completed,
+            BranchStatus::Merging
+        )
+        .is_ok());
         // Merging -> Merged (valid)
-        assert!(
-            BranchManager::validate_status_transition(BranchStatus::Merging, BranchStatus::Merged)
-                .is_ok()
-        );
+        assert!(BranchManager::validate_status_transition(
+            BranchStatus::Merging,
+            BranchStatus::Merged
+        )
+        .is_ok());
         // Merging -> Failed (valid)
-        assert!(
-            BranchManager::validate_status_transition(BranchStatus::Merging, BranchStatus::Failed)
-                .is_ok()
-        );
+        assert!(BranchManager::validate_status_transition(
+            BranchStatus::Merging,
+            BranchStatus::Failed
+        )
+        .is_ok());
     }
 
     #[test]
     fn validate_terminal_transitions_fail() {
         // Merged cannot transition to anything
-        assert!(
-            BranchManager::validate_status_transition(BranchStatus::Merged, BranchStatus::Active)
-                .is_err()
-        );
-        assert!(
-            BranchManager::validate_status_transition(BranchStatus::Merged, BranchStatus::Pending)
-                .is_err()
-        );
+        assert!(BranchManager::validate_status_transition(
+            BranchStatus::Merged,
+            BranchStatus::Active
+        )
+        .is_err());
+        assert!(BranchManager::validate_status_transition(
+            BranchStatus::Merged,
+            BranchStatus::Pending
+        )
+        .is_err());
 
         // Failed cannot transition to anything
-        assert!(
-            BranchManager::validate_status_transition(BranchStatus::Failed, BranchStatus::Active)
-                .is_err()
-        );
-        assert!(
-            BranchManager::validate_status_transition(BranchStatus::Failed, BranchStatus::Pending)
-                .is_err()
-        );
+        assert!(BranchManager::validate_status_transition(
+            BranchStatus::Failed,
+            BranchStatus::Active
+        )
+        .is_err());
+        assert!(BranchManager::validate_status_transition(
+            BranchStatus::Failed,
+            BranchStatus::Pending
+        )
+        .is_err());
     }
 }

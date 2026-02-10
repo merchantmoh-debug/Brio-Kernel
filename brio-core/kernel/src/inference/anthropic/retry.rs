@@ -120,7 +120,7 @@ mod tests {
         // With a high attempt number, should cap at MAX_DELAY_MS + 25% jitter
         let delay = config.calculate_backoff_delay(10);
         // Max delay is 30000 + 25% jitter = 37500
-        let max_with_jitter = (MAX_DELAY_MS as u128 * 125) / 100;
+        let max_with_jitter = (u128::from(MAX_DELAY_MS) * 125) / 100;
         assert!(delay.as_millis() <= max_with_jitter);
     }
 

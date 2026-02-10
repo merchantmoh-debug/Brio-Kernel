@@ -42,33 +42,6 @@ impl fmt::Display for BranchId {
     }
 }
 
-/// Unique identifier for a merge request in the system.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
-pub struct MergeRequestId(
-    /// The underlying numeric identifier (auto-incrementing).
-    u64,
-);
-
-impl MergeRequestId {
-    /// Creates a new `MergeRequestId` from a raw value.
-    #[must_use]
-    pub const fn new(id: u64) -> Self {
-        Self(id)
-    }
-
-    /// Returns the inner value.
-    #[must_use]
-    pub const fn inner(self) -> u64 {
-        self.0
-    }
-}
-
-impl fmt::Display for MergeRequestId {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "merge_{}", self.0)
-    }
-}
-
 /// Unique identifier for a task in the system.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct TaskId(
