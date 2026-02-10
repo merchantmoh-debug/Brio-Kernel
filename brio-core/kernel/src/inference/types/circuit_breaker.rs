@@ -1,120 +1,9 @@
-//! Type definitions for inference operations.
+//! Circuit breaker implementation for resilience.
 //!
-//! This module contains shared types used across all LLM providers.
+//! This module provides circuit breaker pattern implementation to prevent
+//! cascading failures in the inference system.
 
-use serde::{Deserialize, Serialize};
 use std::time::{Duration, Instant};
-
-/// The role of a message in a conversation.
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
-#[serde(rename_all = "lowercase")]
-pub enum Role {
-    /// System-level instructions
-    System,
-    /// User input
-    User,
-    /// Assistant response
-    Assistant,
-}
-
-/// A message in a conversation.
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct Message {
-    /// The role of the message sender
-    pub role: Role,
-    /// The content of the message
-    pub content: String,
-}
-
-/// Token usage information for a completion request.
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct Usage {
-    /// Number of tokens in the prompt
-    pub prompt_tokens: u32,
-    /// Number of tokens in the completion
-    pub completion_tokens: u32,
-    /// Total number of tokens used
-    pub total_tokens: u32,
-}
-
-/// Response from a chat completion request.
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ChatResponse {
-    /// The generated content
-    pub content: String,
-    /// Token usage information, if available
-    pub usage: Option<Usage>,
-}
-
-/// Request for a chat completion.
-#[derive(Debug, Clone)]
-pub struct ChatRequest {
-    /// The model to use for completion
-    pub model: String,
-    /// The conversation history
-    pub messages: Vec<Message>,
-}
-
-/// Errors that can occur during inference operations.
-#[derive(Debug, Clone, thiserror::Error)]
-pub enum InferenceError {
-    /// Error from the LLM provider
-    #[error("Provider Error: {0}")]
-    ProviderError(String),
-    /// Rate limit exceeded
-    #[error("Rate Limit Exceeded")]
-    RateLimit,
-    /// Context length exceeded the model's limit
-    #[error("Context Length Exceeded")]
-    ContextLengthExceeded,
-    /// Network error during request
-    #[error("Network Error: {0}")]
-    NetworkError(String),
-    /// Configuration error
-    #[error("Configuration Error: {0}")]
-    ConfigError(String),
-    /// Provider not found in registry
-    #[error("Provider Not Found: {0}")]
-    ProviderNotFound(String),
-    /// Circuit breaker is open
-    #[error("Circuit Breaker Open: {0}")]
-    CircuitBreakerOpen(String),
-    /// All providers in chain failed
-    #[error("All Providers Failed")]
-    AllProvidersFailed,
-}
-
-impl InferenceError {
-    /// Returns `true` if this error is transient and retry may succeed.
-    #[must_use]
-    pub fn is_retryable(&self) -> bool {
-        match self {
-            Self::RateLimit => true,
-            Self::NetworkError(_) => true,
-            Self::ProviderError(msg) => {
-                // Retry on transient HTTP errors
-                msg.contains("HTTP 50") || msg.contains("HTTP 52")
-            }
-            Self::CircuitBreakerOpen(_) => false,
-            Self::AllProvidersFailed => false,
-            Self::ContextLengthExceeded => false,
-            Self::ConfigError(_) => false,
-            Self::ProviderNotFound(_) => false,
-        }
-    }
-
-    /// Returns `true` if this error is permanent and should not be retried.
-    #[must_use]
-    pub fn is_permanent(&self) -> bool {
-        !self.is_retryable()
-    }
-
-    /// Returns `true` if this error is a circuit breaker error.
-    #[must_use]
-    pub fn is_circuit_breaker(&self) -> bool {
-        matches!(self, Self::CircuitBreakerOpen(_))
-    }
-}
 
 /// Default failure threshold before circuit breaker opens
 pub const DEFAULT_FAILURE_THRESHOLD: u32 = 5;
@@ -408,31 +297,6 @@ mod tests {
     }
 
     #[test]
-    fn test_error_is_retryable() {
-        assert!(InferenceError::RateLimit.is_retryable());
-        assert!(InferenceError::NetworkError("timeout".to_string()).is_retryable());
-        assert!(InferenceError::ProviderError("HTTP 503".to_string()).is_retryable());
-        assert!(InferenceError::ProviderError("HTTP 500".to_string()).is_retryable());
-
-        assert!(!InferenceError::CircuitBreakerOpen("test".to_string()).is_retryable());
-        assert!(!InferenceError::AllProvidersFailed.is_retryable());
-        assert!(!InferenceError::ContextLengthExceeded.is_retryable());
-        assert!(!InferenceError::ConfigError("invalid".to_string()).is_retryable());
-    }
-
-    #[test]
-    fn test_error_is_permanent() {
-        assert!(InferenceError::ContextLengthExceeded.is_permanent());
-        assert!(!InferenceError::RateLimit.is_permanent());
-    }
-
-    #[test]
-    fn test_error_is_circuit_breaker() {
-        assert!(InferenceError::CircuitBreakerOpen("test".to_string()).is_circuit_breaker());
-        assert!(!InferenceError::RateLimit.is_circuit_breaker());
-    }
-
-    #[test]
     fn test_circuit_breaker_stats() {
         let mut cb = CircuitBreaker::default();
 
@@ -445,5 +309,25 @@ mod tests {
         assert_eq!(stats.consecutive_failures, 0);
         assert_eq!(stats.total_successes, 1);
         assert_eq!(stats.total_failures, 2);
+    }
+
+    #[test]
+    fn test_circuit_breaker_config_default() {
+        let config = CircuitBreakerConfig::default();
+        assert_eq!(config.failure_threshold, DEFAULT_FAILURE_THRESHOLD);
+        assert_eq!(config.reset_timeout_ms, DEFAULT_RESET_TIMEOUT_MS);
+        assert_eq!(config.half_open_max_calls, DEFAULT_HALF_OPEN_MAX_CALLS);
+    }
+
+    #[test]
+    fn test_circuit_breaker_config_custom() {
+        let config = CircuitBreakerConfig::new()
+            .with_failure_threshold(10)
+            .with_reset_timeout_ms(60000)
+            .with_half_open_max_calls(5);
+
+        assert_eq!(config.failure_threshold, 10);
+        assert_eq!(config.reset_timeout_ms, 60000);
+        assert_eq!(config.half_open_max_calls, 5);
     }
 }

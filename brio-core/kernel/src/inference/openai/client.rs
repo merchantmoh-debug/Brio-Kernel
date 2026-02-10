@@ -1,52 +1,22 @@
-//! `OpenAI` API provider implementation.
+//! `OpenAI` API HTTP client implementation.
 //!
-//! This module provides integration with `OpenAI`'s API for chat completions.
+//! This module provides the HTTP client for communicating with `OpenAI`'s API.
 
+use crate::inference::openai::mapping::{
+    OpenAIChatRequest, OpenAIChatResponse, create_request, map_response,
+};
+use crate::inference::openai::streaming::{DEFAULT_MAX_RETRIES, RetryConfig};
 use crate::inference::provider::LLMProvider;
-use crate::inference::types::{ChatRequest, ChatResponse, CircuitBreaker, CircuitBreakerConfig, InferenceError, Message, Usage};
+use crate::inference::types::{
+    ChatRequest, ChatResponse, CircuitBreaker, CircuitBreakerConfig, InferenceError,
+};
 use anyhow::Result;
 use async_trait::async_trait;
 use reqwest::{Client, StatusCode, Url};
 use secrecy::{ExposeSecret, SecretString};
-use serde::{Deserialize, Serialize};
 use std::sync::Arc;
-use std::time::Duration;
 use tokio::sync::RwLock;
 use tracing::{debug, warn};
-
-/// Default maximum number of retries for transient errors
-const DEFAULT_MAX_RETRIES: u32 = 3;
-/// Default base delay for exponential backoff (in milliseconds)
-const DEFAULT_BASE_DELAY_MS: u64 = 1000;
-/// Maximum delay cap (in milliseconds)
-const MAX_DELAY_MS: u64 = 30000;
-
-#[derive(Serialize)]
-struct OpenAIChatRequest {
-    model: String,
-    messages: Vec<Message>,
-}
-
-#[derive(Deserialize)]
-struct OpenAIChoice {
-    message: Message,
-}
-
-#[derive(Deserialize)]
-struct OpenAIUsage {
-    #[serde(rename = "prompt_tokens")]
-    prompt: u32,
-    #[serde(rename = "completion_tokens")]
-    completion: u32,
-    #[serde(rename = "total_tokens")]
-    total: u32,
-}
-
-#[derive(Deserialize)]
-struct OpenAIChatResponse {
-    choices: Vec<OpenAIChoice>,
-    usage: Option<OpenAIUsage>,
-}
 
 /// Configuration for the `OpenAI` provider
 pub struct OpenAIConfig {
@@ -101,8 +71,7 @@ impl OpenAIConfig {
 pub struct OpenAIProvider {
     client: Client,
     config: OpenAIConfig,
-    max_retries: u32,
-    base_delay_ms: u64,
+    retry_config: RetryConfig,
     circuit_breaker: Arc<RwLock<CircuitBreaker>>,
 }
 
@@ -111,30 +80,17 @@ impl OpenAIProvider {
     #[must_use]
     pub fn new(config: OpenAIConfig) -> Self {
         let max_retries = config.max_retries.unwrap_or(DEFAULT_MAX_RETRIES);
-        let base_delay_ms = config.base_delay_ms.unwrap_or(DEFAULT_BASE_DELAY_MS);
+        let base_delay_ms = config.base_delay_ms.unwrap_or(1000);
         let cb_config = config.circuit_breaker.unwrap_or_default();
+
         Self {
             client: Client::new(),
-            max_retries,
-            base_delay_ms,
+            retry_config: RetryConfig::new()
+                .with_max_retries(max_retries)
+                .with_base_delay_ms(base_delay_ms),
             config,
             circuit_breaker: Arc::new(RwLock::new(CircuitBreaker::new(cb_config))),
         }
-    }
-
-    /// Calculates the delay for a given retry attempt with jitter
-    fn calculate_backoff_delay(&self, attempt: u32) -> Duration {
-        // Exponential backoff: base_delay * 2^attempt
-        let delay_ms = self.base_delay_ms.saturating_mul(1u64 << attempt);
-        let capped_delay = delay_ms.min(MAX_DELAY_MS);
-
-        // Add jitter (0-25% of the delay) using integer arithmetic
-        // rand_jitter_factor returns value in [0, 1000]
-        let jitter_factor = rand_jitter_factor();
-        let jitter = capped_delay
-            .saturating_mul(jitter_factor)
-            .saturating_div(4000);
-        Duration::from_millis(capped_delay.saturating_add(jitter))
     }
 
     /// Makes a single request attempt
@@ -190,21 +146,7 @@ impl OpenAIProvider {
                     )
                 })?;
 
-                let choice = body.choices.first().ok_or_else(|| {
-                    (
-                        InferenceError::ProviderError("No choices returned".to_string()),
-                        false,
-                    )
-                })?;
-
-                Ok(ChatResponse {
-                    content: choice.message.content.clone(),
-                    usage: body.usage.map(|u| Usage {
-                        prompt_tokens: u.prompt,
-                        completion_tokens: u.completion,
-                        total_tokens: u.total,
-                    }),
-                })
+                map_response(body).map_err(|msg| (InferenceError::ProviderError(msg), false))
             }
             StatusCode::TOO_MANY_REQUESTS => Err((InferenceError::RateLimit, true)),
             StatusCode::BAD_REQUEST => {
@@ -252,18 +194,15 @@ impl LLMProvider for OpenAIProvider {
 
         if !can_execute {
             return Err(InferenceError::CircuitBreakerOpen(
-                "OpenAI circuit is open".to_string()
+                "OpenAI circuit is open".to_string(),
             ));
         }
 
-        let provider_req = OpenAIChatRequest {
-            model: request.model,
-            messages: request.messages,
-        };
+        let provider_req = create_request(request.model, request.messages);
 
         let mut last_error = InferenceError::NetworkError("No attempts made".to_string());
 
-        for attempt in 0..=self.max_retries {
+        for attempt in 0..=self.retry_config.max_retries {
             match self.make_request(&provider_req).await {
                 Ok(response) => {
                     // Record success on circuit breaker
@@ -274,18 +213,18 @@ impl LLMProvider for OpenAIProvider {
                 Err((error, should_retry)) => {
                     last_error = error;
 
-                    if !should_retry || attempt >= self.max_retries {
+                    if !should_retry || attempt >= self.retry_config.max_retries {
                         break;
                     }
 
-                    let delay = self.calculate_backoff_delay(attempt);
+                    let delay = self.retry_config.calculate_backoff_delay(attempt);
                     let delay_ms: u64 = delay.as_millis().try_into().unwrap_or(u64::MAX);
                     warn!(
                         attempt = attempt + 1,
-                        max_retries = self.max_retries,
+                        max_retries = self.retry_config.max_retries,
                         delay_ms = delay_ms,
                         error = %last_error,
-                        "Request failed, retrying after backoff"
+                        "OpenAI request failed, retrying after backoff"
                     );
                     tokio::time::sleep(delay).await;
                 }
@@ -297,21 +236,11 @@ impl LLMProvider for OpenAIProvider {
         cb.record_failure();
 
         debug!(
-            attempts = self.max_retries + 1,
-            "All retry attempts exhausted"
+            attempts = self.retry_config.max_retries + 1,
+            "All OpenAI retry attempts exhausted"
         );
         Err(last_error)
     }
-}
-
-/// Simple pseudo-random jitter factor between 0 and 1000 (representing 0% to 100%)
-fn rand_jitter_factor() -> u64 {
-    use std::time::SystemTime;
-    let nanos = SystemTime::now()
-        .duration_since(SystemTime::UNIX_EPOCH)
-        .map(|d| d.subsec_nanos())
-        .unwrap_or(0);
-    u64::from(nanos % 1000)
 }
 
 #[cfg(test)]
@@ -349,8 +278,8 @@ mod tests {
         let base_url = Url::parse("https://api.openai.com/v1/")?;
         let config = OpenAIConfig::new(api_key, base_url);
         let provider = OpenAIProvider::new(config);
-        assert_eq!(provider.max_retries, DEFAULT_MAX_RETRIES);
-        assert_eq!(provider.base_delay_ms, DEFAULT_BASE_DELAY_MS);
+        assert_eq!(provider.retry_config.max_retries, DEFAULT_MAX_RETRIES);
+        assert_eq!(provider.retry_config.base_delay_ms, 1000);
         Ok(())
     }
 
@@ -362,27 +291,8 @@ mod tests {
             .with_max_retries(10)
             .with_base_delay_ms(2000);
         let provider = OpenAIProvider::new(config);
-        assert_eq!(provider.max_retries, 10);
-        assert_eq!(provider.base_delay_ms, 2000);
-        Ok(())
-    }
-
-    #[test]
-    fn test_backoff_delay_calculation() -> anyhow::Result<()> {
-        let api_key = SecretString::new("test-key".into());
-        let base_url = Url::parse("https://api.openai.com/v1/")?;
-        let config = OpenAIConfig::new(api_key, base_url).with_base_delay_ms(1000);
-        let provider = OpenAIProvider::new(config);
-
-        // First attempt: ~1000ms (+ jitter)
-        let delay0 = provider.calculate_backoff_delay(0);
-        assert!(delay0.as_millis() >= 1000);
-        assert!(delay0.as_millis() <= 1250); // 1000 + 25% jitter
-
-        // Second attempt: ~2000ms (+ jitter)
-        let delay1 = provider.calculate_backoff_delay(1);
-        assert!(delay1.as_millis() >= 2000);
-        assert!(delay1.as_millis() <= 2500);
+        assert_eq!(provider.retry_config.max_retries, 10);
+        assert_eq!(provider.retry_config.base_delay_ms, 2000);
         Ok(())
     }
 }

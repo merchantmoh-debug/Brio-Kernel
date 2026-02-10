@@ -1,66 +1,22 @@
-//! Anthropic API provider implementation.
+//! Anthropic API HTTP client implementation.
 //!
-//! This module provides integration with Anthropic's Claude API for chat completions.
+//! This module provides the HTTP client for communicating with Anthropic's API.
 
+use crate::inference::anthropic::mapping::{AnthropicChatRequest, map_response, prepare_messages};
+use crate::inference::anthropic::retry::{DEFAULT_MAX_RETRIES, RetryConfig};
 use crate::inference::provider::LLMProvider;
-use crate::inference::types::{ChatRequest, ChatResponse, CircuitBreaker, CircuitBreakerConfig, InferenceError, Message, Role, Usage};
+use crate::inference::types::{
+    ChatRequest, ChatResponse, CircuitBreaker, CircuitBreakerConfig, InferenceError,
+};
 use async_trait::async_trait;
 use reqwest::{Client, StatusCode, Url};
 use secrecy::{ExposeSecret, SecretString};
-use serde::{Deserialize, Serialize};
 use std::sync::Arc;
-use std::time::Duration;
 use tokio::sync::RwLock;
 use tracing::{debug, warn};
 
-/// Default maximum number of retries for transient errors
-const DEFAULT_MAX_RETRIES: u32 = 3;
-/// Default base delay for exponential backoff (in milliseconds)
-const DEFAULT_BASE_DELAY_MS: u64 = 1000;
-/// Maximum delay cap (in milliseconds)
-const MAX_DELAY_MS: u64 = 30000;
 /// Default Anthropic API version
 const DEFAULT_API_VERSION: &str = "2023-06-01";
-
-// =============================================================================
-// Anthropic API Types
-// =============================================================================
-
-#[derive(Serialize)]
-struct AnthropicMessage {
-    role: String,
-    content: String,
-}
-
-#[derive(Serialize)]
-struct AnthropicChatRequest {
-    model: String,
-    max_tokens: u32,
-    messages: Vec<AnthropicMessage>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    system: Option<String>,
-}
-
-#[derive(Deserialize)]
-struct AnthropicContent {
-    text: String,
-}
-
-#[derive(Deserialize)]
-struct AnthropicUsage {
-    input_tokens: u32,
-    output_tokens: u32,
-}
-
-#[derive(Deserialize)]
-struct AnthropicChatResponse {
-    content: Vec<AnthropicContent>,
-    usage: Option<AnthropicUsage>,
-}
-
-// =============================================================================
-// Configuration
-// =============================================================================
 
 /// Configuration for the Anthropic provider
 pub struct AnthropicConfig {
@@ -144,16 +100,11 @@ impl AnthropicConfig {
     }
 }
 
-// =============================================================================
-// Provider Implementation
-// =============================================================================
-
 /// Provider implementation for Anthropic's Claude API.
 pub struct AnthropicProvider {
     client: Client,
     config: AnthropicConfig,
-    max_retries: u32,
-    base_delay_ms: u64,
+    retry_config: RetryConfig,
     api_version: String,
     max_tokens: u32,
     circuit_breaker: Arc<RwLock<CircuitBreaker>>,
@@ -164,7 +115,7 @@ impl AnthropicProvider {
     #[must_use]
     pub fn new(config: AnthropicConfig) -> Self {
         let max_retries = config.max_retries.unwrap_or(DEFAULT_MAX_RETRIES);
-        let base_delay_ms = config.base_delay_ms.unwrap_or(DEFAULT_BASE_DELAY_MS);
+        let base_delay_ms = config.base_delay_ms.unwrap_or(1000);
         let api_version = config
             .api_version
             .clone()
@@ -174,55 +125,14 @@ impl AnthropicProvider {
 
         Self {
             client: Client::new(),
-            max_retries,
-            base_delay_ms,
+            retry_config: RetryConfig::new()
+                .with_max_retries(max_retries)
+                .with_base_delay_ms(base_delay_ms),
             api_version,
             max_tokens,
             config,
             circuit_breaker: Arc::new(RwLock::new(CircuitBreaker::new(cb_config))),
         }
-    }
-
-    /// Calculates the delay for a given retry attempt with jitter
-    fn calculate_backoff_delay(&self, attempt: u32) -> Duration {
-        let delay_ms = self.base_delay_ms.saturating_mul(1u64 << attempt);
-        let capped_delay = delay_ms.min(MAX_DELAY_MS);
-        // Add jitter (0-25% of the delay) using integer arithmetic
-        // rand_jitter_factor returns value in [0, 1000]
-        let jitter_factor = rand_jitter_factor();
-        let jitter = capped_delay
-            .saturating_mul(jitter_factor)
-            .saturating_div(4000);
-        Duration::from_millis(capped_delay.saturating_add(jitter))
-    }
-
-    /// Converts our Message type to Anthropic format, extracting system message
-    fn prepare_messages(messages: &[Message]) -> (Option<String>, Vec<AnthropicMessage>) {
-        let mut system_message = None;
-        let mut anthropic_messages = Vec::with_capacity(messages.len());
-
-        for msg in messages {
-            match msg.role {
-                Role::System => {
-                    // Anthropic uses a separate system field, not in messages array
-                    system_message = Some(msg.content.clone());
-                }
-                Role::User => {
-                    anthropic_messages.push(AnthropicMessage {
-                        role: "user".to_string(),
-                        content: msg.content.clone(),
-                    });
-                }
-                Role::Assistant => {
-                    anthropic_messages.push(AnthropicMessage {
-                        role: "assistant".to_string(),
-                        content: msg.content.clone(),
-                    });
-                }
-            }
-        }
-
-        (system_message, anthropic_messages)
     }
 
     /// Makes a single request attempt
@@ -269,27 +179,14 @@ impl AnthropicProvider {
     ) -> Result<ChatResponse, (InferenceError, bool)> {
         match res.status() {
             StatusCode::OK => {
-                let body: AnthropicChatResponse = res.json().await.map_err(|e| {
+                let body = res.json().await.map_err(|e| {
                     (
                         InferenceError::ProviderError(format!("Parse error: {e}")),
                         false,
                     )
                 })?;
 
-                let content = body
-                    .content
-                    .first()
-                    .map(|c| c.text.clone())
-                    .unwrap_or_default();
-
-                Ok(ChatResponse {
-                    content,
-                    usage: body.usage.map(|u| Usage {
-                        prompt_tokens: u.input_tokens,
-                        completion_tokens: u.output_tokens,
-                        total_tokens: u.input_tokens + u.output_tokens,
-                    }),
-                })
+                Ok(map_response(body))
             }
             // Anthropic uses 529 for overloaded, 429 for rate limit
             StatusCode::TOO_MANY_REQUESTS => Err((InferenceError::RateLimit, true)),
@@ -339,11 +236,11 @@ impl LLMProvider for AnthropicProvider {
 
         if !can_execute {
             return Err(InferenceError::CircuitBreakerOpen(
-                "Anthropic circuit is open".to_string()
+                "Anthropic circuit is open".to_string(),
             ));
         }
 
-        let (system, messages) = Self::prepare_messages(&request.messages);
+        let (system, messages) = prepare_messages(&request.messages);
 
         let provider_req = AnthropicChatRequest {
             model: request.model,
@@ -354,7 +251,7 @@ impl LLMProvider for AnthropicProvider {
 
         let mut last_error = InferenceError::NetworkError("No attempts made".to_string());
 
-        for attempt in 0..=self.max_retries {
+        for attempt in 0..=self.retry_config.max_retries {
             match self.make_request(&provider_req).await {
                 Ok(response) => {
                     // Record success on circuit breaker
@@ -365,15 +262,15 @@ impl LLMProvider for AnthropicProvider {
                 Err((error, should_retry)) => {
                     last_error = error;
 
-                    if !should_retry || attempt >= self.max_retries {
+                    if !should_retry || attempt >= self.retry_config.max_retries {
                         break;
                     }
 
-                    let delay = self.calculate_backoff_delay(attempt);
+                    let delay = self.retry_config.calculate_backoff_delay(attempt);
                     let delay_ms: u64 = delay.as_millis().try_into().unwrap_or(u64::MAX);
                     warn!(
                         attempt = attempt + 1,
-                        max_retries = self.max_retries,
+                        max_retries = self.retry_config.max_retries,
                         delay_ms = delay_ms,
                         error = %last_error,
                         "Anthropic request failed, retrying after backoff"
@@ -388,26 +285,12 @@ impl LLMProvider for AnthropicProvider {
         cb.record_failure();
 
         debug!(
-            attempts = self.max_retries + 1,
+            attempts = self.retry_config.max_retries + 1,
             "All Anthropic retry attempts exhausted"
         );
         Err(last_error)
     }
 }
-
-/// Simple pseudo-random jitter factor between 0 and 1000 (representing 0% to 100%)
-fn rand_jitter_factor() -> u64 {
-    use std::time::SystemTime;
-    let nanos = SystemTime::now()
-        .duration_since(SystemTime::UNIX_EPOCH)
-        .map(|d| d.subsec_nanos())
-        .unwrap_or(0);
-    u64::from(nanos % 1000)
-}
-
-// =============================================================================
-// Tests
-// =============================================================================
 
 #[cfg(test)]
 mod tests {
@@ -454,64 +337,9 @@ mod tests {
         let base_url = Url::parse("https://api.anthropic.com/v1/")?;
         let config = AnthropicConfig::new(api_key, base_url);
         let provider = AnthropicProvider::new(config);
-        assert_eq!(provider.max_retries, DEFAULT_MAX_RETRIES);
-        assert_eq!(provider.base_delay_ms, DEFAULT_BASE_DELAY_MS);
+        assert_eq!(provider.retry_config.max_retries, DEFAULT_MAX_RETRIES);
+        assert_eq!(provider.retry_config.base_delay_ms, 1000);
         assert_eq!(provider.api_version, DEFAULT_API_VERSION);
-        Ok(())
-    }
-
-    #[test]
-    fn test_prepare_messages_extracts_system() {
-        let messages = vec![
-            Message {
-                role: Role::System,
-                content: "You are helpful.".to_string(),
-            },
-            Message {
-                role: Role::User,
-                content: "Hello!".to_string(),
-            },
-        ];
-
-        let (system, msgs) = AnthropicProvider::prepare_messages(&messages);
-        assert_eq!(system, Some("You are helpful.".to_string()));
-        assert_eq!(msgs.len(), 1);
-        assert_eq!(msgs[0].role, "user");
-        assert_eq!(msgs[0].content, "Hello!");
-    }
-
-    #[test]
-    fn test_prepare_messages_no_system() {
-        let messages = vec![
-            Message {
-                role: Role::User,
-                content: "Hello!".to_string(),
-            },
-            Message {
-                role: Role::Assistant,
-                content: "Hi there!".to_string(),
-            },
-        ];
-
-        let (system, msgs) = AnthropicProvider::prepare_messages(&messages);
-        assert!(system.is_none());
-        assert_eq!(msgs.len(), 2);
-    }
-
-    #[test]
-    fn test_backoff_delay_calculation() -> anyhow::Result<()> {
-        let api_key = SecretString::new("test-key".into());
-        let base_url = Url::parse("https://api.anthropic.com/v1/")?;
-        let config = AnthropicConfig::new(api_key, base_url).with_base_delay_ms(1000);
-        let provider = AnthropicProvider::new(config);
-
-        let delay0 = provider.calculate_backoff_delay(0);
-        assert!(delay0.as_millis() >= 1000);
-        assert!(delay0.as_millis() <= 1250);
-
-        let delay1 = provider.calculate_backoff_delay(1);
-        assert!(delay1.as_millis() >= 2000);
-        assert!(delay1.as_millis() <= 2500);
         Ok(())
     }
 }
