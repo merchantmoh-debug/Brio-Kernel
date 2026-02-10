@@ -10,12 +10,13 @@
 //! - **File System Tools**: [`ReadFileTool`], [`WriteFileTool`], [`ListDirectoryTool`]
 //! - **Shell Tools**: [`ShellTool`] - Execute shell commands with security
 //! - **Branch Tools**: [`CreateBranchTool`], [`ListBranchesTool`] - Manage branches
+//! - **Search Tools**: [`GrepTool`] - Search files with regex patterns
 //!
 //! # Example
 //!
 //! ```ignore
-//! use agent_sdk::agent::tools::{DoneTool, ReadFileTool, WriteFileTool, ShellTool};
-//! use agent_sdk::agent::parsers::{create_done_parser, create_read_parser, create_write_parser, create_shell_parser};
+//! use agent_sdk::agent::tools::{DoneTool, ReadFileTool, WriteFileTool, ShellTool, GrepTool};
+//! use agent_sdk::agent::parsers::{create_done_parser, create_read_parser, create_write_parser, create_shell_parser, create_grep_parser};
 //! use agent_sdk::ToolRegistry;
 //!
 //! let mut registry = ToolRegistry::new();
@@ -30,11 +31,15 @@
 //! // Register shell tool with allowlist
 //! let allowlist = vec!["ls".to_string(), "cat".to_string()];
 //! registry.register("shell", Box::new(ShellTool::new(allowlist)), create_shell_parser());
+//!
+//! // Register grep tool
+//! registry.register("grep", Box::new(GrepTool::new()), create_grep_parser());
 //! ```
 
 pub mod branch;
 pub mod control;
 pub mod fs;
+pub mod grep;
 pub mod shell;
 
 pub use branch::{
@@ -43,4 +48,5 @@ pub use branch::{
 };
 pub use control::DoneTool;
 pub use fs::{ListDirectoryTool, ReadFileTool, WriteFileTool};
+pub use grep::GrepTool;
 pub use shell::ShellTool;

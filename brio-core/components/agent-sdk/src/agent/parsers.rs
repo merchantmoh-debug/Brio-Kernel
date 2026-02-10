@@ -92,6 +92,27 @@ static SHELL_PARSER: LazyLock<Arc<ToolParser>> = LazyLock::new(|| {
     ))
 });
 
+/// Parser for the grep tool.
+///
+/// Matches: `<grep pattern="search pattern" path="path/to/search" />`
+static GREP_PARSER: LazyLock<Arc<ToolParser>> = LazyLock::new(|| {
+    Arc::new(ToolParser::new_unchecked(
+        r#"<grep\s+pattern="([^"]+)"(?:\s+path="([^"]*)")?\s*/?>"#,
+        |caps: &Captures| {
+            let mut args = HashMap::new();
+            if let Some(m) = caps.get(1) {
+                args.insert("pattern".to_string(), m.as_str().to_string());
+            }
+            if let Some(m) = caps.get(2)
+                && !m.as_str().is_empty()
+            {
+                args.insert("path".to_string(), m.as_str().to_string());
+            }
+            args
+        },
+    ))
+});
+
 /// Parser for the `create_branch` tool.
 ///
 /// Matches: `<create_branch name="branch-name" [parent="parent-id"] [inherit_config="true"] />`
@@ -103,15 +124,15 @@ static CREATE_BRANCH_PARSER: LazyLock<Arc<ToolParser>> = LazyLock::new(|| {
             if let Some(m) = caps.get(1) {
                 args.insert("name".to_string(), m.as_str().to_string());
             }
-            if let Some(m) = caps.get(2) {
-                if !m.as_str().is_empty() {
-                    args.insert("parent".to_string(), m.as_str().to_string());
-                }
+            if let Some(m) = caps.get(2)
+                && !m.as_str().is_empty()
+            {
+                args.insert("parent".to_string(), m.as_str().to_string());
             }
-            if let Some(m) = caps.get(3) {
-                if !m.as_str().is_empty() {
-                    args.insert("inherit_config".to_string(), m.as_str().to_string());
-                }
+            if let Some(m) = caps.get(3)
+                && !m.as_str().is_empty()
+            {
+                args.insert("inherit_config".to_string(), m.as_str().to_string());
             }
             args
         },
@@ -167,6 +188,14 @@ pub fn create_write_parser() -> Arc<ToolParser> {
 #[must_use]
 pub fn create_shell_parser() -> Arc<ToolParser> {
     Arc::clone(&SHELL_PARSER)
+}
+
+/// Returns a clone of the grep tool parser.
+///
+/// This parser extracts the pattern and optional path from `<grep>` tags.
+#[must_use]
+pub fn create_grep_parser() -> Arc<ToolParser> {
+    Arc::clone(&GREP_PARSER)
 }
 
 /// Returns a clone of the `create_branch` tool parser.
@@ -252,6 +281,25 @@ mod tests {
         assert_eq!(results.len(), 1);
         // Note: Tool name is assigned by registry, parser extracts args only
         assert_eq!(results[0].args.get("command"), Some(&"ls -la".to_string()));
+    }
+
+    #[test]
+    fn test_grep_parser() {
+        let parser = create_grep_parser();
+        let input = r#"<grep pattern="fn main" path="src/" />"#;
+        let results = parser.parse(input);
+
+        assert_eq!(results.len(), 1);
+        assert_eq!(results[0].args.get("pattern"), Some(&"fn main".to_string()));
+        assert_eq!(results[0].args.get("path"), Some(&"src/".to_string()));
+
+        // Test without path attribute
+        let input2 = r#"<grep pattern="test" />"#;
+        let results2 = parser.parse(input2);
+
+        assert_eq!(results2.len(), 1);
+        assert_eq!(results2[0].args.get("pattern"), Some(&"test".to_string()));
+        assert_eq!(results2[0].args.get("path"), None);
     }
 
     #[test]

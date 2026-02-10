@@ -27,6 +27,12 @@ pub mod shell {
     pub const SHELL: &str = "shell";
 }
 
+/// Tool names for grep operations.
+pub mod grep {
+    /// Search file contents.
+    pub const GREP: &str = "grep";
+}
+
 /// Tool names for branch operations.
 pub mod branch {
     /// Create a new branch.
@@ -61,5 +67,10 @@ mod tests {
     fn test_branch_constants() {
         assert_eq!(branch::CREATE_BRANCH, "create_branch");
         assert_eq!(branch::LIST_BRANCHES, "list_branches");
+    }
+
+    #[test]
+    fn test_grep_constants() {
+        assert_eq!(grep::GREP, "grep");
     }
 }

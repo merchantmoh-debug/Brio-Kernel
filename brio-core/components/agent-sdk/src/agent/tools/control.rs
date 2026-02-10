@@ -4,8 +4,8 @@
 //! such as marking tasks as complete.
 
 use crate::error::ToolError;
-use crate::tools::constants::control;
 use crate::tools::Tool;
+use crate::tools::constants::control;
 use std::borrow::Cow;
 use std::collections::HashMap;
 

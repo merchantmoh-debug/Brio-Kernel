@@ -90,6 +90,12 @@ pub fn current_dir() -> Result<std::path::PathBuf, std::io::Error> {
     std::env::current_dir()
 }
 
+/// Global mutex for serializing tests that change the current directory.
+/// This is necessary because changing the current directory is a process-wide
+/// operation and tests running in parallel can interfere with each other.
+#[cfg(test)]
+pub static DIR_MUTEX: std::sync::Mutex<()> = std::sync::Mutex::new(());
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -102,6 +108,9 @@ mod tests {
 
     #[test]
     fn test_current_dir() {
+        // Serialize directory tests to avoid race conditions
+        let _guard = crate::DIR_MUTEX.lock().unwrap();
+
         let dir = current_dir().expect("current dir should be accessible");
         assert!(dir.exists());
     }

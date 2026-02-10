@@ -5,7 +5,7 @@
 
 use crate::error::ToolError;
 use crate::tools::constants::shell;
-use crate::tools::{validate_shell_command, Tool};
+use crate::tools::{Tool, validate_shell_command};
 use std::borrow::Cow;
 use std::collections::HashMap;
 
