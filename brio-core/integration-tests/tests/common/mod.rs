@@ -1,11 +1,8 @@
-//! Integration tests for the supervisor manifesto scenario.
+//! Shared test utilities for integration tests.
 //!
-//! Tests end-to-end agent orchestration with real and mock AI providers,
-//! including task lifecycle management and distributed mesh communication.
+//! Provides common setup, teardown, and helper functions for testing
+//! tool components, mesh communication, VFS operations, and branch management.
 
-// Allow casting warnings in tests - these are typically safe conversions for test data
-// where we control the input values and ranges. These casts are necessary for
-// database ID conversions in the test repository implementations.
 #![allow(
     clippy::cast_possible_wrap,
     clippy::cast_sign_loss,
@@ -13,102 +10,136 @@
 )]
 
 use anyhow::Result;
-use brio_kernel::host::{BrioHostState, MeshHandler};
+use brio_kernel::host::BrioHostState;
 use brio_kernel::inference::{ChatRequest, ChatResponse, InferenceError, LLMProvider};
+use brio_kernel::infrastructure::config::SandboxSettings;
 use brio_kernel::mesh::{MeshMessage, Payload};
 use sqlx::Row;
 use std::collections::HashSet;
+use std::path::PathBuf;
 use std::sync::Arc;
 use supervisor::domain::{AgentId, Priority, Task, TaskId, TaskStatus};
 use supervisor::mesh_client::{AgentDispatcher, DispatchResult, MeshError};
 use supervisor::orchestrator::{Planner, PlannerError, Supervisor};
 use supervisor::repository::{RepositoryError, TaskRepository};
+use supervisor::selector::KeywordAgentSelector;
+use tempfile::TempDir;
 use tokio::sync::mpsc;
 
-// =============================================================================
-// Fixtures (Encapsulation)
-// =============================================================================
-
-struct TestEnvironment {
-    host: Arc<BrioHostState>,
-    root: std::path::PathBuf,
-    agent_msg_rx: Option<mpsc::Receiver<MeshMessage>>,
+/// Integration test context providing shared resources.
+pub struct IntegrationTestContext {
+    /// Temporary directory for test files
+    pub temp_dir: TempDir,
+    /// Host state for kernel operations
+    pub host: Arc<BrioHostState>,
+    /// Agent message receiver (if agent registered)
+    pub agent_msg_rx: Option<mpsc::Receiver<MeshMessage>>,
 }
 
-impl TestEnvironment {
-    async fn setup_with_provider(provider: Box<dyn LLMProvider>) -> Result<Self> {
-        let root = std::env::temp_dir().join("brio_manifesto_test");
-        if root.exists() {
-            std::fs::remove_dir_all(&root)?;
-        }
-        std::fs::create_dir_all(&root)?;
+impl IntegrationTestContext {
+    /// Creates a new test context with mock provider.
+    pub async fn new() -> Result<Self> {
+        let temp_dir = TempDir::new()?;
+        let host = Arc::new(
+            BrioHostState::with_provider("sqlite::memory:", Box::new(MockProvider)).await?,
+        );
 
-        let host = Arc::new(BrioHostState::with_provider("sqlite::memory:", provider).await?);
-
-        let env = Self {
+        Ok(Self {
+            temp_dir,
             host,
-            root,
             agent_msg_rx: None,
-        };
-        env.init_db().await?;
-        Ok(env)
+        })
     }
 
-    async fn setup() -> Result<Self> {
-        Self::setup_with_provider(Box::new(MockProvider)).await
+    /// Creates a test context with custom sandbox settings.
+    pub async fn with_sandbox(sandbox: SandboxSettings) -> Result<Self> {
+        let temp_dir = TempDir::new()?;
+        let registry = brio_kernel::inference::ProviderRegistry::new();
+        registry.register_arc("default", Arc::new(MockProvider));
+        registry.set_default("default");
+
+        let host = Arc::new(BrioHostState::new("sqlite::memory:", registry, None, sandbox).await?);
+
+        Ok(Self {
+            temp_dir,
+            host,
+            agent_msg_rx: None,
+        })
     }
 
-    async fn init_db(&self) -> Result<()> {
-        sqlx::query(
-            r"
-            CREATE TABLE tasks (
-                id INTEGER PRIMARY KEY,
-                content TEXT NOT NULL,
-                priority INTEGER NOT NULL,
-                status TEXT NOT NULL,
-                assigned_agent TEXT,
-                failure_reason TEXT,
-                parent_id INTEGER
-            );
-            ",
-        )
-        .execute(self.host.db())
-        .await?;
-        Ok(())
+    /// Gets the path to the temporary directory.
+    pub fn temp_path(&self) -> PathBuf {
+        self.temp_dir.path().to_path_buf()
     }
 
-    fn register_agent(&mut self, id: &str) {
+    /// Creates a subdirectory in the temp directory.
+    pub fn create_subdir(&self, name: &str) -> Result<PathBuf> {
+        let path = self.temp_dir.path().join(name);
+        std::fs::create_dir_all(&path)?;
+        Ok(path)
+    }
+
+    /// Creates a test file with given content.
+    pub fn create_test_file(&self, name: &str, content: &str) -> Result<PathBuf> {
+        let path = self.temp_dir.path().join(name);
+        if let Some(parent) = path.parent() {
+            std::fs::create_dir_all(parent)?;
+        }
+        std::fs::write(&path, content)?;
+        Ok(path)
+    }
+
+    /// Registers an agent and returns the receiver for its messages.
+    pub fn register_agent(&mut self, id: &str) -> mpsc::Receiver<MeshMessage> {
         let (tx, rx) = mpsc::channel(10);
         self.host.register_component(id.to_string(), tx);
         self.agent_msg_rx = Some(rx);
+        // Return the receiver and take it from self
+        self.agent_msg_rx.take().unwrap()
+    }
+
+    /// Gets the database pool for raw queries.
+    pub fn db(&self) -> &sqlx::SqlitePool {
+        self.host.db()
     }
 }
 
 // =============================================================================
-// Mocks (Single Responsibility)
+// Mocks
 // =============================================================================
 
-struct MockProvider;
+/// Mock LLM provider for testing.
+pub struct MockProvider;
+
 #[async_trait::async_trait]
 impl LLMProvider for MockProvider {
     async fn chat(&self, _request: ChatRequest) -> Result<ChatResponse, InferenceError> {
         Ok(ChatResponse {
-            content: "Mock".to_string(),
+            content: "Mock response".to_string(),
             usage: None,
         })
     }
 }
 
-struct MockPlanner;
+/// Mock planner for testing.
+pub struct MockPlanner;
+
 impl Planner for MockPlanner {
     fn plan(&self, _objective: &str) -> Result<Option<Vec<String>>, PlannerError> {
         Ok(None)
     }
 }
 
+/// Test task repository implementation.
 #[derive(Clone)]
-struct TestTaskRepository {
+pub struct TestTaskRepository {
     host: Arc<BrioHostState>,
+}
+
+impl TestTaskRepository {
+    pub fn new(host: Arc<BrioHostState>) -> Self {
+        Self { host }
+    }
 }
 
 impl TaskRepository for TestTaskRepository {
@@ -133,15 +164,15 @@ impl TaskRepository for TestTaskRepository {
                         let assigned_agent_str: Option<String> = r.try_get("assigned_agent").unwrap_or(None);
                         let assigned_agent = assigned_agent_str.map(AgentId::new).transpose().map_err(|e| RepositoryError::ParseError(e.to_string()))?;
 
-                            Task::new(
-                                TaskId::new(id as u64),
-                                content,
-                                Priority::new(priority as u8),
-                                status,
-                                None, // parent_id
-                                assigned_agent,
-                                HashSet::new(),
-                            ).map_err(|e| RepositoryError::ParseError(e.to_string()))
+                        Task::new(
+                            TaskId::new(id as u64),
+                            content,
+                            Priority::new(priority as u8),
+                            status,
+                            None,
+                            assigned_agent,
+                            HashSet::new(),
+                        ).map_err(|e| RepositoryError::ParseError(e.to_string()))
                     })
                     .collect()
             })
@@ -298,18 +329,27 @@ impl TaskRepository for TestTaskRepository {
     }
 }
 
-struct TestDispatcher {
+/// Test agent dispatcher implementation.
+pub struct TestDispatcher {
     host: Arc<BrioHostState>,
+}
+
+impl TestDispatcher {
+    pub fn new(host: Arc<BrioHostState>) -> Self {
+        Self { host }
+    }
 }
 
 impl AgentDispatcher for TestDispatcher {
     fn dispatch(&self, agent: &AgentId, task: &Task) -> Result<DispatchResult, MeshError> {
+        use brio_kernel::host::MeshHandler;
+
         tokio::task::block_in_place(|| {
             tokio::runtime::Handle::current().block_on(async {
                 MeshHandler::mesh_call(
                     &*self.host,
                     agent.as_str(),
-                    "fix",
+                    "execute",
                     Payload::Json(Box::new(task.content().to_string())),
                 )
                 .await
@@ -320,59 +360,21 @@ impl AgentDispatcher for TestDispatcher {
     }
 }
 
-// =============================================================================
-// The Test
-// =============================================================================
-
-#[tokio::test(flavor = "multi_thread")]
-async fn manifesto_scenario_agent_fixing_bug() -> Result<()> {
-    let mut env = TestEnvironment::setup().await?;
-    let project_file = env.root.join("dummy_bug.txt");
-    std::fs::write(&project_file, "bug")?;
-
-    env.register_agent("agent_coder");
-    let agent_rx = env.agent_msg_rx.take().expect("Agent receiver missing");
-    let agent_host = env.host.clone();
-    let project_path = env.root.to_string_lossy().to_string();
-
-    tokio::spawn(async move {
-        agent_logic(agent_host, agent_rx, project_path).await;
-    });
-
-    create_bug_fix_task(&env.host).await?;
-
-    let processed = run_supervisor_cycle(env.host.clone()).await?;
-    assert!(
-        processed >= 1,
-        "Should process at least 1 task state transition"
-    );
-
-    let content = std::fs::read_to_string(project_file)?;
-    assert_eq!(content, "fixed");
-
-    Ok(())
+/// Creates a simple test supervisor.
+pub fn create_test_supervisor(
+    host: Arc<BrioHostState>,
+) -> Supervisor<TestTaskRepository, TestDispatcher, MockPlanner, KeywordAgentSelector> {
+    let repo = TestTaskRepository::new(host.clone());
+    let dispatcher = TestDispatcher::new(host);
+    let planner = MockPlanner;
+    let selector = KeywordAgentSelector;
+    Supervisor::new(repo, dispatcher, planner, selector)
 }
 
-// Small Helper Functions (Small Functions, CQS)
-
-async fn create_bug_fix_task(host: &BrioHostState) -> Result<()> {
-    sqlx::query("INSERT INTO tasks (content, priority, status) VALUES (?, ?, ?)")
-        .bind("fix bug")
-        .bind(10)
-        .bind("pending")
-        .execute(host.db())
-        .await?;
-    Ok(())
-}
-
-async fn run_supervisor_cycle(host: Arc<BrioHostState>) -> Result<u32> {
+/// Runs a supervisor cycle and returns the number of tasks processed.
+pub async fn run_supervisor_cycle(host: Arc<BrioHostState>) -> Result<u32> {
     tokio::task::spawn_blocking(move || {
-        let repo = TestTaskRepository { host: host.clone() };
-        let dispatcher = TestDispatcher { host };
-        let planner = MockPlanner;
-        // Use default selector for test
-        let selector = supervisor::selector::KeywordAgentSelector;
-        let supervisor = Supervisor::new(repo, dispatcher, planner, selector);
+        let supervisor = create_test_supervisor(host);
         let mut total = 0;
         loop {
             let n = supervisor.poll_tasks().expect("Supervisor poll failed");
@@ -381,138 +383,45 @@ async fn run_supervisor_cycle(host: Arc<BrioHostState>) -> Result<u32> {
             }
             total += n;
         }
-        Ok(total)
+        Ok::<u32, anyhow::Error>(total)
     })
     .await?
 }
 
-// =============================================================================
-// Smart Agent (Real AI)
-// =============================================================================
-
-async fn smart_agent_logic(
-    host: Arc<BrioHostState>,
-    mut rx: mpsc::Receiver<MeshMessage>,
-    path: String,
-) {
-    use brio_kernel::inference::{Message, Role};
-
-    while let Some(msg) = rx.recv().await {
-        if msg.method == "fix" {
-            // 1. Begin Session (Sandboxed)
-            let session_id = host.begin_session(&path).expect("Failed to begin session");
-            let session_path = std::env::temp_dir().join("brio").join(&session_id);
-            let file_path = session_path.join("dummy_bug.txt");
-
-            // 2. Read Bug
-            let content = std::fs::read_to_string(&file_path).expect("Failed to read bug file");
-
-            // 3. Consult LLM (The "Smart" part)
-            let prompt = format!(
-                "You are an automated bug fixer. The file content is '{content}'. \
-                Your task is to fix it by replacing the content with the word 'fixed'. \
-                Return ONLY the result word 'fixed' with no other text, markdown, or explanation."
-            );
-
-            let request = ChatRequest {
-                model: "mistralai/devstral-2512:free".to_string(), // Reliable free model
-                messages: vec![
-                    Message {
-                        role: Role::System,
-                        content: "You are a precise code editor.".into(),
-                    },
-                    Message {
-                        role: Role::User,
-                        content: prompt,
-                    },
-                ],
-            };
-
-            let response = host
-                .inference()
-                .expect("Default provider not found")
-                .chat(request)
-                .await
-                .expect("LLM Call Failed");
-            let fixed_content = response.content.trim(); // Trim potential whitespace
-
-            // 4. Apply Fix
-            std::fs::write(&file_path, fixed_content).expect("Failed to write fix");
-
-            // 5. Commit
-            host.commit_session(&session_id)
-                .expect("Failed to commit session");
-            let _ = msg
-                .reply_tx
-                .send(Ok(Payload::Json(Box::new(fixed_content.to_string()))));
-        }
-    }
-}
-
-async fn agent_logic(host: Arc<BrioHostState>, mut rx: mpsc::Receiver<MeshMessage>, path: String) {
-    while let Some(msg) = rx.recv().await {
-        if msg.method == "fix" {
-            let session = host.begin_session(&path).expect("Failed to begin session");
-            let session_path = std::env::temp_dir().join("brio").join(&session);
-            std::fs::write(session_path.join("dummy_bug.txt"), "fixed")
-                .expect("Failed to write fix");
-            host.commit_session(&session)
-                .expect("Failed to commit session");
-            let _ = msg
-                .reply_tx
-                .send(Ok(Payload::Json(Box::new("fixed".to_string()))));
-        }
-    }
-}
-
-// =============================================================================
-// The "Real AI" Test
-// =============================================================================
-
-#[tokio::test(flavor = "multi_thread")]
-async fn manifesto_scenario_real_ai() -> Result<()> {
-    // 1. Check for Key (Conditional Execution)
-    let api_key = if let Ok(k) = std::env::var("OPENROUTER_API_KEY") {
-        k
-    } else {
-        println!("Skipping real AI test: OPENROUTER_API_KEY not set");
-        return Ok(());
-    };
-
-    // 2. Setup Real Provider
-    // Clean Code: Secure config
-    let config = brio_kernel::inference::OpenAIConfig::new(
-        secrecy::SecretString::new(api_key.into()),
-        reqwest::Url::parse("https://openrouter.ai/api/v1/")?,
-    );
-    let provider = brio_kernel::inference::OpenAIProvider::new(config);
-
-    let mut env = TestEnvironment::setup_with_provider(Box::new(provider)).await?;
-    let project_file = env.root.join("dummy_bug.txt");
-    std::fs::write(&project_file, "bug")?;
-
-    env.register_agent("agent_coder");
-    let agent_rx = env.agent_msg_rx.take().expect("Agent receiver missing");
-    let agent_host = env.host.clone();
-    let project_path = env.root.to_string_lossy().to_string();
-
-    tokio::spawn(async move {
-        smart_agent_logic(agent_host, agent_rx, project_path).await;
-    });
-
-    create_bug_fix_task(&env.host).await?;
-    let processed = run_supervisor_cycle(env.host.clone()).await?;
-    assert!(
-        processed >= 1,
-        "Should process at least 1 task state transition"
-    );
-
-    let content = std::fs::read_to_string(project_file)?;
-
-    assert!(
-        content.contains("fixed"),
-        "LLM failed to fix the bug. Content: '{content}'"
-    );
-
+/// Initializes the tasks table in the database.
+pub async fn init_tasks_table(host: &BrioHostState) -> Result<()> {
+    sqlx::query(
+        r"
+        CREATE TABLE IF NOT EXISTS tasks (
+            id INTEGER PRIMARY KEY,
+            content TEXT NOT NULL,
+            priority INTEGER NOT NULL,
+            status TEXT NOT NULL,
+            assigned_agent TEXT,
+            failure_reason TEXT,
+            parent_id INTEGER
+        );
+        ",
+    )
+    .execute(host.db())
+    .await?;
     Ok(())
+}
+
+/// Creates a test task in the database.
+pub async fn create_test_task(
+    host: &BrioHostState,
+    content: &str,
+    priority: i32,
+    status: &str,
+) -> Result<i64> {
+    let id =
+        sqlx::query("INSERT INTO tasks (content, priority, status) VALUES (?, ?, ?) RETURNING id")
+            .bind(content)
+            .bind(priority)
+            .bind(status)
+            .fetch_one(host.db())
+            .await?
+            .get::<i64, _>("id");
+    Ok(id)
 }

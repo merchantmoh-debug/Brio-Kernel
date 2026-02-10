@@ -8,10 +8,10 @@ use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 use std::time::{SystemTime, UNIX_EPOCH};
 
-use supervisor::branch::manager::BranchManager;
+use supervisor::branch::{BranchManager, BranchSource};
 use supervisor::domain::{
-    Branch, BranchConfig, BranchId, BranchResult, BranchSource, BranchStatus,
-    ExecutionMetrics, ExecutionStrategy, MergeRequest, Task
+    BranchConfig, BranchId, BranchRecord, BranchResult, BranchStatus, ExecutionMetrics,
+    ExecutionStrategy, MergeRequest, Task,
 };
 use supervisor::merge::{MergeId, MergeStrategyRegistry};
 use supervisor::mesh_client::{AgentDispatcher, DispatchResult, MeshError};
@@ -45,28 +45,29 @@ impl MockSessionManager {
     }
 }
 
-impl supervisor::branch::manager::SessionManager for MockSessionManager {
+impl supervisor::branch::SessionManager for MockSessionManager {
     fn begin_session(
         &mut self,
         base_path: &str,
-    ) -> Result<String, supervisor::branch::manager::SessionError> {
+    ) -> Result<String, supervisor::branch::SessionError> {
         let session_id = format!("session-{}", self.next_session_id);
         self.next_session_id += 1;
-        self.sessions.insert(session_id.clone(), PathBuf::from(base_path));
+        self.sessions
+            .insert(session_id.clone(), PathBuf::from(base_path));
         Ok(session_id)
     }
 
     fn commit_session(
         &mut self,
         _session_id: &str,
-    ) -> Result<(), supervisor::branch::manager::SessionError> {
+    ) -> Result<(), supervisor::branch::SessionError> {
         Ok(())
     }
 
     fn rollback_session(
         &mut self,
         session_id: &str,
-    ) -> Result<(), supervisor::branch::manager::SessionError> {
+    ) -> Result<(), supervisor::branch::SessionError> {
         self.sessions.remove(session_id);
         Ok(())
     }
@@ -82,7 +83,7 @@ impl supervisor::branch::manager::SessionManager for MockSessionManager {
 
 /// Mock repository for testing branch operations
 pub struct MockBranchRepository {
-    branches: Mutex<HashMap<BranchId, Branch>>,
+    branches: Mutex<HashMap<BranchId, BranchRecord>>,
     merge_requests: Mutex<HashMap<MergeId, MergeRequestRecord>>,
     next_merge_id: Mutex<u64>,
 }
@@ -113,21 +114,20 @@ impl MockBranchRepository {
 }
 
 impl BranchRepository for MockBranchRepository {
-    fn create_branch(
-        &self,
-        branch: &Branch,
-    ) -> Result<BranchId, BranchRepositoryError> {
-        let mut branches = self.branches.lock().map_err(|_| {
-            BranchRepositoryError::SqlError("Lock failed".to_string())
-        })?;
+    fn create_branch(&self, branch: &BranchRecord) -> Result<BranchId, BranchRepositoryError> {
+        let mut branches = self
+            .branches
+            .lock()
+            .map_err(|_| BranchRepositoryError::SqlError("Lock failed".to_string()))?;
         branches.insert(branch.id(), branch.clone());
         Ok(branch.id())
     }
 
-    fn get_branch(&self, id: BranchId) -> Result<Option<Branch>, BranchRepositoryError> {
-        let branches = self.branches.lock().map_err(|_| {
-            BranchRepositoryError::SqlError("Lock failed".to_string())
-        })?;
+    fn get_branch(&self, id: BranchId) -> Result<Option<BranchRecord>, BranchRepositoryError> {
+        let branches = self
+            .branches
+            .lock()
+            .map_err(|_| BranchRepositoryError::SqlError("Lock failed".to_string()))?;
         Ok(branches.get(&id).cloned())
     }
 
@@ -136,9 +136,10 @@ impl BranchRepository for MockBranchRepository {
         id: BranchId,
         status: BranchStatus,
     ) -> Result<(), BranchRepositoryError> {
-        let mut branches = self.branches.lock().map_err(|_| {
-            BranchRepositoryError::SqlError("Lock failed".to_string())
-        })?;
+        let mut branches = self
+            .branches
+            .lock()
+            .map_err(|_| BranchRepositoryError::SqlError("Lock failed".to_string()))?;
 
         if let Some(existing) = branches.get(&id) {
             let completed_at = if status.is_terminal() {
@@ -148,7 +149,7 @@ impl BranchRepository for MockBranchRepository {
             };
 
             let config_json = existing.config().to_string();
-            let updated = Branch::new(
+            let updated = BranchRecord::new(
                 existing.id(),
                 existing.parent_id(),
                 existing.session_id().to_string(),
@@ -167,14 +168,14 @@ impl BranchRepository for MockBranchRepository {
         }
     }
 
-    fn list_active_branches(&self,
-    ) -> Result<Vec<Branch>, BranchRepositoryError> {
-        let branches = self.branches.lock().map_err(|_| {
-            BranchRepositoryError::SqlError("Lock failed".to_string())
-        })?;
+    fn list_active_branches(&self) -> Result<Vec<BranchRecord>, BranchRepositoryError> {
+        let branches = self
+            .branches
+            .lock()
+            .map_err(|_| BranchRepositoryError::SqlError("Lock failed".to_string()))?;
         Ok(branches
             .values()
-            .filter(|b| b.is_active())
+            .filter(|b: &&BranchRecord| b.is_active())
             .cloned()
             .collect())
     }
@@ -182,21 +183,23 @@ impl BranchRepository for MockBranchRepository {
     fn list_branches_by_parent(
         &self,
         parent_id: BranchId,
-    ) -> Result<Vec<Branch>, BranchRepositoryError> {
-        let branches = self.branches.lock().map_err(|_| {
-            BranchRepositoryError::SqlError("Lock failed".to_string())
-        })?;
+    ) -> Result<Vec<BranchRecord>, BranchRepositoryError> {
+        let branches = self
+            .branches
+            .lock()
+            .map_err(|_| BranchRepositoryError::SqlError("Lock failed".to_string()))?;
         Ok(branches
             .values()
-            .filter(|b| b.parent_id() == Some(parent_id))
+            .filter(|b: &&BranchRecord| b.parent_id() == Some(parent_id))
             .cloned()
             .collect())
     }
 
     fn delete_branch(&self, id: BranchId) -> Result<(), BranchRepositoryError> {
-        let mut branches = self.branches.lock().map_err(|_| {
-            BranchRepositoryError::SqlError("Lock failed".to_string())
-        })?;
+        let mut branches = self
+            .branches
+            .lock()
+            .map_err(|_| BranchRepositoryError::SqlError("Lock failed".to_string()))?;
         branches.remove(&id);
         Ok(())
     }
@@ -207,13 +210,15 @@ impl BranchRepository for MockBranchRepository {
         parent_id: Option<BranchId>,
         strategy: &str,
     ) -> Result<MergeId, BranchRepositoryError> {
-        let mut merge_requests = self.merge_requests.lock().map_err(|_| {
-            BranchRepositoryError::SqlError("Lock failed".to_string())
-        })?;
+        let mut merge_requests = self
+            .merge_requests
+            .lock()
+            .map_err(|_| BranchRepositoryError::SqlError("Lock failed".to_string()))?;
 
-        let mut next_id = self.next_merge_id.lock().map_err(|_| {
-            BranchRepositoryError::SqlError("Lock failed".to_string())
-        })?;
+        let mut next_id = self
+            .next_merge_id
+            .lock()
+            .map_err(|_| BranchRepositoryError::SqlError("Lock failed".to_string()))?;
 
         let merge_id = MergeId::from_uuid(uuid::Uuid::from_u128(*next_id as u128));
         *next_id += 1;
@@ -236,7 +241,9 @@ impl BranchRepository for MockBranchRepository {
         &self,
         merge_id: MergeId,
     ) -> Result<Option<MergeRequest>, BranchRepositoryError> {
-        Err(BranchRepositoryError::SqlError("Not implemented".to_string()))
+        Err(BranchRepositoryError::SqlError(
+            "Not implemented".to_string(),
+        ))
     }
 
     fn update_merge_request(
@@ -251,9 +258,10 @@ impl BranchRepository for MockBranchRepository {
         merge_id: MergeId,
         approver: &str,
     ) -> Result<(), BranchRepositoryError> {
-        let mut merge_requests = self.merge_requests.lock().map_err(|_| {
-            BranchRepositoryError::SqlError("Lock failed".to_string())
-        })?;
+        let mut merge_requests = self
+            .merge_requests
+            .lock()
+            .map_err(|_| BranchRepositoryError::SqlError("Lock failed".to_string()))?;
 
         if let Some(record) = merge_requests.get_mut(&merge_id) {
             record.approved = true;
@@ -264,6 +272,12 @@ impl BranchRepository for MockBranchRepository {
         }
     }
 }
+
+/// Default test files directory path
+pub const TEST_FILES_DIR: &str = "./test_files";
+
+/// Default merge strategy for tests
+pub const DEFAULT_MERGE_STRATEGY: &str = "union";
 
 /// Test context providing shared test infrastructure
 pub struct TestContext {
@@ -297,14 +311,8 @@ impl TestContext {
         let mut manager = self.branch_manager.lock().unwrap();
         manager
             .create_branch(
-                BranchSource::Base(PathBuf::from("./test_files")),
-                BranchConfig {
-                    name: name.into(),
-                    agents: vec![],
-                    execution_strategy: ExecutionStrategy::Sequential,
-                    auto_merge: false,
-                    merge_strategy: "union".to_string(),
-                },
+                BranchSource::Base(PathBuf::from(TEST_FILES_DIR)),
+                Self::default_test_config(name),
             )
             .await
             .unwrap()
@@ -315,17 +323,7 @@ impl TestContext {
         let manager = self.branch_manager.lock().unwrap();
         manager.mark_executing(id, 1).unwrap();
 
-        let result = BranchResult {
-            branch_id: id,
-            file_changes: vec![],
-            agent_results: vec![],
-            metrics: ExecutionMetrics {
-                total_duration_ms: 100,
-                files_processed: 0,
-                agents_executed: 1,
-                peak_memory_bytes: 0,
-            },
-        };
+        let result = Self::default_test_result(id);
         manager.complete_branch(id, result).unwrap();
         id
     }
@@ -340,6 +338,33 @@ impl TestContext {
         // For testing purposes, we just return the branch ID
         let _ = (file_path, content);
         id
+    }
+
+    /// Returns a default BranchConfig for testing
+    pub fn default_test_config(name: impl Into<String>) -> BranchConfig {
+        BranchConfig::new(
+            name,
+            vec![],
+            ExecutionStrategy::Sequential,
+            false,
+            DEFAULT_MERGE_STRATEGY,
+        )
+        .unwrap()
+    }
+
+    /// Returns default ExecutionMetrics for testing
+    pub fn default_test_metrics() -> ExecutionMetrics {
+        ExecutionMetrics {
+            total_duration_ms: 100,
+            files_processed: 0,
+            agents_executed: 1,
+            peak_memory_bytes: 0,
+        }
+    }
+
+    /// Returns a default BranchResult for testing with the given branch_id
+    pub fn default_test_result(branch_id: BranchId) -> BranchResult {
+        BranchResult::new(branch_id, vec![], vec![], Self::default_test_metrics())
     }
 }
 

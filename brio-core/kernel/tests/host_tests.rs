@@ -1,7 +1,7 @@
 //! Tests for the BrioHostState and host functionality.
 
 use anyhow::Result;
-use brio_kernel::host::BrioHostState;
+use brio_kernel::host::{BrioHostState, MeshHandler};
 use brio_kernel::inference::{ChatRequest, ChatResponse, InferenceError, LLMProvider};
 use brio_kernel::mesh::{MeshMessage, Payload};
 use std::sync::Arc;

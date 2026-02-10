@@ -3,7 +3,7 @@
 //! Tests component registration, message routing between agents, and
 //! error handling for unknown methods and missing components.
 
-use brio_kernel::host::BrioHostState;
+use brio_kernel::host::{BrioHostState, MeshHandler};
 use brio_kernel::mesh::{MeshMessage, Payload};
 use tokio::sync::mpsc;
 

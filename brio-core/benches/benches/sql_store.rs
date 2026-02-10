@@ -5,7 +5,7 @@
 //! - `SqlStore::execute`: INSERT/UPDATE/DELETE operations
 //! - `convert_cell`: Type conversion from database to string
 
-use criterion::{black_box, criterion_group, criterion_main, BenchmarkId, Criterion};
+use criterion::{BenchmarkId, Criterion, black_box, criterion_group, criterion_main};
 use std::collections::HashMap;
 
 /// Simulated cell conversion - mirrors store/impl.rs logic
@@ -135,8 +135,14 @@ fn bench_authorize_policy(c: &mut Criterion) {
 
     let queries = [
         ("simple_select", "SELECT * FROM users WHERE id = 1"),
-        ("complex_select", "SELECT u.id, u.name, o.total FROM users u JOIN orders o ON u.id = o.user_id WHERE o.total > 100"),
-        ("select_with_params", "SELECT * FROM products WHERE category = ? AND price < ?"),
+        (
+            "complex_select",
+            "SELECT u.id, u.name, o.total FROM users u JOIN orders o ON u.id = o.user_id WHERE o.total > 100",
+        ),
+        (
+            "select_with_params",
+            "SELECT * FROM products WHERE category = ? AND price < ?",
+        ),
         ("rejected_drop", "DROP TABLE users"),
         ("rejected_delete", "DELETE FROM users WHERE id = 1"),
     ];

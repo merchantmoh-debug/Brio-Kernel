@@ -28,7 +28,7 @@ pub fn create_task_with_subtasks_manual(
     subtask_contents: Vec<String>,
 ) -> Result<u64, TransactionError> {
     // Begin a new transaction
-    let mut tx = Transaction::begin()?;
+    let tx = Transaction::begin()?;
 
     // Insert the parent task
     let parent_result = tx.query(
@@ -160,7 +160,7 @@ pub fn update_task_with_audit_log(
 pub fn demonstrate_rollback_on_error() -> Result<(), TransactionError> {
     let repo = WitTaskRepository::new();
 
-    let result = repo.with_transaction(|tx| {
+    let result: Result<(), TransactionError> = repo.with_transaction(|tx| {
         // First operation succeeds
         tx.execute(
             "INSERT INTO tasks (content, status) VALUES (?, ?)",
@@ -189,7 +189,7 @@ pub fn demonstrate_rollback_on_error() -> Result<(), TransactionError> {
 
 /// Shows how to inspect transaction state during operations.
 pub fn inspect_transaction_state() -> Result<(), TransactionError> {
-    let mut tx = Transaction::begin()?;
+    let tx = Transaction::begin()?;
 
     assert!(tx.is_active());
     assert!(!tx.is_committed());
@@ -265,26 +265,76 @@ pub fn create_merge_request_with_metadata(
 }
 
 // =============================================================================
-// Tests
+// Main - Entry point for the example
 // =============================================================================
 
-#[cfg(test)]
-mod tests {
-    use super::*;
+fn main() {
+    println!("Transaction API Usage Examples");
+    println!("==============================\n");
 
-    #[test]
-    fn transaction_error_display() {
-        let err = TransactionError::BeginError("connection failed".to_string());
-        assert!(err.to_string().contains("connection failed"));
-
-        let err = TransactionError::AlreadyCompleted;
-        assert!(err.to_string().contains("already completed"));
+    // Example 1: Manual transaction control
+    println!("Example 1: Manual Transaction Control");
+    match create_task_with_subtasks_manual(
+        "Parent task".to_string(),
+        vec!["Subtask 1".to_string(), "Subtask 2".to_string()],
+    ) {
+        Ok(id) => println!("  Created task with ID: {}", id),
+        Err(e) => println!("  Error: {}", e),
     }
+    println!();
 
-    #[test]
-    fn transaction_state_checks() {
-        // Note: This test would require a database connection to actually run
-        // For now, just verify the API compiles correctly
-        let _ = inspect_transaction_state;
+    // Example 2: Using with_transaction closure API
+    println!("Example 2: with_transaction Closure API");
+    let repo = WitBranchRepository::new();
+    match create_branch_with_state_atomic(
+        &repo,
+        "branch-001",
+        "session-001",
+        "feature-branch",
+        r#"{"status": "active"}"#,
+    ) {
+        Ok(()) => println!("  Branch created successfully"),
+        Err(e) => println!("  Error: {}", e),
     }
+    println!();
+
+    // Example 3: Multi-Table Operations with Error Handling
+    println!("Example 3: Update Task with Audit Log");
+    let task_repo = WitTaskRepository::new();
+    match update_task_with_audit_log(&task_repo, 1, "InProgress", "user@example.com") {
+        Ok(()) => println!("  Task updated and logged successfully"),
+        Err(e) => println!("  Error: {}", e),
+    }
+    println!();
+
+    // Example 4: Demonstrate rollback on error
+    println!("Example 4: Rollback on Error Demonstration");
+    match demonstrate_rollback_on_error() {
+        Ok(()) => println!("  Rollback demonstration completed"),
+        Err(e) => println!("  Error: {}", e),
+    }
+    println!();
+
+    // Example 5: Transaction state inspection
+    println!("Example 5: Transaction State Inspection");
+    match inspect_transaction_state() {
+        Ok(()) => println!("  State inspection completed"),
+        Err(e) => println!("  Error: {}", e),
+    }
+    println!();
+
+    // Example 6: Complex multi-step operation
+    println!("Example 6: Create Merge Request with Metadata");
+    let approvers = vec![
+        "alice@example.com".to_string(),
+        "bob@example.com".to_string(),
+    ];
+    match create_merge_request_with_metadata(&repo, "branch-001", Some("main"), "merge", &approvers)
+    {
+        Ok(id) => println!("  Merge request created with ID: {}", id),
+        Err(e) => println!("  Error: {}", e),
+    }
+    println!();
+
+    println!("All examples completed!");
 }

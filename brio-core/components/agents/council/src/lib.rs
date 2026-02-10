@@ -1,17 +1,19 @@
 //! Council Agent - Strategic planning and oversight
 #![allow(missing_docs)]
 
+use agent_sdk::agent::parsers::{
+    create_done_parser, create_list_parser, create_read_parser, create_write_parser,
+};
+use agent_sdk::agent::tools::{DoneTool, ListDirectoryTool, ReadFileTool};
 use agent_sdk::agent::{
-    handle_standard_event, run_standard_agent, StandardAgent, StandardAgentConfig,
+    StandardAgent, StandardAgentConfig, handle_standard_event, run_standard_agent,
 };
 use agent_sdk::error::AgentError;
 use agent_sdk::tools::ToolRegistry;
 use agent_sdk::types::{InferenceResponse, Message, Role, TaskContext};
-use agent_sdk::{AgentConfig, PromptBuilder};
-use regex::Regex;
+use agent_sdk::{AgentConfig, PromptBuilder, Tool, ToolError};
 use std::borrow::Cow;
 use std::collections::HashMap;
-use std::sync::OnceLock;
 use wit_bindgen::generate;
 
 // Generate WIT bindings at crate root level
@@ -40,10 +42,25 @@ impl StandardAgent for CouncilAgent {
         PromptBuilder::build_council_agent(context, tools, &agent_config)
     }
 
-    fn create_tool_registry(&self, _config: &AgentConfig) -> ToolRegistry {
+    fn create_tool_registry(&self, config: &AgentConfig) -> ToolRegistry {
         let mut registry = ToolRegistry::new();
-        // Council uses only 'done' tool (from base)
+
+        // Register shared tools
         registry.register("done", Box::new(DoneTool), create_done_parser());
+        registry.register(
+            "read_file",
+            Box::new(ReadFileTool::new(config.max_file_size)),
+            create_read_parser(),
+        );
+        registry.register(
+            "ls",
+            Box::new(ListDirectoryTool::new(config.max_depth)),
+            create_list_parser(),
+        );
+
+        // Council has write capability for strategic plans
+        registry.register("write_file", Box::new(WriteFileTool), create_write_parser());
+
         registry
     }
 
@@ -108,38 +125,117 @@ fn convert_role(role: Role) -> brio::ai::inference::Role {
     }
 }
 
-static DONE_REGEX: OnceLock<Regex> = OnceLock::new();
+// WriteFileTool implementation for council agent
+struct WriteFileTool;
 
-fn create_done_parser() -> agent_sdk::tools::ToolParser {
-    let regex = DONE_REGEX.get_or_init(|| {
-        Regex::new(r"<done>\s*(.*?)\s*</done>").expect("DONE_REGEX should be valid")
-    });
-    agent_sdk::tools::ToolParser::from_regex(regex, |caps: &regex::Captures| {
-        let mut args = HashMap::new();
-        args.insert("summary".to_string(), caps[1].to_string());
-        args
-    })
-}
-
-use agent_sdk::error::ToolError;
-use agent_sdk::Tool;
-
-struct DoneTool;
-
-impl Tool for DoneTool {
+impl Tool for WriteFileTool {
     fn name(&self) -> Cow<'static, str> {
-        Cow::Borrowed("done")
+        Cow::Borrowed("write_file")
     }
 
     fn description(&self) -> Cow<'static, str> {
         Cow::Borrowed(
-            r"<done>summary of completion</done> - Mark task as complete with strategic plan",
+            r#"<write_file path="path/to/file">content</write_file> - Write strategic plans and documentation"#,
         )
     }
 
-    fn execute(&self, _args: &HashMap<String, String>) -> Result<String, ToolError> {
-        Ok("Strategic plan complete".to_string())
+    fn execute(&self, args: &HashMap<String, String>) -> Result<String, ToolError> {
+        let path = args
+            .get("path")
+            .ok_or_else(|| ToolError::InvalidArguments {
+                tool: "write_file".to_string(),
+                reason: "Missing 'path' argument".to_string(),
+            })?;
+        let content = args
+            .get("content")
+            .ok_or_else(|| ToolError::InvalidArguments {
+                tool: "write_file".to_string(),
+                reason: "Missing 'content' argument".to_string(),
+            })?;
+
+        std::fs::write(path, content).map_err(|e| ToolError::ExecutionFailed {
+            tool: "write_file".to_string(),
+            source: Box::new(e),
+        })?;
+
+        Ok(format!("Wrote {} bytes to {}", content.len(), path))
     }
 }
 
 export!(CouncilAgent);
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_all_tools_registered() {
+        let agent = CouncilAgent;
+        let config = AgentConfig::default();
+        let registry = agent.create_tool_registry(&config);
+        let tools = registry.available_tools();
+
+        // Verify all 4 tools are registered
+        assert!(tools.contains(&"done"), "done tool should be registered");
+        assert!(
+            tools.contains(&"read_file"),
+            "read_file tool should be registered"
+        );
+        assert!(tools.contains(&"ls"), "ls tool should be registered");
+        assert!(
+            tools.contains(&"write_file"),
+            "write_file tool should be registered"
+        );
+        assert_eq!(tools.len(), 4, "should have exactly 4 tools");
+    }
+
+    #[test]
+    fn test_council_has_write_capability() {
+        let agent = CouncilAgent;
+        let config = AgentConfig::default();
+        let registry = agent.create_tool_registry(&config);
+        let tools = registry.available_tools();
+
+        // Council agent should have write capability for strategic plans
+        assert!(
+            tools.contains(&"write_file"),
+            "council agent should have write_file tool for strategic plans"
+        );
+    }
+
+    #[test]
+    fn test_write_file_tool_execution() -> Result<(), ToolError> {
+        let tool = WriteFileTool;
+        let mut args = HashMap::new();
+        args.insert("path".to_string(), "/tmp/test_council_file.txt".to_string());
+        args.insert("content".to_string(), "Strategic plan content".to_string());
+
+        let result = tool.execute(&args)?;
+        assert!(result.contains("bytes"));
+
+        // Cleanup
+        let _ = std::fs::remove_file("/tmp/test_council_file.txt");
+        Ok(())
+    }
+
+    #[test]
+    fn test_write_file_tool_missing_path() {
+        let tool = WriteFileTool;
+        let mut args = HashMap::new();
+        args.insert("content".to_string(), "content".to_string());
+
+        let result = tool.execute(&args);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_council_agent_implements_standard_agent() {
+        let agent = CouncilAgent;
+        let context = TaskContext::new("test", "Test strategic planning");
+        let config = StandardAgentConfig::default();
+        let tools = agent.create_tool_registry(&AgentConfig::default());
+
+        let prompt = agent.build_prompt(&context, &tools, &config);
+        assert!(prompt.contains("Test strategic planning"));
+    }
+}

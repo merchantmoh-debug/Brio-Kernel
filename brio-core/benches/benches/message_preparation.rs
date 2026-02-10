@@ -6,7 +6,7 @@
 //! - Token counting estimation
 //! - Role mapping and content extraction
 
-use criterion::{black_box, criterion_group, criterion_main, BenchmarkId, Criterion};
+use criterion::{BenchmarkId, Criterion, black_box, criterion_group, criterion_main};
 
 /// Mirrors brio-core/kernel/src/inference/types.rs
 #[derive(Debug, Clone)]

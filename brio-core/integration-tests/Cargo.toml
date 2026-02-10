@@ -15,6 +15,7 @@ publish = false
 [dev-dependencies]
 brio-kernel = { path = "../kernel" }
 supervisor = { path = "../components/supervisor" }
+agent-sdk = { path = "../components/agent-sdk" }
 tokio = { workspace = true, features = ["full", "test-util"] }
 anyhow = { workspace = true }
 sqlx = { workspace = true, features = ["sqlite", "runtime-tokio"] }
@@ -24,6 +25,11 @@ reqwest = { version = "0.13.1", default-features = false, features = [
     "rustls",
 ] }
 async-trait = "0.1"
+tempfile = { workspace = true }
+regex = { workspace = true }
+chrono = "0.4"
+serde_json = { workspace = true }
+serde = { workspace = true }
 
 [lints]
 workspace = true

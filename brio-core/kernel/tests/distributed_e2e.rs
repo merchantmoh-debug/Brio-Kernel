@@ -3,7 +3,7 @@
 //! Tests multi-node communication and service discovery across different nodes
 //! in a distributed setup using gRPC transport.
 
-use brio_kernel::host::BrioHostState;
+use brio_kernel::host::{BrioHostState, MeshHandler};
 use brio_kernel::inference::ProviderRegistry;
 use brio_kernel::infrastructure::config::SandboxSettings;
 use brio_kernel::mesh::Payload;

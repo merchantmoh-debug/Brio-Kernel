@@ -5,7 +5,7 @@
 //! - `scan_directory`: Directory traversal and metadata collection
 //! - `compute_diff`: Comparing two directory snapshots
 
-use criterion::{black_box, criterion_group, criterion_main, BenchmarkId, Criterion, Throughput};
+use criterion::{BenchmarkId, Criterion, Throughput, black_box, criterion_group, criterion_main};
 use sha2::{Digest, Sha256};
 use std::fs;
 use std::io::Read;

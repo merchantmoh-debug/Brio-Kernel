@@ -5,14 +5,15 @@
 
 use std::path::PathBuf;
 
-use supervisor::branch::manager::BranchError;
+use supervisor::branch::BranchError;
+use supervisor::branch::BranchSource;
 use supervisor::domain::{
-    AgentAssignment, BranchConfig, BranchId, BranchSource, BranchStatus,
-    ExecutionMetrics, ExecutionStrategy, Priority,
+    AgentAssignment, BranchConfig, BranchId, BranchStatus, ExecutionMetrics, ExecutionStrategy,
+    Priority,
 };
 
 mod common;
-use common::TestContext;
+use common::{DEFAULT_MERGE_STRATEGY, TEST_FILES_DIR, TestContext};
 
 // ============= Branch Lifecycle Tests =============
 
@@ -25,14 +26,8 @@ async fn test_branch_lifecycle() {
     // 1. Create branch
     let branch_id = manager
         .create_branch(
-            BranchSource::Base(PathBuf::from("./test_files")),
-            BranchConfig {
-                name: "Test Branch".to_string(),
-                agents: vec![],
-                execution_strategy: ExecutionStrategy::Sequential,
-                auto_merge: false,
-                merge_strategy: "union".to_string(),
-            },
+            BranchSource::Base(PathBuf::from(TEST_FILES_DIR)),
+            TestContext::default_test_config("Test Branch"),
         )
         .await
         .unwrap();
@@ -48,17 +43,7 @@ async fn test_branch_lifecycle() {
     assert!(matches!(branch.status(), BranchStatus::Active));
 
     // 4. Complete branch
-    let result = supervisor::domain::BranchResult {
-        branch_id,
-        file_changes: vec![],
-        agent_results: vec![],
-        metrics: ExecutionMetrics {
-            total_duration_ms: 100,
-            files_processed: 0,
-            agents_executed: 1,
-            peak_memory_bytes: 0,
-        },
-    };
+    let result = TestContext::default_test_result(branch_id);
     manager.complete_branch(branch_id, result).unwrap();
 
     // 5. Verify completed
@@ -72,21 +57,15 @@ async fn test_branch_creation_validation() {
     let manager_arc = ctx.branch_manager();
     let mut manager = manager_arc.lock().unwrap();
 
-    // Test empty name
-    let result = manager
-        .create_branch(
-            BranchSource::Base(PathBuf::from("./test_files")),
-            BranchConfig {
-                name: "".to_string(),
-                agents: vec![],
-                execution_strategy: ExecutionStrategy::Sequential,
-                auto_merge: false,
-                merge_strategy: "union".to_string(),
-            },
-        )
-        .await;
-
-    assert!(result.is_err());
+    // Test empty name - should fail validation
+    let config_result = BranchConfig::new(
+        "",
+        vec![],
+        ExecutionStrategy::Sequential,
+        false,
+        DEFAULT_MERGE_STRATEGY,
+    );
+    assert!(config_result.is_err());
 }
 
 #[tokio::test]
@@ -98,44 +77,22 @@ async fn test_branch_from_parent() {
     // Create parent branch
     let parent_id = manager
         .create_branch(
-            BranchSource::Base(PathBuf::from("./test_files")),
-            BranchConfig {
-                name: "Parent Branch".to_string(),
-                agents: vec![],
-                execution_strategy: ExecutionStrategy::Sequential,
-                auto_merge: false,
-                merge_strategy: "union".to_string(),
-            },
+            BranchSource::Base(PathBuf::from(TEST_FILES_DIR)),
+            TestContext::default_test_config("Parent Branch"),
         )
         .await
         .unwrap();
 
     // Complete parent
     manager.mark_executing(parent_id, 1).unwrap();
-    let result = supervisor::domain::BranchResult {
-        branch_id: parent_id,
-        file_changes: vec![],
-        agent_results: vec![],
-        metrics: ExecutionMetrics {
-            total_duration_ms: 100,
-            files_processed: 0,
-            agents_executed: 1,
-            peak_memory_bytes: 0,
-        },
-    };
+    let result = TestContext::default_test_result(parent_id);
     manager.complete_branch(parent_id, result).unwrap();
 
     // Create child from parent
     let child_id = manager
         .create_branch(
             BranchSource::Branch(parent_id),
-            BranchConfig {
-                name: "Child Branch".to_string(),
-                agents: vec![],
-                execution_strategy: ExecutionStrategy::Sequential,
-                auto_merge: false,
-                merge_strategy: "union".to_string(),
-            },
+            TestContext::default_test_config("Child Branch"),
         )
         .await
         .unwrap();
@@ -156,14 +113,8 @@ async fn test_max_branch_limit() {
     for i in 0..8 {
         let result = manager
             .create_branch(
-                BranchSource::Base(PathBuf::from("./test_files")),
-                BranchConfig {
-                    name: format!("Branch {}", i),
-                    agents: vec![],
-                    execution_strategy: ExecutionStrategy::Sequential,
-                    auto_merge: false,
-                    merge_strategy: "union".to_string(),
-                },
+                BranchSource::Base(PathBuf::from(TEST_FILES_DIR)),
+                TestContext::default_test_config(format!("Branch {}", i)),
             )
             .await;
         assert!(result.is_ok(), "Should be able to create branch {}", i);
@@ -172,20 +123,17 @@ async fn test_max_branch_limit() {
     // 9th should fail
     let result = manager
         .create_branch(
-            BranchSource::Base(PathBuf::from("./test_files")),
-            BranchConfig {
-                name: "Over limit".to_string(),
-                agents: vec![],
-                execution_strategy: ExecutionStrategy::Sequential,
-                auto_merge: false,
-                merge_strategy: "union".to_string(),
-            },
+            BranchSource::Base(PathBuf::from(TEST_FILES_DIR)),
+            TestContext::default_test_config("Over limit"),
         )
         .await;
 
     assert!(matches!(
         result,
-        Err(BranchError::MaxBranchesExceeded { current: 8, limit: 8 })
+        Err(BranchError::MaxBranchesExceeded {
+            current: 8,
+            limit: 8
+        })
     ));
 }
 
@@ -198,43 +146,21 @@ async fn test_completed_branches_dont_count_towards_limit() {
     // Create and complete a branch
     let branch_id = manager
         .create_branch(
-            BranchSource::Base(PathBuf::from("./test_files")),
-            BranchConfig {
-                name: "To Complete".to_string(),
-                agents: vec![],
-                execution_strategy: ExecutionStrategy::Sequential,
-                auto_merge: false,
-                merge_strategy: "union".to_string(),
-            },
+            BranchSource::Base(PathBuf::from(TEST_FILES_DIR)),
+            TestContext::default_test_config("To Complete"),
         )
         .await
         .unwrap();
 
     manager.mark_executing(branch_id, 1).unwrap();
-    let result = supervisor::domain::BranchResult {
-        branch_id,
-        file_changes: vec![],
-        agent_results: vec![],
-        metrics: ExecutionMetrics {
-            total_duration_ms: 100,
-            files_processed: 0,
-            agents_executed: 1,
-            peak_memory_bytes: 0,
-        },
-    };
+    let result = TestContext::default_test_result(branch_id);
     manager.complete_branch(branch_id, result).unwrap();
 
     // Should be able to create another branch (total still 1 active, not 8)
     let result = manager
         .create_branch(
-            BranchSource::Base(PathBuf::from("./test_files")),
-            BranchConfig {
-                name: "New Branch".to_string(),
-                agents: vec![],
-                execution_strategy: ExecutionStrategy::Sequential,
-                auto_merge: false,
-                merge_strategy: "union".to_string(),
-            },
+            BranchSource::Base(PathBuf::from(TEST_FILES_DIR)),
+            TestContext::default_test_config("New Branch"),
         )
         .await;
 
@@ -252,35 +178,19 @@ async fn test_merge_request_with_approval() {
     // Create and complete branch
     let branch_id = manager
         .create_branch(
-            BranchSource::Base(PathBuf::from("./test_files")),
-            BranchConfig {
-                name: "To Merge".to_string(),
-                agents: vec![],
-                execution_strategy: ExecutionStrategy::Sequential,
-                auto_merge: false,
-                merge_strategy: "union".to_string(),
-            },
+            BranchSource::Base(PathBuf::from(TEST_FILES_DIR)),
+            TestContext::default_test_config("To Merge"),
         )
         .await
         .unwrap();
 
     manager.mark_executing(branch_id, 1).unwrap();
-    let result = supervisor::domain::BranchResult {
-        branch_id,
-        file_changes: vec![],
-        agent_results: vec![],
-        metrics: ExecutionMetrics {
-            total_duration_ms: 100,
-            files_processed: 0,
-            agents_executed: 1,
-            peak_memory_bytes: 0,
-        },
-    };
+    let result = TestContext::default_test_result(branch_id);
     manager.complete_branch(branch_id, result).unwrap();
 
     // Request merge with approval required
     let merge_req = manager
-        .request_merge(branch_id, "union", true)
+        .request_merge(branch_id, DEFAULT_MERGE_STRATEGY, true)
         .await
         .unwrap();
 
@@ -301,20 +211,16 @@ async fn test_merge_requires_completed_status() {
     // Create branch but don't complete it
     let branch_id = manager
         .create_branch(
-            BranchSource::Base(PathBuf::from("./test_files")),
-            BranchConfig {
-                name: "Incomplete".to_string(),
-                agents: vec![],
-                execution_strategy: ExecutionStrategy::Sequential,
-                auto_merge: false,
-                merge_strategy: "union".to_string(),
-            },
+            BranchSource::Base(PathBuf::from(TEST_FILES_DIR)),
+            TestContext::default_test_config("Incomplete"),
         )
         .await
         .unwrap();
 
     // Try to request merge
-    let result = manager.request_merge(branch_id, "union", false).await;
+    let result = manager
+        .request_merge(branch_id, DEFAULT_MERGE_STRATEGY, false)
+        .await;
 
     assert!(matches!(
         result,
@@ -332,34 +238,20 @@ async fn test_invalid_merge_strategy() {
     // Create and complete branch
     let branch_id = manager
         .create_branch(
-            BranchSource::Base(PathBuf::from("./test_files")),
-            BranchConfig {
-                name: "To Merge".to_string(),
-                agents: vec![],
-                execution_strategy: ExecutionStrategy::Sequential,
-                auto_merge: false,
-                merge_strategy: "union".to_string(),
-            },
+            BranchSource::Base(PathBuf::from(TEST_FILES_DIR)),
+            TestContext::default_test_config("To Merge"),
         )
         .await
         .unwrap();
 
     manager.mark_executing(branch_id, 1).unwrap();
-    let result = supervisor::domain::BranchResult {
-        branch_id,
-        file_changes: vec![],
-        agent_results: vec![],
-        metrics: ExecutionMetrics {
-            total_duration_ms: 100,
-            files_processed: 0,
-            agents_executed: 1,
-            peak_memory_bytes: 0,
-        },
-    };
+    let result = TestContext::default_test_result(branch_id);
     manager.complete_branch(branch_id, result).unwrap();
 
     // Request merge with invalid strategy
-    let result = manager.request_merge(branch_id, "invalid-strategy", false).await;
+    let result = manager
+        .request_merge(branch_id, "invalid-strategy", false)
+        .await;
 
     assert!(matches!(
         result,
@@ -379,44 +271,22 @@ async fn test_nested_branches() {
     // Create parent branch
     let parent_id = manager
         .create_branch(
-            BranchSource::Base(PathBuf::from("./test_files")),
-            BranchConfig {
-                name: "Parent".to_string(),
-                agents: vec![],
-                execution_strategy: ExecutionStrategy::Sequential,
-                auto_merge: false,
-                merge_strategy: "union".to_string(),
-            },
+            BranchSource::Base(PathBuf::from(TEST_FILES_DIR)),
+            TestContext::default_test_config("Parent"),
         )
         .await
         .unwrap();
 
     // Complete parent so we can branch from it
     manager.mark_executing(parent_id, 1).unwrap();
-    let result = supervisor::domain::BranchResult {
-        branch_id: parent_id,
-        file_changes: vec![],
-        agent_results: vec![],
-        metrics: ExecutionMetrics {
-            total_duration_ms: 100,
-            files_processed: 0,
-            agents_executed: 1,
-            peak_memory_bytes: 0,
-        },
-    };
+    let result = TestContext::default_test_result(parent_id);
     manager.complete_branch(parent_id, result).unwrap();
 
     // Create child branches
     let child1 = manager
         .create_branch(
             BranchSource::Branch(parent_id),
-            BranchConfig {
-                name: "Child 1".to_string(),
-                agents: vec![],
-                execution_strategy: ExecutionStrategy::Sequential,
-                auto_merge: false,
-                merge_strategy: "union".to_string(),
-            },
+            TestContext::default_test_config("Child 1"),
         )
         .await
         .unwrap();
@@ -424,13 +294,7 @@ async fn test_nested_branches() {
     let child2 = manager
         .create_branch(
             BranchSource::Branch(parent_id),
-            BranchConfig {
-                name: "Child 2".to_string(),
-                agents: vec![],
-                execution_strategy: ExecutionStrategy::Sequential,
-                auto_merge: false,
-                merge_strategy: "union".to_string(),
-            },
+            TestContext::default_test_config("Child 2"),
         )
         .await
         .unwrap();
@@ -454,74 +318,36 @@ async fn test_branch_tree_depth() {
     // Create nested branches: root -> child -> grandchild
     let root = manager
         .create_branch(
-            BranchSource::Base(PathBuf::from("./test_files")),
-            BranchConfig {
-                name: "Root".to_string(),
-                agents: vec![],
-                execution_strategy: ExecutionStrategy::Sequential,
-                auto_merge: false,
-                merge_strategy: "union".to_string(),
-            },
+            BranchSource::Base(PathBuf::from(TEST_FILES_DIR)),
+            TestContext::default_test_config("Root"),
         )
         .await
         .unwrap();
 
     // Complete root
     manager.mark_executing(root, 1).unwrap();
-    let result = supervisor::domain::BranchResult {
-        branch_id: root,
-        file_changes: vec![],
-        agent_results: vec![],
-        metrics: ExecutionMetrics {
-            total_duration_ms: 100,
-            files_processed: 0,
-            agents_executed: 1,
-            peak_memory_bytes: 0,
-        },
-    };
+    let result = TestContext::default_test_result(root);
     manager.complete_branch(root, result).unwrap();
 
     // Create child
     let child = manager
         .create_branch(
             BranchSource::Branch(root),
-            BranchConfig {
-                name: "Child".to_string(),
-                agents: vec![],
-                execution_strategy: ExecutionStrategy::Sequential,
-                auto_merge: false,
-                merge_strategy: "union".to_string(),
-            },
+            TestContext::default_test_config("Child"),
         )
         .await
         .unwrap();
 
     // Complete child
     manager.mark_executing(child, 1).unwrap();
-    let result = supervisor::domain::BranchResult {
-        branch_id: child,
-        file_changes: vec![],
-        agent_results: vec![],
-        metrics: ExecutionMetrics {
-            total_duration_ms: 100,
-            files_processed: 0,
-            agents_executed: 1,
-            peak_memory_bytes: 0,
-        },
-    };
+    let result = TestContext::default_test_result(child);
     manager.complete_branch(child, result).unwrap();
 
     // Create grandchild
     let grandchild = manager
         .create_branch(
             BranchSource::Branch(child),
-            BranchConfig {
-                name: "Grandchild".to_string(),
-                agents: vec![],
-                execution_strategy: ExecutionStrategy::Sequential,
-                auto_merge: false,
-                merge_strategy: "union".to_string(),
-            },
+            TestContext::default_test_config("Grandchild"),
         )
         .await
         .unwrap();
@@ -531,7 +357,11 @@ async fn test_branch_tree_depth() {
     assert_eq!(tree.total_nodes(), 3);
 
     // Verify nesting level
-    let child_node = tree.children.iter().find(|c| c.branch.id() == child).unwrap();
+    let child_node = tree
+        .children
+        .iter()
+        .find(|c| c.branch.id() == child)
+        .unwrap();
     assert_eq!(child_node.children.len(), 1);
     assert_eq!(child_node.children[0].branch.id(), grandchild);
 }
@@ -547,28 +377,16 @@ async fn test_branch_recovery_after_restart() {
     // Create branches
     let id1 = manager
         .create_branch(
-            BranchSource::Base(PathBuf::from("./test_files")),
-            BranchConfig {
-                name: "Branch 1".to_string(),
-                agents: vec![],
-                execution_strategy: ExecutionStrategy::Sequential,
-                auto_merge: false,
-                merge_strategy: "union".to_string(),
-            },
+            BranchSource::Base(PathBuf::from(TEST_FILES_DIR)),
+            TestContext::default_test_config("Branch 1"),
         )
         .await
         .unwrap();
 
     let id2 = manager
         .create_branch(
-            BranchSource::Base(PathBuf::from("./test_files")),
-            BranchConfig {
-                name: "Branch 2".to_string(),
-                agents: vec![],
-                execution_strategy: ExecutionStrategy::Sequential,
-                auto_merge: false,
-                merge_strategy: "union".to_string(),
-            },
+            BranchSource::Base(PathBuf::from(TEST_FILES_DIR)),
+            TestContext::default_test_config("Branch 2"),
         )
         .await
         .unwrap();
@@ -600,33 +418,14 @@ async fn test_invalid_status_transitions() {
     // Create branch
     let branch_id = manager
         .create_branch(
-            BranchSource::Base(PathBuf::from("./test_files")),
-            BranchConfig {
-                name: "Test".to_string(),
-                agents: vec![],
-                execution_strategy: ExecutionStrategy::Sequential,
-                auto_merge: false,
-                merge_strategy: "union".to_string(),
-            },
+            BranchSource::Base(PathBuf::from(TEST_FILES_DIR)),
+            TestContext::default_test_config("Test"),
         )
         .await
         .unwrap();
 
     // Cannot complete without executing first
-    let result = manager.complete_branch(
-        branch_id,
-        supervisor::domain::BranchResult {
-            branch_id,
-            file_changes: vec![],
-            agent_results: vec![],
-            metrics: ExecutionMetrics {
-                total_duration_ms: 100,
-                files_processed: 0,
-                agents_executed: 1,
-                peak_memory_bytes: 0,
-            },
-        },
-    );
+    let result = manager.complete_branch(branch_id, TestContext::default_test_result(branch_id));
 
     assert!(result.is_err());
 }
@@ -640,31 +439,15 @@ async fn test_terminal_status_is_terminal() {
     // Create branch
     let branch_id = manager
         .create_branch(
-            BranchSource::Base(PathBuf::from("./test_files")),
-            BranchConfig {
-                name: "To Complete".to_string(),
-                agents: vec![],
-                execution_strategy: ExecutionStrategy::Sequential,
-                auto_merge: false,
-                merge_strategy: "union".to_string(),
-            },
+            BranchSource::Base(PathBuf::from(TEST_FILES_DIR)),
+            TestContext::default_test_config("To Complete"),
         )
         .await
         .unwrap();
 
     // Complete it
     manager.mark_executing(branch_id, 1).unwrap();
-    let result = supervisor::domain::BranchResult {
-        branch_id,
-        file_changes: vec![],
-        agent_results: vec![],
-        metrics: ExecutionMetrics {
-            total_duration_ms: 100,
-            files_processed: 0,
-            agents_executed: 1,
-            peak_memory_bytes: 0,
-        },
-    };
+    let result = TestContext::default_test_result(branch_id);
     manager.complete_branch(branch_id, result).unwrap();
 
     // Verify it's terminal
@@ -685,22 +468,23 @@ async fn test_branch_with_agents() {
 
     let branch_id = manager
         .create_branch(
-            BranchSource::Base(PathBuf::from("./test_files")),
-            BranchConfig {
-                name: "With Agents".to_string(),
-                agents: vec![agent],
-                execution_strategy: ExecutionStrategy::Sequential,
-                auto_merge: false,
-                merge_strategy: "union".to_string(),
-            },
+            BranchSource::Base(PathBuf::from(TEST_FILES_DIR)),
+            BranchConfig::new(
+                "With Agents",
+                vec![agent],
+                ExecutionStrategy::Sequential,
+                false,
+                DEFAULT_MERGE_STRATEGY,
+            )
+            .unwrap(),
         )
         .await
         .unwrap();
 
     let branch = manager.get_branch(branch_id).unwrap().unwrap();
-    let config: BranchConfig = serde_json::from_str(branch.config()).unwrap();
-    assert_eq!(config.agents.len(), 1);
-    assert_eq!(config.agents[0].agent_id.as_str(), "agent_coder");
+    let config = branch.config();
+    assert_eq!(config.agents().len(), 1);
+    assert_eq!(config.agents()[0].agent_id().as_str(), "agent_coder");
 }
 
 #[tokio::test]
@@ -718,20 +502,21 @@ async fn test_branch_with_parallel_strategy() {
     let branch_id = manager
         .create_branch(
             BranchSource::Base(PathBuf::from("./test_files")),
-            BranchConfig {
-                name: "Parallel".to_string(),
+            BranchConfig::new(
+                "Parallel",
                 agents,
-                execution_strategy: ExecutionStrategy::Parallel { max_concurrent: 2 },
-                auto_merge: false,
-                merge_strategy: "union".to_string(),
-            },
+                ExecutionStrategy::Parallel { max_concurrent: 2 },
+                false,
+                "union",
+            )
+            .unwrap(),
         )
         .await
         .unwrap();
 
     let branch = manager.get_branch(branch_id).unwrap().unwrap();
-    let config: BranchConfig = serde_json::from_str(branch.config()).unwrap();
-    assert_eq!(config.execution_strategy.concurrency_limit(), 2);
+    let config = branch.config();
+    assert_eq!(config.execution_strategy().concurrency_limit(), 2);
 }
 
 // ============= Error Handling Tests =============
@@ -776,37 +561,26 @@ async fn test_branch_name_length_limits() {
     let manager_arc = ctx.branch_manager();
     let mut manager = manager_arc.lock().unwrap();
 
-    // Test max length name (256 chars)
+    // Test max length name (256 chars) - should succeed
     let long_name = "a".repeat(256);
     let result = manager
         .create_branch(
-            BranchSource::Base(PathBuf::from("./test_files")),
-            BranchConfig {
-                name: long_name,
-                agents: vec![],
-                execution_strategy: ExecutionStrategy::Sequential,
-                auto_merge: false,
-                merge_strategy: "union".to_string(),
-            },
+            BranchSource::Base(PathBuf::from(TEST_FILES_DIR)),
+            TestContext::default_test_config(long_name),
         )
         .await;
     assert!(result.is_ok());
 
-    // Test name too long (257 chars)
+    // Test name too long (257 chars) - should fail validation
     let too_long = "a".repeat(257);
-    let result = manager
-        .create_branch(
-            BranchSource::Base(PathBuf::from("./test_files")),
-            BranchConfig {
-                name: too_long,
-                agents: vec![],
-                execution_strategy: ExecutionStrategy::Sequential,
-                auto_merge: false,
-                merge_strategy: "union".to_string(),
-            },
-        )
-        .await;
-    assert!(result.is_err());
+    let config_result = BranchConfig::new(
+        too_long,
+        vec![],
+        ExecutionStrategy::Sequential,
+        false,
+        DEFAULT_MERGE_STRATEGY,
+    );
+    assert!(config_result.is_err());
 }
 
 #[tokio::test]
@@ -824,19 +598,23 @@ async fn test_branch_with_task_override() {
 
     let branch_id = manager
         .create_branch(
-            BranchSource::Base(PathBuf::from("./test_files")),
-            BranchConfig {
-                name: "With Override".to_string(),
-                agents: vec![agent],
-                execution_strategy: ExecutionStrategy::Sequential,
-                auto_merge: false,
-                merge_strategy: "union".to_string(),
-            },
+            BranchSource::Base(PathBuf::from(TEST_FILES_DIR)),
+            BranchConfig::new(
+                "With Override",
+                vec![agent],
+                ExecutionStrategy::Sequential,
+                false,
+                DEFAULT_MERGE_STRATEGY,
+            )
+            .unwrap(),
         )
         .await
         .unwrap();
 
     let branch = manager.get_branch(branch_id).unwrap().unwrap();
-    let config: BranchConfig = serde_json::from_str(branch.config()).unwrap();
-    assert_eq!(config.agents[0].task_override, Some("Custom task override".to_string()));
+    let config = branch.config();
+    assert_eq!(
+        config.agents()[0].task_override(),
+        Some("Custom task override")
+    );
 }
